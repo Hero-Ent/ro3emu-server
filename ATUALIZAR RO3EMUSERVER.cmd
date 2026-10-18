@@ -44,9 +44,15 @@ if "%NOVOS_COMMITS%"=="" set NOVOS_COMMITS=0
 echo.
 if "%NOVOS_COMMITS%"=="0" (
     echo [STATUS] O seu emulador ja esta 100%% atualizado com o upstream!
-    echo Nenhuma correcao nova pendente.
+    echo Nenhuma correcao nova pendente no repositorio aethai/ro3emu-server.
     echo.
-    goto FIM
+    echo ============================================================
+    echo Ultimas correcoes do aethai ja integradas no seu emulador:
+    echo ============================================================
+    git log upstream/main -n 3 --oneline
+    echo ============================================================
+    echo.
+    goto SYNC_GITHUB
 )
 
 echo ============================================================
@@ -102,6 +108,15 @@ if not errorlevel 1 (
     echo [SUCESSO] Emulador recompilado com sucesso com as novas correcoes!
 ) else (
     echo [INFO] .NET SDK nao encontrado no PATH imediato. O codigo foi atualizado via Git.
+)
+
+:SYNC_GITHUB
+echo.
+set ENVIAR_GITHUB=N
+set /p ENVIAR_GITHUB="Deseja sincronizar seus commits com seu GitHub origin agora? [S/N, padrao N]: "
+if /i "%ENVIAR_GITHUB%"=="S" (
+    echo Enviando para o GitHub: git push origin main...
+    git push origin main
 )
 
 :FIM
