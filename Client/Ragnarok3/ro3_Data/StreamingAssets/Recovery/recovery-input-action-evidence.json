@@ -1,0 +1,7 @@
+{
+    "schema_version": 1,
+    "build_variant": "ReconstructedPayload",
+    "source_relative_path": "Assets/Editor/Resources/ArtRes/Bundle/ScriptableObject/RoKeyActionMapsAsset.inputactions",
+    "overlay_relative_path": "Recovery/Input/RoKeyActionMapsAsset.inputactions",
+    "input_action_sha256": "f09f522dd75b6fc06837a8be8bd0500f5c6ac05b675e01dda6ac4be5c70d1d51"
+}

@@ -1,0 +1,70 @@
+{
+  "approved_editor_xlua_sha256": "cc7d2be335d2ab5a34de6e10c28668bbffa2e0ee016bb8fe151845d8752f3dee",
+  "approved_player_xlua_sha256": "c189e0fdfb23782d381dfd761a4d746c1e195508ed8eecbe25f23a39bfc7309a",
+  "compiler_archive_logical_path": "Tools/RecoveryDiagnostics/ThirdParty/ReconstructedCompatiblePayload/2026-07-26/RO3-ReconstructedCompatiblePayload-20260726.zip",
+  "compiler_archive_sha256": "de693b33b54ec009248e09faf1fbecfd0762445e2282cfa93f2699a4884b3899",
+  "compiler_component_hashes": [
+    {
+      "path": "dump_probe.py",
+      "sha256": "59864d4276adfb1447ec4787568e0906a06db69a2cfc1e06f052a7d1a328b394"
+    },
+    {
+      "path": "reconstructed_compatible_payload.py",
+      "sha256": "c603d8894e06f071c4b38cae78f6b852ee788181ca49c685532ca2d8880b90ea"
+    },
+    {
+      "path": "standalone_probe.py",
+      "sha256": "36f36a46f60d145e27cc08f7716f5962e07de83e9bcefe5cb2f686269cb3c149"
+    }
+  ],
+  "compiler_component_set_sha256": "97c27ebe828f295e17f5fe63a383f375091dcbf4f6d071eb05b549224d4377e7",
+  "compiler_evidence_id": "reconstructed-compatible:c0cffa40f67bfc2f66187b0f82b59ee4e67ad5e64ffc172936e215bbc7ac88eb",
+  "compiler_kind": "reconstructed_compatible",
+  "execution_result": 0,
+  "format_specification_hash": "be872d653836eb85616dbd8291217fd2f147fea1f774ebfae20dcde627ffcf64",
+  "format_version": "ro3-xlua-5.4-custom-v1",
+  "native_load_result": 0,
+  "schema_version": 1,
+  "test_file_hashes": [
+    {
+      "path": "tests/test_dump_probe.py",
+      "sha256": "df17133d82ef3f90910b9cf5e2d6613fd115d6d674ee94b5099aa9a244a6f2e2"
+    },
+    {
+      "path": "tests/test_reconstructed_compatible_payload.py",
+      "sha256": "90478d32477f3a9dacf2d04bb4e0d474280bb746f2eb80d72344c27684de0e04"
+    },
+    {
+      "path": "tests/test_standalone_probe.py",
+      "sha256": "4c98284101ff33eb94f8fefcad4bdd97d95a4f15c0edd6b4388c602b736264fa"
+    }
+  ],
+  "test_report_hashes": [
+    {
+      "path": "REPORT.md",
+      "sha256": "1005840255291447d2f9c548fa6fadfd1f1c44c59981984919c9065ab562558d"
+    },
+    {
+      "path": "evidence/final-verification.txt",
+      "sha256": "4024382cca32960fb047c2894b446e32e9ed4b84474b6fa0b9039f984bb5516c"
+    },
+    {
+      "path": "evidence/ida-static-analysis.md",
+      "sha256": "60b4659710a36a9b4a03521273b08285098dc42de3895215c0bae7517d03fd18"
+    },
+    {
+      "path": "evidence/results.json",
+      "sha256": "21ada65818f4c8ddfad2a2354ab6f527d50e2078db20046e417ef1492a09ae61"
+    },
+    {
+      "path": "evidence/tdd-red.txt",
+      "sha256": "82382ff60e35aa6c2394ff97354d1061119fa093891df5f8a12fe7687d38d41f"
+    }
+  ],
+  "test_suite_hash": "f9dc32cc1e718f74df6e3d588c7f86b3859a8bdc3ff1bc96e98eb67e63c9cfe3",
+  "usage_document_hash": "fb8d7aa7b9a18b697aa59591fecf99d8d3d116d95339926d18484cc3ce9766bd",
+  "validation_canary_payload_sha256": "b8a959ea45cadabe07e5d2f8aa3dee04be191535a781b74a53ac29e18e0e95b4",
+  "validation_canary_return_value": 42,
+  "validation_canary_source_sha256": "bc7b993416ebaa9652a671c902ce5eab66e06d981e074ab7f9a7af217dd3e207",
+  "validation_conclusion": "editor_xlua_dump_compatible"
+}

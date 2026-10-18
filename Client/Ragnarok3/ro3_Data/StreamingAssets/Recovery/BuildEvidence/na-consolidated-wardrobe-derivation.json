@@ -1,0 +1,24 @@
+{
+  "after": 0,
+  "attachment_sha256": "32230ddedd8a781182bba8663db0d205257547267d2462e48f8b067090bafe39",
+  "before": 1,
+  "before_json_sha256": "697e42cd0b2d251580ab818fee605de2787434181b26c809aebe0d64793c29da",
+  "ids": [
+    10050020,
+    10060010,
+    40050020,
+    40060010,
+    50050020,
+    50060010,
+    60040031,
+    60040033,
+    60040070,
+    60050010,
+    60050021,
+    80050020
+  ],
+  "only_field": "_iDisable",
+  "schema": "ro3.na.wardrobe-exact-disable.v1",
+  "source_candidate_sha256": "c5a91ebdded216958c7ac35cbce8b49a780e5a47fe18b44aecb2eaaf4c07b53c",
+  "source_preimage_sha256": "a002220c3a5f42d3a71fc8b86ff3757f08170f66a7c1f0a23f5ed8c815973117"
+}

@@ -1,0 +1,21 @@
+{
+    "schema_version": 1,
+    "build_variant": "ReconstructedPayload",
+    "compiler_evidence_id": "reconstructed-compatible:c0cffa40f67bfc2f66187b0f82b59ee4e67ad5e64ffc172936e215bbc7ac88eb",
+    "compiled_identity_sha256": "de43ae5b58edd7b4485e556de1f21e9fec351db5b4fee7a60791240082b6549b",
+    "manifest_sha256": "9bef3cf913a335039c20db954e8b1e5a57b65f3035eaa1165ba3f9e2101586fd",
+    "inventory_sha256": "ae1cc8687689a2305927a8a2bcee796f3a530ffcdc234146a5662b327a50b4d3",
+    "representative_corpus_sha256": "5ffb85aca9c28a12ec60a0c0a26ba5e1149896c228e82311206fc5a03ef68875",
+    "release_config_evidence_sha256": "",
+    "release_config_overlay_membership_sha256": "",
+    "current_input_action_sha256": "f09f522dd75b6fc06837a8be8bd0500f5c6ac05b675e01dda6ac4be5c70d1d51",
+    "built_input_action_overlay_sha256": "f09f522dd75b6fc06837a8be8bd0500f5c6ac05b675e01dda6ac4be5c70d1d51",
+    "source_player_xlua_sha256": "c189e0fdfb23782d381dfd761a4d746c1e195508ed8eecbe25f23a39bfc7309a",
+    "built_player_xlua_before_overlay_sha256": "c189e0fdfb23782d381dfd761a4d746c1e195508ed8eecbe25f23a39bfc7309a",
+    "built_player_xlua_after_overlay_sha256": "c189e0fdfb23782d381dfd761a4d746c1e195508ed8eecbe25f23a39bfc7309a",
+    "lua_module_count": 13474,
+    "recovered_fallback_allowed": false,
+    "selected_recovered_vfs_file_count": 28531,
+    "selected_recovered_vfs_total_bytes": 23746141340,
+    "isolated_player_path": "F:\\RO3Recovery\\Build\\RO3-Full-Client-EN-PTBR-2026.08.16-PRODUCTION-r11\\ro3.exe"
+}

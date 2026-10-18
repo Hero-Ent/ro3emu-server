@@ -27,3 +27,18 @@ tools/unluac-batch/*.class
 /downloads/
 /RO3Emu.settings.json
 /RO3Emu-diagnostics.zip
+
+# Client exclusions (heavy VFS assets ~23.6GB, videos, logs, and files >= 100MB)
+**/ro3_Data/StreamingAssets/VFS/
+**/ro3_Data/StreamingAssets/Videos/
+**/ro3_Data/persistent/
+**/persistent/
+**/Logs/
+**/logs/
+**/downloads/
+**/data/backups/
+**/data/*.db*
+*.zip
+*.tar.gz
+Client/**/Ro3Emu.Server.exe
+
