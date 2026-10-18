@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
 title Atualizador RO3Emu Server - Aethai Upstream
 cd /d "%~dp0"
