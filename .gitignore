@@ -41,4 +41,6 @@ tools/unluac-batch/*.class
 *.zip
 *.tar.gz
 Client/**/Ro3Emu.Server.exe
-
+/Launcher-Dist/
+Abrir_Launcher.cmd
+**/.ro3launcher/

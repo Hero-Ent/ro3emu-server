@@ -113,7 +113,7 @@ public sealed class LauncherController : IDisposable
             else if (updater.QuickVerify(check.Installed) is { Count: > 0 } changed) PostState("repair", $"{changed.Count} game files differ from the release.");
             else PostState("ready");
         }
-        catch (Exception e) when (e is PatcherException or HttpRequestException or TaskCanceledException or IOException or JsonException)
+        catch (Exception)
         {
             _installed = new Updater(_layout, _repo).LoadState();
             // Offline but installed: the game can still start (the update server and the game server are separate).
@@ -220,7 +220,7 @@ public sealed class LauncherController : IDisposable
                     online = key.IsSuccessStatusCode;
                 }
             }
-            catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException) { }
+            catch (Exception) { }
             if (_life.IsCancellationRequested) return;
             _post(new { type = "server", online, players });
             try { await Task.Delay(TimeSpan.FromSeconds(30), _life.Token); }
@@ -239,7 +239,7 @@ public sealed class LauncherController : IDisposable
             if (json.RootElement.TryGetProperty("items", out var items))
                 _post(new { type = "news", items = items.Clone() });
         }
-        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException or PatcherException) { }
+        catch (Exception) { }
     }
 
     public void Dispose()

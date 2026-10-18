@@ -46,6 +46,13 @@ public partial class MainWindow : Window
             Application.Current.Shutdown();
             return;
         }
+        catch (Exception ex)
+        {
+            try { File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "launcher.log"), $"[WebView2 Init] {ex}\n"); } catch { }
+            MessageBox.Show($"Failed to initialize launcher UI: {ex.Message}", "RO3Emu", MessageBoxButton.OK, MessageBoxImage.Error);
+            Application.Current.Shutdown();
+            return;
+        }
 
         var core = Web.CoreWebView2;
         var settings = core.Settings;
@@ -60,7 +67,10 @@ public partial class MainWindow : Window
 
         core.AddWebResourceRequestedFilter(Origin + "*", CoreWebView2WebResourceContext.All);
         core.WebResourceRequested += OnWebResourceRequested;
-        core.WebMessageReceived += async (_, e) => await OnMessageAsync(e.WebMessageAsJson);
+        core.WebMessageReceived += async (_, e) =>
+        {
+            try { await OnMessageAsync(e.WebMessageAsJson); } catch { }
+        };
         core.NavigationStarting += (_, e) =>
         {
             if (!e.Uri.StartsWith(Origin, StringComparison.OrdinalIgnoreCase))
@@ -112,27 +122,31 @@ public partial class MainWindow : Window
 
     async Task OnMessageAsync(string json)
     {
-        JsonElement message;
         try
         {
-            message = JsonDocument.Parse(json).RootElement;
-        }
-        catch (JsonException)
-        {
-            return;
-        }
-        string? cmd = message.TryGetProperty("cmd", out var c) ? c.GetString() : null;
-        if (cmd == "window")
-        {
-            switch (message.TryGetProperty("action", out var a) ? a.GetString() : null)
+            JsonElement message;
+            try
             {
-                case "minimize": WindowState = WindowState.Minimized; break;
-                case "close": Close(); break;
-                case "drag": BeginDrag(); break;
+                message = JsonDocument.Parse(json).RootElement;
             }
-            return;
+            catch (JsonException)
+            {
+                return;
+            }
+            string? cmd = message.TryGetProperty("cmd", out var c) ? c.GetString() : null;
+            if (cmd == "window")
+            {
+                switch (message.TryGetProperty("action", out var a) ? a.GetString() : null)
+                {
+                    case "minimize": WindowState = WindowState.Minimized; break;
+                    case "close": Close(); break;
+                    case "drag": BeginDrag(); break;
+                }
+                return;
+            }
+            if (cmd != null) await _controller.HandleAsync(cmd);
         }
-        if (cmd != null) await _controller.HandleAsync(cmd);
+        catch { }
     }
 
     void Post(object message)
