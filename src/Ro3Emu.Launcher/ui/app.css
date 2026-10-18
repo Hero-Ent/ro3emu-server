@@ -25,7 +25,7 @@ ul{list-style:none;margin:0;padding:0}
 /* ---------- top paper strip ---------- */
 .topbar{position:absolute;z-index:5;top:0;left:0;right:0;height:var(--top);display:flex;align-items:center;padding:0 18px 0 22px;
   background:linear-gradient(180deg,#f7eed8,#eadbb6);box-shadow:0 2px 0 rgba(160,125,60,.35),0 6px 18px rgba(50,35,10,.28);app-region:drag}
-.logo{font-family:var(--caps);font-size:34px;font-weight:700;letter-spacing:.08em;color:var(--gold-2);text-shadow:0 1px 0 #fff8e6}
+.logo{height:68px;width:auto;object-fit:contain;display:block;filter:drop-shadow(0 2px 6px rgba(50,35,10,.3));pointer-events:none;-webkit-user-drag:none}
 .tabs{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:48px;app-region:no-drag}
 .tab{position:relative;font-family:var(--caps);font-weight:600;font-size:18px;letter-spacing:.32em;text-transform:uppercase;color:var(--ink-2);
   padding:6px 0 8px .32em;transition:color .15s}
