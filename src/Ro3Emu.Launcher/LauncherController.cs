@@ -38,7 +38,26 @@ public sealed class LauncherController : IDisposable
         _pickFolder = pickFolder;
         _minimize = minimize;
         _repo = new RepositoryClient(new Uri(config.Repository));
-        _layout = new InstallLayout(_settings.ClientDirectory ?? Path.Combine(Path.GetDirectoryName(exePath)!, "Client"));
+        _layout = new InstallLayout(_settings.ClientDirectory ?? FindDefaultClientDirectory(exePath));
+    }
+
+    static string FindDefaultClientDirectory(string exePath)
+    {
+        string? baseDir = Path.GetDirectoryName(exePath);
+        if (string.IsNullOrEmpty(baseDir)) return "Client";
+
+        string sub1 = Path.Combine(baseDir, "Client", "Ragnarok3");
+        if (File.Exists(Path.Combine(sub1, "ro3.exe"))) return sub1;
+
+        string sub2 = Path.Combine(baseDir, "Ragnarok3");
+        if (File.Exists(Path.Combine(sub2, "ro3.exe"))) return sub2;
+
+        string sub3 = Path.Combine(baseDir, "Client");
+        if (File.Exists(Path.Combine(sub3, "ro3.exe"))) return sub3;
+
+        if (File.Exists(Path.Combine(baseDir, "ro3.exe"))) return baseDir;
+
+        return sub1;
     }
 
     public async Task HandleAsync(string cmd)

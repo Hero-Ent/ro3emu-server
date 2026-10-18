@@ -42,5 +42,7 @@ tools/unluac-batch/*.class
 *.tar.gz
 Client/**/Ro3Emu.Server.exe
 /Launcher-Dist/
+/HeroLauncher.exe
+/Launcher.exe
 Abrir_Launcher.cmd
 **/.ro3launcher/

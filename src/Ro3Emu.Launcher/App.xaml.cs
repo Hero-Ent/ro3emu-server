@@ -17,7 +17,7 @@ public partial class App : Application
             Shutdown();
             return;
         }
-        string exePath = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Ro3EmuLauncher.exe");
+        string exePath = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "HeroLauncher.exe");
         SelfUpdate.DeleteLeftovers(exePath);
         var config = LauncherConfig.Load(Path.Combine(Path.GetDirectoryName(exePath)!, "launcher.json"));
         MainWindow = new MainWindow(config, exePath);
