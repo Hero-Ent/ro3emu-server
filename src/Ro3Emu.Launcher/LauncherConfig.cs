@@ -19,9 +19,45 @@ public sealed class LauncherConfig
     {
         try
         {
-            if (File.Exists(besideExe)) return JsonSerializer.Deserialize<LauncherConfig>(File.ReadAllBytes(besideExe), Options) ?? new();
-            using var stream = typeof(LauncherConfig).Assembly.GetManifestResourceStream("launcher.json");
-            return stream is null ? new() : JsonSerializer.Deserialize<LauncherConfig>(stream, Options) ?? new();
+            LauncherConfig? cfg = null;
+            bool fromBeside = false;
+            if (File.Exists(besideExe))
+            {
+                cfg = JsonSerializer.Deserialize<LauncherConfig>(File.ReadAllBytes(besideExe), Options);
+                fromBeside = true;
+            }
+            if (cfg == null)
+            {
+                using var stream = typeof(LauncherConfig).Assembly.GetManifestResourceStream("launcher.json");
+                if (stream != null) cfg = JsonSerializer.Deserialize<LauncherConfig>(stream, Options);
+            }
+            cfg ??= new LauncherConfig();
+
+            // Self-healing migration: if the old r2.dev dev link is configured anywhere,
+            // automatically migrate to the fast Cloudflare CDN domain and clear fallback.
+            bool migrated = false;
+            if (cfg.Repository.Contains("r2.dev", StringComparison.OrdinalIgnoreCase))
+            {
+                cfg.Repository = "https://patch.herosaga.com.br/";
+                cfg.FallbackRepository = null;
+                migrated = true;
+            }
+            if (cfg.FallbackRepository?.Contains("r2.dev", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                cfg.FallbackRepository = null;
+                migrated = true;
+            }
+
+            if (fromBeside && migrated)
+            {
+                try
+                {
+                    File.WriteAllText(besideExe, JsonSerializer.Serialize(cfg, new JsonSerializerOptions { WriteIndented = true }));
+                }
+                catch { }
+            }
+
+            return cfg;
         }
         catch (JsonException)
         {

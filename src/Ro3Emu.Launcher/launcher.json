@@ -1,6 +1,5 @@
 {
   "repository": "https://patch.herosaga.com.br/",
-  "fallbackRepository": "https://pub-b6bae04f5f25406685e211641d96e4a5.r2.dev/",
   "channel": "live",
   "server": "http://45.130.137.89:5380",
   "serverName": "Hero Saga Produção"

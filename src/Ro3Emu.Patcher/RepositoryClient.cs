@@ -20,6 +20,11 @@ public sealed class RepositoryClient : IDisposable
     public RepositoryClient(Uri baseUri, Uri? fallbackUri, HttpMessageHandler? handler = null)
     {
         _primaryUri = EnsureTrailingSlash(baseUri);
+        // Never use r2.dev as fallback because it rate-limits client downloads
+        if (fallbackUri != null && fallbackUri.Host.EndsWith("r2.dev", StringComparison.OrdinalIgnoreCase))
+        {
+            fallbackUri = null;
+        }
         _fallbackUri = fallbackUri is not null ? EnsureTrailingSlash(fallbackUri) : null;
         _activeBaseUri = _primaryUri;
 
@@ -38,7 +43,7 @@ public sealed class RepositoryClient : IDisposable
             {
                 DefaultRequestVersion = System.Net.HttpVersion.Version11,
                 DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
-                Timeout = TimeSpan.FromSeconds(15)
+                Timeout = TimeSpan.FromSeconds(30)
             };
         }
         else
@@ -108,7 +113,7 @@ public sealed class RepositoryClient : IDisposable
     public async Task<byte[]> GetChunkAsync(string hash, int storedSize, Action<int>? onBytes, CancellationToken ct)
     {
         using var chunkCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        chunkCts.CancelAfter(TimeSpan.FromSeconds(10)); // Max 10s per 250 KB chunk
+        chunkCts.CancelAfter(TimeSpan.FromSeconds(30)); // Max 30s per chunk
 
         byte[] data;
         try
@@ -120,8 +125,7 @@ public sealed class RepositoryClient : IDisposable
         }
         catch (Exception) when (_fallbackUri != null && _activeBaseUri != _fallbackUri)
         {
-            _activeBaseUri = _fallbackUri;
-            var fallbackTarget = new Uri(_activeBaseUri, PathRules.ChunkRelative(hash));
+            var fallbackTarget = new Uri(_fallbackUri, PathRules.ChunkRelative(hash));
             using var fbResponse = await _http.GetAsync(fallbackTarget, chunkCts.Token);
             fbResponse.EnsureSuccessStatusCode();
             data = await fbResponse.Content.ReadAsByteArrayAsync(chunkCts.Token);

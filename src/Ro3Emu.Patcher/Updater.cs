@@ -247,6 +247,8 @@ public sealed class Updater
         }
 
         long downloadTotal = missing.Values.Sum(c => (long)c.StoredSize), downloaded = 0;
+        PatcherLog.Log($"[Updater] Starting download: {missing.Count} chunks ({downloadTotal / 1024 / 1024} MB) with concurrency {DownloadConcurrency} from {_repo.BaseUri}");
+        var downloadSw = System.Diagnostics.Stopwatch.StartNew();
         progress?.Report(new UpdateProgress(UpdateStage.Downloading, 0, downloadTotal));
         await Parallel.ForEachAsync(missing.Values, new ParallelOptions { MaxDegreeOfParallelism = DownloadConcurrency, CancellationToken = ct }, async (chunk, token) =>
         {
@@ -254,6 +256,9 @@ public sealed class Updater
             long done = Interlocked.Add(ref downloaded, chunk.StoredSize);
             progress?.Report(new UpdateProgress(UpdateStage.Downloading, done, downloadTotal));
         });
+        downloadSw.Stop();
+        double dMb = downloaded / 1024.0 / 1024.0;
+        PatcherLog.Log($"[Updater] Download finished: {dMb:F1} MB in {downloadSw.Elapsed.TotalSeconds:F1}s ({(dMb / Math.Max(0.1, downloadSw.Elapsed.TotalSeconds)):F2} MB/s).");
 
         // 4. Assemble each changed file into staging; every chunk is checked, the whole file too.
         var cacheUses = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -365,8 +370,10 @@ public sealed class Updater
             {
                 if (attempt >= 8)
                 {
+                    PatcherLog.Log($"[Updater] Chunk {chunk.Hash[..12]} FAILED after 8 attempts: {e.Message}");
                     throw new PatcherException("Downloading the update failed. Check your connection and try again.", e);
                 }
+                PatcherLog.Log($"[Updater] Chunk {chunk.Hash[..12]} retry #{attempt} ({e.GetType().Name}: {e.Message})");
                 bool isRateLimit = e is HttpRequestException { StatusCode: System.Net.HttpStatusCode.TooManyRequests };
                 int baseDelay = isRateLimit ? 500 * attempt : (int)(120 * Math.Pow(1.5, attempt - 1));
                 int jitter = Random.Shared.Next(50, 200);

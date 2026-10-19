@@ -18,8 +18,13 @@ public partial class App : Application
             return;
         }
         string exePath = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "HeroLauncher.exe");
+        string logPath = Path.Combine(Path.GetDirectoryName(exePath)!, "launcher.log");
+        PatcherLog.LogFilePath = logPath;
+        PatcherLog.Log($"=== Hero Ragnarok Launcher Starting ===");
+        PatcherLog.Log($"Process Path: {exePath}");
         SelfUpdate.DeleteLeftovers(exePath);
         var config = LauncherConfig.Load(Path.Combine(Path.GetDirectoryName(exePath)!, "launcher.json"));
+        PatcherLog.Log($"Loaded Repository: {config.Repository} (Fallback: {config.FallbackRepository ?? "none"})");
         MainWindow = new MainWindow(config, exePath);
         MainWindow.Show();
     }

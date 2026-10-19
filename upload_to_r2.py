@@ -18,6 +18,8 @@ def get_content_type(key):
         return "application/zstd"
     if key.endswith(".exe"):
         return "application/vnd.microsoft.portable-executable"
+    if key.endswith(".zip"):
+        return "application/zip"
     return "application/octet-stream"
 
 def upload_file(s3, local_path, s3_key, file_size):
@@ -95,6 +97,15 @@ def main():
                 continue
 
             to_upload.append((full_path, rel_path, size))
+            total_bytes += size
+
+    # Adiciona tambem HeroSaga-Launcher.zip e HeroLauncher.exe para download direto do CDN
+    root_dir = r"D:\ro3emu-server"
+    for extra_file in ["HeroSaga-Launcher.zip", "HeroLauncher.exe"]:
+        extra_path = os.path.join(root_dir, extra_file)
+        if os.path.exists(extra_path):
+            size = os.path.getsize(extra_path)
+            to_upload.append((extra_path, extra_file, size))
             total_bytes += size
 
     total_files = len(to_upload)
