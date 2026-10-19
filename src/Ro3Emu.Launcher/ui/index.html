@@ -1,76 +1,175 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>RO3Emu</title>
+<title>Hero Saga Launcher</title>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
 <header class="topbar" id="drag">
-  <img class="logo" src="assets/logo-hero.png" alt="Hero" />
+  <img class="logo" src="assets/logo-hero.png" alt="Hero Saga" />
   <nav class="tabs">
     <span class="star">✦</span>
-    <button class="tab active" data-tab="home">Home</button>
-    <button class="tab" data-tab="news">News</button>
-    <button class="tab" data-tab="settings">Settings</button>
+    <button class="tab active" data-tab="home" id="tab-home" type="button">INÍCIO</button>
+    <button class="tab" data-tab="news" id="tab-news" type="button">NOTÍCIAS</button>
+    <a href="https://herosaga.com.br" class="tab-link" id="tab-register" target="_blank">CRIAR CONTA</a>
+    <a href="https://discord.gg/herosaga" class="tab-link" id="tab-discord" target="_blank">DISCORD</a>
+    <!-- <button class="tab" data-tab="settings" id="tab-settings" type="button">CONFIGURAÇÕES</button> -->
     <span class="star">✦</span>
   </nav>
   <div class="right">
-    <span class="server" id="server"><i></i><span id="server-text">Connecting…</span></span>
+    <span class="server" id="server"><i></i><span id="server-text"><b>Online</b> · 0 jogadores</span></span>
     <span class="vsep"></span>
-    <button class="wbtn" id="btn-min" title="Minimize"><svg viewBox="0 0 16 16"><path d="M3 8h10"/></svg></button>
-    <button class="wbtn" id="btn-close" title="Close"><svg viewBox="0 0 16 16"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button>
+    <div class="lang-selector" id="lang-selector">
+      <button class="lang-btn" id="lang-btn" type="button" title="Idioma / Language">
+        <svg class="globe-icon" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" stroke="currentColor" fill="none" stroke-width="1.2"/><ellipse cx="8" cy="8" rx="3.2" ry="7" stroke="currentColor" fill="none" stroke-width="1.1"/><path d="M1.5 5.5h13M1.5 10.5h13" stroke="currentColor" stroke-width="1.1"/></svg>
+        <span id="current-lang">PT</span>
+        <span class="chevron-down">˅</span>
+      </button>
+      <div class="lang-dropdown" id="lang-dropdown" hidden>
+        <button class="lang-opt active" data-lang="pt-br" type="button">Português (PT-BR)</button>
+        <button class="lang-opt" data-lang="en" type="button">English (EN)</button>
+        <button class="lang-opt" data-lang="es" type="button">Español (ES)</button>
+      </div>
+    </div>
+    <span class="vsep"></span>
+    <button class="wbtn" id="btn-min" type="button" title="Minimizar"><svg viewBox="0 0 16 16"><path d="M3 8h10"/></svg></button>
+    <button class="wbtn" id="btn-close" type="button" title="Fechar"><svg viewBox="0 0 16 16"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button>
   </div>
 </header>
 
 <section class="card notices" id="notices">
   <div class="card-head">
-    <h2><span class="star">✦</span>Notices</h2>
-    <span class="pill green">Test server</span>
+    <h2><span class="star">✦</span><span id="notices-title">AVISOS</span></h2>
+    <span class="pill green" id="notices-badge">CONTEÚDO ASSINADO</span>
   </div>
-  <p class="card-sub">News from the RO3Emu team.</p>
-  <hr class="gem">
+  <p class="card-sub" id="notices-sub">Anúncios oficiais da equipe Hero Saga.</p>
+
+  <a href="https://discord.gg/herosaga" target="_blank" class="discord-banner" id="discord-banner-link" title="Join our Discord">
+    <img src="assets/discord-banner.jpg" alt="Join our Discord">
+  </a>
+
   <ul class="list" id="news-list"></ul>
-  <p class="card-foot">RO3Emu · private test realm</p>
+  <p class="card-foot" id="notices-foot">CANAL OFICIAL DE NOTÍCIAS · PT-BR</p>
 </section>
 
 <section class="card settings" id="settings" hidden>
-  <div class="card-head"><h2><span class="star">✦</span>Settings</h2></div>
-  <p class="card-sub">Where the game lives on this PC.</p>
+  <div class="card-head"><h2><span class="star">✦</span><span id="settings-title">Configurações</span></h2></div>
+  <p class="card-sub" id="settings-sub">Onde o jogo está instalado neste computador.</p>
   <hr class="gem">
-  <label class="field-label">Game folder</label>
+  <label class="field-label" id="settings-lbl-folder">Pasta do jogo</label>
   <div class="field" id="set-dir"></div>
   <div class="row">
-    <button class="cream small" id="set-dir-change">Change folder</button>
-    <button class="cream small" id="set-open">Open folder</button>
+    <button class="cream small" id="set-dir-change" type="button">Alterar pasta</button>
+    <button class="cream small" id="set-open" type="button">Abrir pasta</button>
   </div>
-  <p class="hint">Already have the RO3 PC client? Point this at its ROO_PC folder and only the changed files are downloaded.</p>
+  <p class="hint" id="settings-hint">Já possui o cliente instalado? Aponte para a pasta e apenas os arquivos atualizados serão baixados.</p>
   <p class="card-foot" id="set-version"></p>
 </section>
 
 <section class="panel steps-panel">
   <div class="steps">
-    <div class="step" id="step-1"><span class="hex">1</span><div><b>Install</b><small>Download game files</small></div></div>
+    <div class="step" id="step-1">
+      <div class="hex-badge hex-1">
+        <svg viewBox="0 0 44 48" class="hex-svg">
+          <polygon points="22,2 41,12 41,36 22,46 3,36 3,12" class="hex-outer" />
+          <polygon points="22,6 37,14 37,34 22,42 7,34 7,14" class="hex-inner" />
+          <polygon points="22,4 23.5,5.5 22,7 20.5,5.5" class="hex-dot" />
+          <polygon points="22,41 23.5,42.5 22,44 20.5,42.5" class="hex-dot" />
+          <text x="22" y="29" class="hex-num">01</text>
+        </svg>
+      </div>
+      <div class="step-meta">
+        <b id="step-1-title">INSTALAR</b>
+        <small id="step-1-desc">Baixar arquivos do jogo</small>
+      </div>
+    </div>
+
     <span class="chev">›</span>
-    <div class="step" id="step-2"><span class="hex">2</span><div><b>Verify</b><small>Check file integrity</small></div></div>
+
+    <div class="step" id="step-2">
+      <div class="hex-badge hex-2">
+        <svg viewBox="0 0 44 48" class="hex-svg">
+          <polygon points="22,2 41,12 41,36 22,46 3,36 3,12" class="hex-outer" />
+          <polygon points="22,6 37,14 37,34 22,42 7,34 7,14" class="hex-inner" />
+          <polygon points="22,4 23.5,5.5 22,7 20.5,5.5" class="hex-dot" />
+          <polygon points="22,41 23.5,42.5 22,44 20.5,42.5" class="hex-dot" />
+          <text x="22" y="29" class="hex-num">02</text>
+        </svg>
+      </div>
+      <div class="step-meta">
+        <b id="step-2-title">VERIFICAR</b>
+        <small id="step-2-desc">Checar integridade dos arquivos</small>
+      </div>
+    </div>
+
     <span class="chev">›</span>
-    <div class="step" id="step-3"><span class="hex">3</span><div><b>Ready</b><small>Launch the game</small></div></div>
+
+    <div class="step" id="step-3">
+      <div class="hex-badge hex-3">
+        <svg viewBox="0 0 44 48" class="hex-svg">
+          <polygon points="22,2 41,12 41,36 22,46 3,36 3,12" class="hex-outer" />
+          <polygon points="22,6 37,14 37,34 22,42 7,34 7,14" class="hex-inner" />
+          <polygon points="22,4 23.5,5.5 22,7 20.5,5.5" class="hex-dot" />
+          <polygon points="22,41 23.5,42.5 22,44 20.5,42.5" class="hex-dot" />
+          <text x="22" y="29" class="hex-num">03</text>
+        </svg>
+      </div>
+      <div class="step-meta">
+        <b id="step-3-title">PRONTO</b>
+        <small id="step-3-desc">Iniciar ou reparar</small>
+      </div>
+    </div>
   </div>
+
   <div class="progress" id="progress" hidden>
-    <div class="p-top"><b id="p-stage">Downloading</b><span id="p-pct">0%</span></div>
+    <div class="p-top"><b id="p-stage">Baixando</b><span id="p-pct">0%</span></div>
     <div class="bar"><div id="p-fill"></div></div>
     <div class="p-bottom"><span id="p-bytes"></span><span id="p-rate"></span></div>
   </div>
-  <p class="message" id="message"><span id="message-text">Checking for updates…</span></p>
+
+  <p class="message" id="message">
+    <span class="msg-warn-icon" id="msg-warn-icon">⚠</span>
+    <span id="message-text">Verificando atualizações…</span>
+    <span class="msg-help" id="msg-help" title="Ajuda">?</span>
+  </p>
 </section>
 
 <section class="panel actions-panel">
-  <h3>Actions</h3>
-  <button class="blue" id="primary" disabled><img id="primary-icon" alt="" hidden><span id="primary-label">Checking…</span></button>
-  <button class="cream" id="repair"><span>Repair</span></button>
+  <h3 id="actions-title">AÇÕES DO JOGO</h3>
+
+  <button class="game-btn cream" id="primary" type="button" disabled>
+    <span class="btn-icon" id="primary-icon-wrap"></span>
+    <span class="btn-text" id="primary-label">Verificando…</span>
+  </button>
+
+  <button class="game-btn blue" id="repair" type="button">
+    <span class="btn-icon" id="repair-icon-wrap">
+      <svg viewBox="0 0 24 24" class="icon-svg"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6-4.6 4.6a2 2 0 0 1-1.3.6 2 2 0 0 1-1.4-.6l-.6-.6a2 2 0 0 1 0-2.8l4.6-4.6-1.6-1.6a1 1 0 0 0-1.4 0l-1.4 1.4a4 4 0 0 0 0 5.6l.6.6-4.3 4.3a1 1 0 0 0 0 1.4l2.8 2.8a1 1 0 0 0 1.4 0l4.3-4.3.6.6a4 4 0 0 0 5.6 0l1.4-1.4a1 1 0 0 0 0-1.4l-1.6-1.6 4.6-4.6a1 1 0 0 0-1.4-1.4l-4.6 4.6z" fill="currentColor"/></svg>
+    </span>
+    <span class="btn-text" id="repair-label">Reparar</span>
+  </button>
 </section>
 
-<footer class="version" id="ver-line"></footer>
+<footer class="footer">
+  <div class="footer-left">
+    <a href="https://herosaga.com.br" target="_blank" class="footer-site">herosaga.com.br</a>
+  </div>
+  <div class="footer-right">
+    <span class="footer-ver" id="ver-line">v1.0.1</span>
+    <div class="footer-socials">
+      <a href="https://discord.gg/herosaga" target="_blank" class="social-link" title="Discord">
+        <svg viewBox="0 0 24 24"><path d="M20.3 4.4a19.8 19.8 0 0 0-4.9-1.5.1.1 0 0 0-.1.1c-.2.4-.4.9-.6 1.3a18.3 18.3 0 0 0-5.4 0c-.2-.4-.4-.9-.6-1.3a.1.1 0 0 0-.1-.1 19.8 19.8 0 0 0-4.9 1.5.1.1 0 0 0 0 .1C.8 9 0 13.5.3 18a.1.1 0 0 0 0 .1 19.9 19.9 0 0 0 6 3 .1.1 0 0 0 .1 0c.5-.7.9-1.4 1.3-2.1a.1.1 0 0 0-.1-.1c-.7-.3-1.3-.6-1.9-1a.1.1 0 0 1 0-.1c.1-.1.3-.2.4-.3a.1.1 0 0 1 .1 0c4 1.8 8.2 1.8 12.1 0a.1.1 0 0 1 .1 0c.1.1.3.2.4.3a.1.1 0 0 1 0 .1c-.6.4-1.2.7-1.9 1a.1.1 0 0 0-.1.1c.4.7.8 1.4 1.3 2.1a.1.1 0 0 0 .1 0 19.8 19.8 0 0 0 6.1-3 .1.1 0 0 0 0-.1c.4-5.2-.7-9.6-3.4-13.6a.1.1 0 0 0 0-.1zM8.5 15.3c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4zm7 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4z" fill="currentColor"/></svg>
+      </a>
+      <a href="https://instagram.com/herosaga" target="_blank" class="social-link" title="Instagram">
+        <svg viewBox="0 0 24 24"><path d="M12 2.2c3.2 0 3.6 0 4.8.1 3.3.1 4.8 1.7 4.9 4.9.1 1.3.1 1.6.1 4.8s0 3.6-.1 4.8c-.1 3.2-1.7 4.8-4.9 4.9-1.3.1-1.6.1-4.8.1s-3.6 0-4.8-.1c-3.3-.1-4.8-1.7-4.9-4.9-.1-1.3-.1-1.6-.1-4.8s0-3.6.1-4.8c.1-3.2 1.7-4.8 4.9-4.9 1.3-.1 1.6-.1 4.8-.1zm0-2.2C8.7 0 8.3 0 7.1.1 2.7.3.3 2.7.1 7.1 0 8.3 0 8.7 0 12s0 3.7.1 4.9c.2 4.4 2.6 6.8 7 7 1.2.1 1.6.1 4.9.1s3.7 0 4.9-.1c4.4-.2 6.8-2.6 7-7 .1-1.2.1-1.6.1-4.9s0-3.7-.1-4.9c-.2-4.4-2.6-6.8-7-7C15.7 0 15.3 0 12 0zm0 5.8a6.2 6.2 0 1 0 0 12.4 6.2 6.2 0 0 0 0-12.4zm0 10.2a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.4-11.8a1.4 1.4 0 1 0 0 2.9 1.4 1.4 0 0 0 0-2.9z" fill="currentColor"/></svg>
+      </a>
+      <a href="https://youtube.com/@herosaga" target="_blank" class="social-link" title="YouTube">
+        <svg viewBox="0 0 24 24"><path d="M23.5 6.2c-.3-1-.9-1.8-1.9-2-1.7-.5-8.6-.5-8.6-.5s-6.9 0-8.6.5c-1 .3-1.6 1.1-1.9 2C2 8 2 12 2 12s0 4 .5 5.8c.3 1 .9 1.8 1.9 2 1.7.5 8.6.5 8.6.5s6.9 0 8.6-.5c1-.3 1.6-1.1 1.9-2 .5-1.8.5-5.8.5-5.8s0-4-.5-5.8zM9.5 15.5V8.5l6 3.5-6 3.5z" fill="currentColor"/></svg>
+      </a>
+    </div>
+  </div>
+</footer>
 <script src="app.js"></script>
 </body>
 </html>
