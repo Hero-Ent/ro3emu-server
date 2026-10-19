@@ -23,6 +23,10 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+# Fecha HeroLauncher se estiver em execucao para liberar o arquivo
+Get-Process -Name "HeroLauncher" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 500
+
 $exeSource = Join-Path $tempPublish 'HeroLauncher.exe'
 if (Test-Path $exeSource) {
     Copy-Item $exeSource (Join-Path $root 'HeroLauncher.exe') -Force

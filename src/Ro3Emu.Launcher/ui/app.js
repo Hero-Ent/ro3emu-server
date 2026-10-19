@@ -395,6 +395,141 @@
     }
   }
 
+  var KNOWN_MESSAGES = {
+    offline_installed: {
+      "pt-br": "Não foi possível conectar ao servidor de atualização; jogando a versão instalada.",
+      "en": "Can't reach the update server; playing the installed version.",
+      "es": "No se pudo conectar al servidor de actualización; jugando la versión instalada."
+    },
+    offline_uninstalled: {
+      "pt-br": "Não foi possível conectar ao servidor de atualização.",
+      "en": "Can't reach the update server.",
+      "es": "No se pudo conectar al servidor de actualización."
+    },
+    found_client: {
+      "pt-br": "Cliente encontrado nesta pasta: apenas os arquivos modificados serão baixados.",
+      "en": "Found an RO3 client in this folder: only the changed files will be downloaded.",
+      "es": "Cliente encontrado en esta carpeta: solo se descargarán los archivos modificados."
+    },
+    paused: {
+      "pt-br": "Pausado. Os arquivos baixados foram mantidos; continue a qualquer momento.",
+      "en": "Paused. Downloaded parts are kept; continue any time.",
+      "es": "Pausado. Los archivos descargados se conservan; continúa en cualquier momento."
+    },
+    ready: {
+      "pt-br": "Tudo atualizado. Bom jogo!",
+      "en": "Up to date. Have fun!",
+      "es": "¡Todo actualizado! ¡Que disfrutes del juego!"
+    },
+    checking: {
+      "pt-br": "Verificando atualizações…",
+      "en": "Checking for updates…",
+      "es": "Buscando actualizaciones…"
+    },
+    running: {
+      "pt-br": "O jogo está em execução.",
+      "en": "The game is running.",
+      "es": "El juego se está ejecutando."
+    },
+    starting: {
+      "pt-br": "Iniciando o cliente do jogo…",
+      "en": "Starting the game…",
+      "es": "Iniciando el cliente del juego…"
+    }
+  };
+
+  function translateMessage(rawMsg, phase) {
+    if (!rawMsg) {
+      var ph = I18N[currentLang].phases[phase];
+      return ph ? ph.text : "";
+    }
+
+    var lang = currentLang;
+
+    // Check offline installed message
+    if (rawMsg.indexOf("Can't reach the update server; playing the installed version") !== -1 ||
+        rawMsg.indexOf("Não foi possível conectar ao servidor de atualização; jogando a versão instalada") !== -1 ||
+        rawMsg.indexOf("No se pudo conectar al servidor de actualización; jugando la versión instalada") !== -1) {
+      return KNOWN_MESSAGES.offline_installed[lang];
+    }
+
+    // Check offline uninstalled
+    if (rawMsg.indexOf("Can't reach the update server") !== -1 ||
+        rawMsg.indexOf("Não foi possível conectar ao servidor de atualização") !== -1 ||
+        rawMsg.indexOf("No se pudo conectar al servidor de actualización") !== -1) {
+      return KNOWN_MESSAGES.offline_uninstalled[lang];
+    }
+
+    // Check found client
+    if (rawMsg.indexOf("Found an RO3 client in this folder") !== -1 ||
+        rawMsg.indexOf("Cliente encontrado nesta pasta") !== -1 ||
+        rawMsg.indexOf("Cliente encontrado en esta carpeta") !== -1) {
+      return KNOWN_MESSAGES.found_client[lang];
+    }
+
+    // Check paused
+    if (rawMsg.indexOf("Paused. Downloaded parts are kept") !== -1 ||
+        rawMsg.indexOf("Pausado. Os arquivos baixados foram mantidos") !== -1 ||
+        rawMsg.indexOf("Pausado. Los arquivos descargados se conservan") !== -1) {
+      return KNOWN_MESSAGES.paused[lang];
+    }
+
+    // Version X is available
+    var mVer = rawMsg.match(/Version\s+([\w\.\-]+)\s+is available/i) ||
+               rawMsg.match(/versão\s+([\w\.\-]+)\s+está disponível/i) ||
+               rawMsg.match(/versión\s+([\w\.\-]+)\s+está disponible/i);
+    if (mVer) {
+      if (lang === "pt-br") return "A versão " + mVer[1] + " está disponível.";
+      if (lang === "es") return "La versión " + mVer[1] + " está disponible.";
+      return "Version " + mVer[1] + " is available.";
+    }
+
+    // X game files differ from the release
+    var mDiff = rawMsg.match(/(\d+)\s+game files differ/i) ||
+                rawMsg.match(/(\d+)\s+arquivos do jogo diferem/i) ||
+                rawMsg.match(/(\d+)\s+archivos del juego difieren/i);
+    if (mDiff) {
+      if (lang === "pt-br") return mDiff[1] + " arquivos do jogo diferem da versão oficial.";
+      if (lang === "es") return mDiff[1] + " archivos del juego difieren de la versión oficial.";
+      return mDiff[1] + " game files differ from the release.";
+    }
+
+    // Updating the launcher to X
+    var mUpLaunch = rawMsg.match(/Updating the launcher to\s+([\w\.\-]+)/i) ||
+                    rawMsg.match(/Atualizando o inicializador para\s+([\w\.\-]+)/i);
+    if (mUpLaunch) {
+      if (lang === "pt-br") return "Atualizando o inicializador para " + mUpLaunch[1] + "…";
+      if (lang === "es") return "Actualizando el lanzador a " + mUpLaunch[1] + "…";
+      return "Updating the launcher to " + mUpLaunch[1] + "…";
+    }
+
+    // The game did not start: X
+    var mFail = rawMsg.match(/The game did not start:\s*(.+)/i) ||
+                rawMsg.match(/O jogo não iniciou:\s*(.+)/i);
+    if (mFail) {
+      if (lang === "pt-br") return "O jogo não iniciou: " + mFail[1];
+      if (lang === "es") return "El juego no se inició: " + mFail[1];
+      return "The game did not start: " + mFail[1];
+    }
+
+    // Ready message
+    if (rawMsg.indexOf("Up to date") !== -1 ||
+        rawMsg.indexOf("Tudo atualizado") !== -1 ||
+        rawMsg.indexOf("Todo actualizado") !== -1) {
+      return KNOWN_MESSAGES.ready[lang];
+    }
+
+    // Checking message
+    if (rawMsg.indexOf("Checking for updates") !== -1 ||
+        rawMsg.indexOf("Verificando atualizações") !== -1 ||
+        rawMsg.indexOf("Buscando actualizaciones") !== -1) {
+      return KNOWN_MESSAGES.checking[lang];
+    }
+
+    var phText = I18N[lang].phases[phase];
+    return (phText && phText.text) ? phText.text : rawMsg;
+  }
+
   function render() {
     var t = I18N[currentLang];
     var cfg = PHASES_CONFIG[state.phase] || PHASES_CONFIG.checking;
@@ -411,7 +546,7 @@
 
     var msg = $("message");
     msg.className = "message" + (cfg.warn ? " warn" : "");
-    $("message-text").textContent = state.message || phaseTexts.text;
+    $("message-text").textContent = translateMessage(state.message, state.phase);
     $("msg-help").hidden = !cfg.warn;
 
     // Actions panel title
@@ -598,6 +733,15 @@
         emit({ type: "settings", dir: "C:\\Games\\HeroSaga\\Client", launcher: "1.0.1" });
         emit({ type: "server", online: scenario !== "offline", players: 124 });
         if (scenario === "offline") return emit({ type: "state", phase: "offline" });
+        if (scenario === "offline_installed") {
+          return emit({
+            type: "state",
+            phase: "ready",
+            installed: "2.2.13",
+            remote: remote,
+            message: "Can't reach the update server; playing the installed version."
+          });
+        }
         if (scenario === "downloading") {
           emit({ type: "state", phase: "install", remote: remote });
           emit({ type: "progress", stage: "downloading", done: 4.2e9, total: 11.5e9, rate: 28.5 * 1048576, eta: 256 });
