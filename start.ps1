@@ -9,6 +9,7 @@ param(
     [switch]$Reexport,
     [switch]$Join,
     [string]$Server,
+    [switch]$Debug,
     [Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest
 )
 $ErrorActionPreference = 'Stop'
@@ -36,10 +37,11 @@ if ($ClientDir) {
     $clientBuild = @("-p:ClientManaged=$managed")
 }
 
-Write-Host '== Building' -ForegroundColor Cyan
+$config = if ($Debug) { 'Debug' } else { 'Release' }
+Write-Host "== Building ($config)" -ForegroundColor Cyan
 foreach ($project in 'src/Ro3Emu.Server', 'src/Ro3Emu.ClientHooks', 'src/Ro3Emu.Loc', 'src/Ro3Emu.Setup') {
     $extra = if ($project -in 'src/Ro3Emu.ClientHooks', 'src/Ro3Emu.Loc') { $clientBuild } else { @() }
-    Run dotnet (@('build', (Join-Path $root $project), '-c', 'Release', '-v', 'q', '-nologo', '-clp:ErrorsOnly') + $extra)
+    Run dotnet (@('build', (Join-Path $root $project), '-c', $config, '-v', 'q', '-nologo', '-clp:ErrorsOnly') + $extra)
 }
 
 $arguments = @()
@@ -48,5 +50,5 @@ if ($Rest) { $arguments += $Rest }
 if ($ClientDir) { $arguments += @('--client', $ClientDir) }
 if ($Reexport) { $arguments += '--reexport' }
 $arguments += @('--home', $root)
-& (Join-Path $root 'src\Ro3Emu.Setup\bin\Release\net10.0\RO3Emu.exe') @arguments
+& (Join-Path $root "src\Ro3Emu.Setup\bin\$config\net10.0\RO3Emu.exe") @arguments
 exit $LASTEXITCODE

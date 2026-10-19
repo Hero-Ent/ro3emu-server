@@ -25,7 +25,8 @@ public static class ServerHost
         // the logging thread - the game loop included (a quarter of a walk's cost at 500 players). The console logger
         // queues to a background writer; the metrics provider registered below stays.
         builder.Logging.ClearProviders();
-        builder.Logging.AddConsole();
+        builder.Logging.AddConsole(opt => opt.FormatterName = Diagnostics.RathenaConsoleFormatter.FormatterName)
+            .AddConsoleFormatter<Diagnostics.RathenaConsoleFormatter, Microsoft.Extensions.Logging.Console.ConsoleFormatterOptions>();
         // One server per data dir (C/D 19): taken before anything opens the database, released when the app is disposed.
         builder.Services.AddSingleton(_ => RealmLock.Acquire(options.DataDir));
         builder.Services.AddSingleton(Options.Create(options));

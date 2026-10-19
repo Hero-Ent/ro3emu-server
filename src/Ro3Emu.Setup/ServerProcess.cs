@@ -38,11 +38,25 @@ internal sealed class ServerProcess : IDisposable
         var name = OperatingSystem.IsWindows() ? "Ro3Emu.Server.exe" : "Ro3Emu.Server";
         if (SetupHome.Shipped("server", name) is { } shipped) return shipped;
         if (SetupHome.RepositoryRoot() is { } repo)
+        {
+            string? newestExe = null;
+            DateTime newestTime = DateTime.MinValue;
             foreach (var config in new[] { "Release", "Debug" })
             {
                 var dir = Path.Combine(repo, "src", "Ro3Emu.Server", "bin", config, "net10.0");
-                if (File.Exists(Path.Combine(dir, name))) return Path.Combine(dir, name);
+                var exe = Path.Combine(dir, name);
+                if (File.Exists(exe))
+                {
+                    var time = File.GetLastWriteTimeUtc(exe);
+                    if (time > newestTime)
+                    {
+                        newestTime = time;
+                        newestExe = exe;
+                    }
+                }
             }
+            if (newestExe != null) return newestExe;
+        }
         return null;
     }
 
@@ -94,7 +108,14 @@ internal sealed class ServerProcess : IDisposable
         SetupLog.Write($"server: {exe} {string.Join(' ', start.ArgumentList)}");
 
         var process = new Process { StartInfo = start, EnableRaisingEvents = true };
-        void Line(object _, DataReceivedEventArgs e) { if (e.Data != null) lock (log) log.WriteLine(e.Data); }
+        void Line(object _, DataReceivedEventArgs e)
+        {
+            if (e.Data != null)
+            {
+                lock (log) log.WriteLine(e.Data);
+                Ui.ServerLine(e.Data);
+            }
+        }
         process.OutputDataReceived += Line;
         process.ErrorDataReceived += Line;
         if (!process.Start()) throw new SetupException("The server did not start.", "Run RO3Emu.exe diag and attach the zip to an issue.");

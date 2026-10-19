@@ -11,6 +11,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- The client's managed DLLs: -p:ClientManaged=..., or the RO3_CLIENT_DIR environment variable (the ROO_PC folder). -->
     <ClientManaged Condition="'$(ClientManaged)' == '' and '$(RO3_CLIENT_DIR)' != ''">$(RO3_CLIENT_DIR)\ro3_Data\Managed</ClientManaged>
+    <ClientManaged Condition="'$(ClientManaged)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\Client\Ragnarok3\ro3_Data\Managed\Assembly-CSharp.dll')">$(MSBuildThisFileDirectory)..\..\Client\Ragnarok3\ro3_Data\Managed</ClientManaged>
+    <ClientManaged Condition="'$(ClientManaged)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\Client\ro3_Data\Managed\Assembly-CSharp.dll')">$(MSBuildThisFileDirectory)..\..\Client\ro3_Data\Managed</ClientManaged>
     <ClientManaged Condition="'$(ClientManaged)' == ''">C:\RO3\ROO_PC\ro3_Data\Managed</ClientManaged>
     <!-- The client's DLLs reference mscorlib-era types the netstandard facades cover; don't warn about it. -->
     <NoWarn>$(NoWarn);MSB3277;CS1701;CS1702</NoWarn>
@@ -23,7 +25,7 @@
 
   <ItemGroup>
     <Reference Include="mscorlib"><HintPath>$(ClientManaged)\mscorlib.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="netstandard"><HintPath>$(ClientManaged)\netstandard.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="netstandard" Condition="Exists('$(ClientManaged)\netstandard.dll')"><HintPath>$(ClientManaged)\netstandard.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="System"><HintPath>$(ClientManaged)\System.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="System.Core"><HintPath>$(ClientManaged)\System.Core.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>

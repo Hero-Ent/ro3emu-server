@@ -27,6 +27,15 @@ internal static class Ui
 
     public static void Error(string text) => Write(ConsoleColor.Red, "\n" + text);
 
+    public static void ServerLine(string text)
+    {
+        lock (Gate)
+        {
+            EndProgress();
+            Console.WriteLine(text);
+        }
+    }
+
     private static void Write(ConsoleColor? color, string text)
     {
         lock (Gate)
