@@ -46,3 +46,4 @@ Client/**/Ro3Emu.Server.exe
 /Launcher.exe
 Abrir_Launcher.cmd
 **/.ro3launcher/
+**/loc_misses.tsv
