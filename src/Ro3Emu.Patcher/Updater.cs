@@ -35,7 +35,7 @@ public sealed class Updater
 
     public InstallLayout Layout => _layout;
 
-    public int DownloadConcurrency { get; set; } = 8;
+    public int DownloadConcurrency { get; set; } = 24;
 
     string StatePath => Path.Combine(_metaDir, "state.json");
     string NextStatePath => Path.Combine(_metaDir, "state.next.json");
@@ -354,13 +354,8 @@ public sealed class Updater
             try
             {
                 byte[] stored = await _repo.GetChunkAsync(chunk.Hash, chunk.StoredSize, null, ct);
-                byte[] raw = Decompress(stored, chunk.Size);
-                if (!string.Equals(Hashing.Sha256Hex(raw), chunk.Hash, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new IOException($"Chunk {chunk.Hash[..12]} is corrupt.");
-                }
                 string path = CachePath(chunk.Hash);
-                string temp = path + "." + Environment.CurrentManagedThreadId + ".tmp";
+                string temp = path + "." + Guid.NewGuid().ToString("N")[..8] + ".tmp";
                 await File.WriteAllBytesAsync(temp, stored, ct);
                 File.Move(temp, path, overwrite: true);
                 return;

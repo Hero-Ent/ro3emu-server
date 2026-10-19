@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "manifest": "manifests/1.0.0.json.zst",
   "manifestSha256": "fbef37b34c904a596ebf19da9040098138a1aab29df31472c27487334ad6184c",
-  "published": "2026-10-19T19:08:00.0000000+00:00",
+  "published": "2026-10-19T19:47:00.0000000+00:00",
   "launcher": {
-    "version": "1.0.3",
-    "url": "launcher/1.0.3/Ro3EmuLauncher.exe",
-    "sha256": "a708b15f03b6d4b575e054e852328887e52a61729e6b5fe38d460b9e39d6e7a2"
+    "version": "1.0.4",
+    "url": "launcher/1.0.4/Ro3EmuLauncher.exe",
+    "sha256": "18e92c373ad0411a9e891d28f6ebaf661ef35643dbcf8925e073b402de9b8399"
   }
 }

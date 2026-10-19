@@ -578,7 +578,7 @@
     if (setDirChange) setDirChange.disabled = busy;
 
     // Footer Version: Displays Launcher version and Game version clearly
-    var lVer = state.launcher || "1.0.3";
+    var lVer = state.launcher || "1.0.4";
     var vStr = "Launcher v" + lVer.replace(/^v/, "");
     var cVer = state.installed || state.remote;
     if (cVer) {

@@ -29,17 +29,16 @@ public sealed class RepositoryClient : IDisposable
             {
                 AutomaticDecompression = System.Net.DecompressionMethods.None,
                 MaxConnectionsPerServer = 32,
-                PooledConnectionLifetime = TimeSpan.FromMinutes(10),
-                PooledConnectionIdleTimeout = TimeSpan.FromMinutes(2),
-                EnableMultipleHttp2Connections = true,
-                KeepAlivePingDelay = TimeSpan.FromSeconds(30),
-                KeepAlivePingTimeout = TimeSpan.FromSeconds(10),
+                PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+                PooledConnectionIdleTimeout = TimeSpan.FromMinutes(1),
+                KeepAlivePingDelay = TimeSpan.FromSeconds(15),
+                KeepAlivePingTimeout = TimeSpan.FromSeconds(5),
             };
             _http = new HttpClient(sockets)
             {
-                DefaultRequestVersion = System.Net.HttpVersion.Version20,
+                DefaultRequestVersion = System.Net.HttpVersion.Version11,
                 DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
-                Timeout = TimeSpan.FromSeconds(45)
+                Timeout = TimeSpan.FromSeconds(15)
             };
         }
         else
@@ -108,27 +107,32 @@ public sealed class RepositoryClient : IDisposable
     /// <summary>Downloads one stored chunk; <paramref name="onBytes"/> reports compressed bytes as they arrive.</summary>
     public async Task<byte[]> GetChunkAsync(string hash, int storedSize, Action<int>? onBytes, CancellationToken ct)
     {
-        var targetUri = new Uri(_activeBaseUri, PathRules.ChunkRelative(hash));
-        using var response = await _http.GetAsync(targetUri, HttpCompletionOption.ResponseHeadersRead, ct);
-        response.EnsureSuccessStatusCode();
-        await using var stream = await response.Content.ReadAsStreamAsync(ct);
-        byte[] buffer = new byte[storedSize];
-        int total = 0;
-        while (total < storedSize)
+        using var chunkCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        chunkCts.CancelAfter(TimeSpan.FromSeconds(10)); // Max 10s per 250 KB chunk
+
+        byte[] data;
+        try
         {
-            int read = await stream.ReadAsync(buffer.AsMemory(total, Math.Min(64 * 1024, storedSize - total)), ct);
-            if (read == 0)
-            {
-                break;
-            }
-            total += read;
-            onBytes?.Invoke(read);
+            var targetUri = new Uri(_activeBaseUri, PathRules.ChunkRelative(hash));
+            using var response = await _http.GetAsync(targetUri, chunkCts.Token);
+            response.EnsureSuccessStatusCode();
+            data = await response.Content.ReadAsByteArrayAsync(chunkCts.Token);
         }
-        if (total != storedSize || await stream.ReadAsync(new byte[1], ct) != 0)
+        catch (Exception) when (_fallbackUri != null && _activeBaseUri != _fallbackUri)
         {
-            throw new IOException($"Chunk {hash[..12]} has the wrong size.");
+            _activeBaseUri = _fallbackUri;
+            var fallbackTarget = new Uri(_activeBaseUri, PathRules.ChunkRelative(hash));
+            using var fbResponse = await _http.GetAsync(fallbackTarget, chunkCts.Token);
+            fbResponse.EnsureSuccessStatusCode();
+            data = await fbResponse.Content.ReadAsByteArrayAsync(chunkCts.Token);
         }
-        return buffer;
+
+        if (data.Length != storedSize)
+        {
+            throw new IOException($"Chunk {hash[..12]} has size {data.Length}, expected {storedSize}.");
+        }
+        onBytes?.Invoke(data.Length);
+        return data;
     }
 
     public async Task<byte[]?> TryGetBytesAsync(string relative, CancellationToken ct)
