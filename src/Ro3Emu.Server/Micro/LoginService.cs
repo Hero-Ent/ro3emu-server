@@ -49,6 +49,11 @@ public sealed class LoginService(AccountStore accounts, RoleStore roles, MicroSe
             log.LogWarning("verifySdk: unknown ticket from {Remote}", session.Channel.Remote);
             return MicroServiceRouter.Fail("invalid ticket");
         }
+        if (await accounts.IsBannedAsync(account))
+        {
+            log.LogWarning("verifySdk: account {Account} is banned", account);
+            return MicroServiceRouter.Fail("account is banned");
+        }
         micro.SignIn(session, account);
         // Phonest.Common.MixedLoginToken, [MessagePackObject(true)] => string-keyed map.
         var engineToken = MessagePackSerializer.Serialize(new Dictionary<string, object>

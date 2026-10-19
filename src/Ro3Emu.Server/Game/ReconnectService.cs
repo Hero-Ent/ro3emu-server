@@ -183,12 +183,21 @@ public sealed class ReconnectService
         }
     }
 
-    private void Kick(GameSession session, int reason)
+    internal void Kick(GameSession session, int reason)
     {
         Revoke(session);
         session.ReconnectBlocked = true;
         var channel = session.Channel;
         _ = Task.Run(() => CloseAsync(channel, reason));
+    }
+
+    internal bool KickAccount(string account, int reason = 21)
+    {
+        var session = _sessions.All().FirstOrDefault(s => string.Equals(s.Account, account, StringComparison.OrdinalIgnoreCase));
+        if (session == null) return false;
+        Kick(session, reason);
+        _sessions.Unregister(session);
+        return true;
     }
 
     private async Task CloseAsync(PhonestChannel channel, int reason)

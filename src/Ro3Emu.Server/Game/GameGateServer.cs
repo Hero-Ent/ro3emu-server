@@ -111,7 +111,7 @@ public sealed class GameGateServer(
             account = accounts.ResolveEngineSign(token.GetValueOrDefault("Sign") as string);
         }
         Log.LogInformation("GameGate: {Remote} connectServer {Type} account={Account}", session.Channel.Remote, type, account ?? "?");
-        if (account == null || (type == ConnectServerReq.Types.ReqType.SwitchToAccount && account != session.Account))
+        if (account == null || (type == ConnectServerReq.Types.ReqType.SwitchToAccount && account != session.Account) || await accounts.IsBannedAsync(account))
         {
             await session.Channel.SendAsync(ConnectResponse, new ConnectServerResp { Type = ConnectServerResp.Types.RespType.ConnectRefused });
             return;

@@ -298,6 +298,19 @@ public static class ServerHost
             lifetime.StopApplication();
             return Results.Ok("stopping");
         });
+        // Kick a player from the game server immediately (loopback only)
+        app.MapPost("/ro3emu/kick", async (HttpContext context, SessionRegistry sessions, ReconnectService reconnects, Micro.MicroSessions micro, GameLoop loop) =>
+        {
+            if (context.Connection.RemoteIpAddress is not { } ip || !System.Net.IPAddress.IsLoopback(ip)) return Results.NotFound();
+            var account = context.Request.Query["account"].ToString().Trim();
+            if (string.IsNullOrEmpty(account)) return Results.BadRequest("account is required");
+
+            micro.Kick(account);
+
+            bool kicked = await loop.InvokeAsync(() => Task.FromResult(reconnects.KickAccount(account)));
+            app.Logger.LogInformation("Kick requested for {Account}: kicked={Kicked}", account, kicked);
+            return Results.Json(new { ok = true, kicked, account });
+        });
         // Who is online, for the admin (loopback only).
         app.MapGet("/ro3emu/online", (HttpContext context, SessionRegistry sessions) =>
         {

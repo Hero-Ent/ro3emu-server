@@ -146,7 +146,7 @@ public sealed partial class AccountStore : IDisposable
         catch { db.Dispose(); throw; }
     }
 
-    public enum LoginResult { Ok, Registered, BadPassword }
+    public enum LoginResult { Ok, Registered, BadPassword, Banned, Unverified }
 
     private bool OnLoop => _loop?.IsOnLoop == true || _metrics != null && ReferenceEquals(ServerMetrics.LoopOwner, _metrics);
     private DbWriter Writer { get { lock (_runtimeGate) { ObjectDisposedException.ThrowIf(_disposed, this); return _writer.Value; } } }
@@ -506,8 +506,31 @@ public sealed partial class AccountStore : IDisposable
             ?? throw new InvalidOperationException("Account registration collision did not leave a visible account.");
         return await Check(existing).ConfigureAwait(false);
 
-        async Task<SignIn> Check(AccountCredentials credentials) =>
-            new(await MatchesAsync(password, credentials).ConfigureAwait(false) ? LoginResult.Ok : LoginResult.BadPassword, credentials.Name);
+        async Task<SignIn> Check(AccountCredentials credentials)
+        {
+            if (!await MatchesAsync(password, credentials).ConfigureAwait(false))
+                return new(LoginResult.BadPassword, credentials.Name);
+
+            var ban = await ReadAsync<AccountBanInfo?>(new AccountBanRead(credentials.Name)).ConfigureAwait(false);
+            if (ban is { IsBanned: true })
+                return new(LoginResult.Banned, credentials.Name);
+            if (ban is { IsUnverified: true })
+                return new(LoginResult.Unverified, credentials.Name);
+
+            return new(LoginResult.Ok, credentials.Name);
+        }
+    }
+
+    public async Task<bool> IsBannedAsync(string account)
+    {
+        var ban = await ReadAsync<AccountBanInfo?>(new AccountBanRead(account)).ConfigureAwait(false);
+        return ban is { IsBanned: true };
+    }
+
+    public bool IsBanned(string account)
+    {
+        var ban = ReadSync<AccountBanInfo?>(new AccountBanRead(account));
+        return ban is { IsBanned: true };
     }
 
     public readonly record struct SignIn(LoginResult Result, string Account);

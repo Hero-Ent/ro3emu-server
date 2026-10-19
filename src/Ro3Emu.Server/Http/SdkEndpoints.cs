@@ -43,7 +43,15 @@ public static class SdkEndpoints
             log.LogInformation("SDK login {Identity}: {Result}", account, result);
             if (result == AccountStore.LoginResult.BadPassword)
             {
-                return Results.Json(new { code = 401 });
+                return Results.Json(new { code = 401, msg = "Senha incorreta.", message = "Senha incorreta." });
+            }
+            if (result == AccountStore.LoginResult.Banned)
+            {
+                return Results.Json(new { code = 403, msg = "Esta conta foi suspensa ou banida permanentemente.", message = "Esta conta foi suspensa ou banida permanentemente." });
+            }
+            if (result == AccountStore.LoginResult.Unverified)
+            {
+                return Results.Json(new { code = 403, msg = "Por favor, verifique seu e-mail antes de entrar no jogo.", message = "Por favor, verifique seu e-mail antes de entrar no jogo." });
             }
             return Results.Json(new { code = 0, data = new { token = await accounts.IssueSdkTokenAsync(account) } });
         });

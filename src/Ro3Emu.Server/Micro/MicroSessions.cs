@@ -42,6 +42,23 @@ public sealed class MicroSessions(ILogger<MicroSessions> log)
             if (session.Account != null && _byAccount.TryGetValue(session.Account, out var current) && current == session) _byAccount.Remove(session.Account);
     }
 
+    public void Kick(string account)
+    {
+        MicroSession? session;
+        lock (_sync)
+        {
+            var key = _byAccount.Keys.FirstOrDefault(k => string.Equals(k, account, StringComparison.OrdinalIgnoreCase));
+            if (key != null && _byAccount.Remove(key, out session))
+            {
+            }
+            else session = null;
+        }
+        if (session != null)
+        {
+            try { _ = session.Channel.DisposeAsync(); } catch { }
+        }
+    }
+
     /// <summary>Pushes <paramref name="args"/> (never empty: a zero-length body is unpacked unsafely) to the account's client.</summary>
     public async Task PushAsync(string account, string service, string method, params object?[] args)
     {

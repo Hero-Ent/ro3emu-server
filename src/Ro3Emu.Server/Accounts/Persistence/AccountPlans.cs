@@ -89,3 +89,79 @@ internal sealed class AccountTokenRead(string kind, string? token, long now) : D
         return cmd.ExecuteScalar() as string;
     }
 }
+
+internal sealed record AccountBanInfo(bool IsBanned, bool IsUnverified, string? Reason, string? Type, string? ExpiresAt);
+
+/// <summary>
+/// Checks whether an account is currently banned or pending verification in ro3emu.db.
+/// Inspects account_penalties and web_account_meta.
+/// </summary>
+internal sealed class AccountBanRead(string name) : DbReadPlan
+{
+    internal override int Bytes => 128 + Encoding.UTF8.GetByteCount(name);
+    internal override string Label => "account/ban_status";
+    internal override object? Execute(SqliteConnection db, SqliteTransaction tx)
+    {
+        // 1. Check account_penalties
+        try
+        {
+            using var penaltyCmd = DbSql.Command(db, tx,
+                "SELECT id, type, reason, expires_at, active FROM account_penalties WHERE account_name=$name COLLATE NOCASE AND active=1 ORDER BY id DESC LIMIT 1");
+            penaltyCmd.Parameters.AddWithValue("$name", name);
+            using var pReader = penaltyCmd.ExecuteReader();
+            if (pReader.Read())
+            {
+                long id = pReader.GetInt64(0);
+                string type = pReader.IsDBNull(1) ? "permban" : pReader.GetString(1);
+                string reason = pReader.IsDBNull(2) ? "Violação das regras" : pReader.GetString(2);
+                string? expiresAt = pReader.IsDBNull(3) ? null : pReader.GetString(3);
+
+                // Check if tempban has expired
+                if (string.Equals(type, "tempban", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(expiresAt))
+                {
+                    if (DateTimeOffset.TryParse(expiresAt, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var exp))
+                    {
+                        if (DateTimeOffset.UtcNow >= exp)
+                        {
+                            // Expired
+                            return new AccountBanInfo(false, false, null, null, null);
+                        }
+                    }
+                }
+
+                return new AccountBanInfo(true, false, reason, type, expiresAt);
+            }
+        }
+        catch
+        {
+            // Table might not exist yet
+        }
+
+        // 2. Check web_account_meta
+        try
+        {
+            using var metaCmd = DbSql.Command(db, tx,
+                "SELECT status FROM web_account_meta WHERE account_name=$name COLLATE NOCASE LIMIT 1");
+            metaCmd.Parameters.AddWithValue("$name", name);
+            var statusObj = metaCmd.ExecuteScalar();
+            if (statusObj is string status)
+            {
+                if (string.Equals(status, "banned", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(status, "temp_banned", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new AccountBanInfo(true, false, "Conta banida", status, null);
+                }
+                if (string.Equals(status, "pending_verification", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new AccountBanInfo(false, true, "E-mail não verificado", status, null);
+                }
+            }
+        }
+        catch
+        {
+            // Table might not exist yet
+        }
+
+        return new AccountBanInfo(false, false, null, null, null);
+    }
+}
