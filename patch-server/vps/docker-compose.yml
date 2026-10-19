@@ -1,0 +1,10 @@
+services:
+  patch-server:
+    image: nginx:alpine
+    container_name: hero-patch-server
+    restart: always
+    ports:
+      - "8790:8790"
+    volumes:
+      - ./nginx-patchserver.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../repo:/var/www/hero-patches/repo:ro

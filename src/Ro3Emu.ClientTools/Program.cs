@@ -12,6 +12,8 @@ if (args.Length < 2)
           release <client dir> <server url> <gate_rsa_public.pem> <repo dir> <version> [channel] [zstd level]
                                                 publish the client patched for that server for Ro3Emu.Launcher
           release-launcher <repo dir> <channel> <Ro3EmuLauncher.exe> <version>
+          init-repo <repo dir> [channel] [version]
+                                                initialize a clean patch repository structure
           scan    <client dir> <text>...        list string literals in the client DLLs
           members <client dir> <dll> <type> [method]  list a type's methods with their parameters
           delete-role <server url> <account> <password> <character name or id>
@@ -45,6 +47,9 @@ try
             var withLauncher = await Ro3Emu.Patcher.Publisher.PublishLauncherAsync(args[1], args[2], args[3], args[4]);
             Console.WriteLine($"channel {withLauncher.Channel}: game {withLauncher.Version}, launcher {withLauncher.Launcher!.Version}");
             return 0;
+        case "init-repo":
+            if (args.Length < 2) throw new ArgumentException("init-repo needs <repo dir> [channel] [version]");
+            return await InitRepo(args[1], args.Length > 2 ? args[2] : "test", args.Length > 3 ? args[3] : "1.0.0");
         case "scan":
             ClientPatcher.Scan(args[1], args[2..]);
             return 0;
@@ -90,3 +95,91 @@ static async Task<string> ServerKey(string serverUrl)
     Console.WriteLine($"fetching gate key from {url}");
     return await http.GetStringAsync(url);
 }
+
+static async Task<int> InitRepo(string repoDir, string channelName, string version)
+{
+    repoDir = Path.GetFullPath(repoDir);
+    Directory.CreateDirectory(Path.Combine(repoDir, "channels"));
+    Directory.CreateDirectory(Path.Combine(repoDir, "manifests"));
+    Directory.CreateDirectory(Path.Combine(repoDir, "chunks"));
+    Directory.CreateDirectory(Path.Combine(repoDir, "launcher", version));
+
+    string manifestRelative = $"manifests/{version}.json.zst";
+    string manifestPath = Path.Combine(repoDir, manifestRelative);
+
+    var manifest = new Ro3Emu.Patcher.Manifest
+    {
+        Version = version,
+        Created = DateTimeOffset.UtcNow,
+        Launch = new Ro3Emu.Patcher.LaunchInfo { Exe = "ro3.exe", Args = "" },
+        Chunking = Ro3Emu.Patcher.ChunkingInfo.From(Ro3Emu.Patcher.ChunkingParameters.Default),
+        Files = new List<Ro3Emu.Patcher.ManifestFile>()
+    };
+    byte[] manifestBytes = manifest.ToCompressedBytes();
+    await File.WriteAllBytesAsync(manifestPath, manifestBytes);
+    string manifestSha256 = Ro3Emu.Patcher.Hashing.Sha256Hex(manifestBytes);
+
+    Ro3Emu.Patcher.LauncherRelease? launcherRelease = null;
+    string[] candidateLaunchers = ["HeroLauncher.exe", "Launcher-Dist/HeroLauncher.exe", "Ro3EmuLauncher.exe"];
+    string? foundLauncher = candidateLaunchers.FirstOrDefault(File.Exists);
+    if (foundLauncher is not null)
+    {
+        byte[] exeBytes = await File.ReadAllBytesAsync(foundLauncher);
+        string launcherTarget = Path.Combine(repoDir, "launcher", version, "HeroLauncher.exe");
+        await File.WriteAllBytesAsync(launcherTarget, exeBytes);
+        string rootTarget = Path.Combine(repoDir, "HeroLauncher.exe");
+        if (!File.Exists(rootTarget)) File.Copy(foundLauncher, rootTarget, overwrite: true);
+        launcherRelease = new Ro3Emu.Patcher.LauncherRelease
+        {
+            Version = version,
+            Url = $"launcher/{version}/HeroLauncher.exe",
+            Sha256 = Ro3Emu.Patcher.Hashing.Sha256Hex(exeBytes)
+        };
+    }
+
+    var channel = new Ro3Emu.Patcher.ChannelInfo
+    {
+        Channel = channelName,
+        Version = version,
+        Manifest = manifestRelative,
+        ManifestSha256 = manifestSha256,
+        Published = DateTimeOffset.UtcNow,
+        Launcher = launcherRelease
+    };
+    string channelPath = Path.Combine(repoDir, "channels", $"{channelName}.json");
+    await File.WriteAllBytesAsync(channelPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(channel, Ro3Emu.Patcher.Json.Indented));
+
+    string newsPath = Path.Combine(repoDir, "news.json");
+    if (!File.Exists(newsPath))
+    {
+        var news = new
+        {
+            items = new[]
+            {
+                new { tag = "WELCOME", color = "blue", title = "Prepare-se para o lançamento", text = "Os portões de Midgard se abrem em breve. Junte-se ao nosso Discord oficial para acompanhar tudo!", date = DateTime.UtcNow.ToString("yyyy-MM-dd") },
+                new { tag = "STATUS", color = "red", title = "Servidores em preparação", text = "Estamos ajustando os detalhes finais para o lançamento. Verifique o Discord para avisos.", date = DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-dd") },
+                new { tag = "UPDATES", color = "orange", title = "Atualizações automáticas", text = "O inicializador baixa e atualiza todos os arquivos necessários de forma rápida e segura.", date = DateTime.UtcNow.AddDays(-3).ToString("yyyy-MM-dd") }
+            }
+        };
+        await File.WriteAllBytesAsync(newsPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(news, Ro3Emu.Patcher.Json.Indented));
+    }
+
+    string clientStatePath = Path.Combine("Client", "Ragnarok3", ".ro3launcher", "state.json");
+    if (File.Exists(clientStatePath))
+    {
+        var localState = System.Text.Json.JsonSerializer.Deserialize<Ro3Emu.Patcher.LocalState>(await File.ReadAllBytesAsync(clientStatePath), Ro3Emu.Patcher.Json.Compact)
+            ?? new Ro3Emu.Patcher.LocalState();
+        localState.Version = version;
+        localState.Channel = channelName;
+        localState.ManifestSha256 = manifestSha256;
+        localState.Save(clientStatePath);
+    }
+
+    Console.WriteLine($"Repository initialized at {repoDir}");
+    Console.WriteLine($"  Channel: {channelName} -> Version {version}");
+    Console.WriteLine($"  Manifest: {manifestRelative} (sha256: {manifestSha256})");
+    if (launcherRelease is not null)
+        Console.WriteLine($"  Launcher: {launcherRelease.Url} (version: {launcherRelease.Version})");
+    return 0;
+}
+

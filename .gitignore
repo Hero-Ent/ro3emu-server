@@ -47,3 +47,9 @@ Client/**/Ro3Emu.Server.exe
 Abrir_Launcher.cmd
 **/.ro3launcher/
 **/loc_misses.tsv
+
+# Patch repository binaries and chunks
+patch-server/repo/**/*.exe
+patch-server/repo/*.exe
+patch-server/repo/chunks/*
+!patch-server/repo/chunks/.gitkeep

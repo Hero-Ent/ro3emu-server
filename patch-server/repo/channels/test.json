@@ -1,0 +1,12 @@
+{
+  "channel": "test",
+  "version": "1.0.0",
+  "manifest": "manifests/1.0.0.json.zst",
+  "manifestSha256": "b9b701789d044660426535a660a391200dce05128c2a618753317de7e6332551",
+  "published": "2026-10-19T14:14:46.2006809+00:00",
+  "launcher": {
+    "version": "1.0.0",
+    "url": "launcher/1.0.0/HeroLauncher.exe",
+    "sha256": "51cd21b61ce0dde457b66439c11790e63d4bab48ed375b90ad4b5e8060f9f3f3"
+  }
+}

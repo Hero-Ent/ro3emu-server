@@ -80,17 +80,29 @@ public static class ReleaseBuilder
     private static List<(string Relative, long Size)> ReadBaseline(string clientDir)
     {
         string path = Path.Combine(clientDir, BaselineFile);
-        if (!File.Exists(path)) throw new FileNotFoundException("not an installed RO3 client (no verified baseline)", path);
-        var lines = File.ReadAllLines(path);
-        if (lines.Length < 3 || lines[0] != BaselineHeader) throw new InvalidDataException($"unknown baseline format in {path}");
-        var result = new List<(string, long)>();
-        foreach (var line in lines.Skip(3))
+        if (File.Exists(path))
         {
-            if (line.Length == 0) continue;
-            var parts = line.Split('\t');
-            if (parts.Length != 3 || !long.TryParse(parts[0], out long size)) throw new InvalidDataException($"bad baseline line: {line}");
-            result.Add((parts[2], size));
+            var lines = File.ReadAllLines(path);
+            if (lines.Length < 3 || lines[0] != BaselineHeader) throw new InvalidDataException($"unknown baseline format in {path}");
+            var result = new List<(string, long)>();
+            foreach (var line in lines.Skip(3))
+            {
+                if (line.Length == 0) continue;
+                var parts = line.Split('\t');
+                if (parts.Length != 3 || !long.TryParse(parts[0], out long size)) throw new InvalidDataException($"bad baseline line: {line}");
+                result.Add((parts[2], size));
+            }
+            return result;
         }
-        return result;
+
+        var list = new List<(string, long)>();
+        foreach (var file in Directory.EnumerateFiles(clientDir, "*", SearchOption.AllDirectories))
+        {
+            string rel = Path.GetRelativePath(clientDir, file).Replace('\\', '/');
+            if (rel.StartsWith(".ro3") || rel.StartsWith("Logs/") || rel.StartsWith("ro3emu/") || rel.StartsWith("ro3emu-backup/") || rel.EndsWith(".log"))
+                continue;
+            list.Add((rel, new FileInfo(file).Length));
+        }
+        return list;
     }
 }

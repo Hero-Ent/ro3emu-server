@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "tag": "WELCOME",
+      "color": "blue",
+      "title": "Prepare-se para o lan\u00E7amento",
+      "text": "Os port\u00F5es de Midgard se abrem em breve. Junte-se ao nosso Discord oficial para acompanhar tudo!",
+      "date": "2026-10-19"
+    },
+    {
+      "tag": "STATUS",
+      "color": "red",
+      "title": "Servidores em prepara\u00E7\u00E3o",
+      "text": "Estamos ajustando os detalhes finais para o lan\u00E7amento. Verifique o Discord para avisos.",
+      "date": "2026-10-18"
+    },
+    {
+      "tag": "UPDATES",
+      "color": "orange",
+      "title": "Atualiza\u00E7\u00F5es autom\u00E1ticas",
+      "text": "O inicializador baixa e atualiza todos os arquivos necess\u00E1rios de forma r\u00E1pida e segura.",
+      "date": "2026-10-16"
+    }
+  ]
+}
