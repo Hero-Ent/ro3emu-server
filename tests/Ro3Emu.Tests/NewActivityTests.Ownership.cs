@@ -42,4 +42,16 @@ public sealed partial class NewActivityTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
         Assert.False(resumed);
     }
+
+    [Fact]
+    public async Task JobChangeDoesNotAbortActivityReconciliation()
+    {
+        await using var bot = await InWorld("ActJob");
+        var session = Session(bot);
+        await OnLoop(async () =>
+        {
+            session.Role = session.Role! with { Career = 1100 };
+            await Service<NewActivityService>().ReconcileAsync(session);
+        });
+    }
 }

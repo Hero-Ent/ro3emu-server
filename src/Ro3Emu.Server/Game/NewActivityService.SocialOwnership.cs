@@ -79,7 +79,7 @@ public sealed partial class NewActivityService
             var scope = await owners.EnterWithGateAsync(origin, session.ActivityGate, keys.ToArray());
             try
             {
-                if (!ReferenceEquals(session.Role, role) || !ReferenceEquals(session.Owner, owner)
+                if (session.Role?.Id != role.Id || !ReferenceEquals(session.Owner, owner)
                     || !ReferenceEquals(session.Attachment, attachment) || attachment?.Cancelled == true)
                     throw new OperationCanceledException("Activity attachment changed before admission.");
                 var currentKeys = new List<ReservationKey> { ReservationKey.Role(role.Id), ReservationKey.Lifecycle(role.Id) };
@@ -126,7 +126,7 @@ public sealed partial class NewActivityService
             var scope = await owners.EnterWithGateAsync(origin, sender.ActivityGate, keys.Distinct().ToArray());
             try
             {
-                if (!ReferenceEquals(sender.Role, role) || !ReferenceEquals(sender.Owner, owner)
+                if (sender.Role?.Id != role.Id || !ReferenceEquals(sender.Owner, owner)
                     || !ReferenceEquals(sender.Attachment, attachment) || attachment?.Cancelled == true)
                     throw new OperationCanceledException("Activity sender attachment changed before admission.");
                 if (EveKeyFor(sender) != eveKey)

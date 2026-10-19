@@ -581,7 +581,7 @@ public sealed partial class NewActivityService
             int serial = session.AccountEntitySerial;
             loop.PostRuntime(() =>
             {
-                if (ReferenceEquals(session.Role, role) && session.AccountEntitySerial == serial) QueueRefresh(session);
+                if (session.Role?.Id == role?.Id && session.AccountEntitySerial == serial) QueueRefresh(session);
                 return Task.CompletedTask;
             });
             return;
@@ -593,6 +593,7 @@ public sealed partial class NewActivityService
         loop.PostRuntime(async () =>
         {
             try { if (deadlines.IsCurrent(session, lease)) await ReconcileAsync(session); }
+            catch (OperationCanceledException) { }
             finally { lock (queued) queued.Remove(queuedKey); }
         });
     }
