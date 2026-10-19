@@ -37,7 +37,9 @@ public sealed class LauncherController : IDisposable
         _post = post;
         _pickFolder = pickFolder;
         _minimize = minimize;
-        _repo = new RepositoryClient(new Uri(config.Repository));
+        Uri baseRepo = new Uri(config.Repository);
+        Uri? fallbackRepo = !string.IsNullOrWhiteSpace(config.FallbackRepository) ? new Uri(config.FallbackRepository) : null;
+        _repo = new RepositoryClient(baseRepo, fallbackRepo);
         _layout = new InstallLayout(_settings.ClientDirectory ?? FindDefaultClientDirectory(exePath));
     }
 
@@ -272,6 +274,8 @@ public sealed class LauncherController : IDisposable
     {
         readonly Stopwatch _clock = Stopwatch.StartNew();
         readonly Queue<(double At, long Bytes)> _samples = new();
+        double _lastValidRate;
+        double _lastValidTime;
 
         public (double Rate, double Eta) Sample(long done, long total)
         {
@@ -280,9 +284,19 @@ public sealed class LauncherController : IDisposable
             while (_samples.Count > 2 && now - _samples.Peek().At > 5) _samples.Dequeue();
             var first = _samples.Peek();
             double seconds = now - first.At;
-            if (seconds < 1) return (0, 0);
+            if (seconds < 0.5) return (_lastValidRate, _lastValidRate > 0 ? (total - done) / _lastValidRate : 0);
             double rate = (done - first.Bytes) / seconds;
-            return rate <= 0 ? (0, 0) : (rate, (total - done) / rate);
+            if (rate > 0)
+            {
+                _lastValidRate = rate;
+                _lastValidTime = now;
+                return (rate, (total - done) / rate);
+            }
+            if (now - _lastValidTime < 2.0 && _lastValidRate > 0)
+            {
+                return (_lastValidRate, (total - done) / _lastValidRate);
+            }
+            return (0, 0);
         }
     }
 }

@@ -8,6 +8,7 @@ namespace Ro3Emu.Launcher;
 public sealed class LauncherConfig
 {
     [JsonPropertyName("repository")] public string Repository { get; set; } = "http://localhost:8790/";
+    [JsonPropertyName("fallbackRepository")] public string? FallbackRepository { get; set; }
     [JsonPropertyName("channel")] public string Channel { get; set; } = "test";
     [JsonPropertyName("server")] public string? Server { get; set; }
     [JsonPropertyName("serverName")] public string ServerName { get; set; } = "RO3Emu";

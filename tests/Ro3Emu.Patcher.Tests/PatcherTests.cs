@@ -425,6 +425,18 @@ public sealed class PatcherTests : IDisposable
         Assert.Throws<ArgumentException>(() => new InstallLayout(Game, Path.Combine(Game, "sub")));
         Assert.Null(new InstallLayout(Game, Path.Combine(Game, "ROData")).DataDirectory);
     }
+
+    [Fact]
+    public async Task RepositoryClient_FallsBackWhenPrimaryFails()
+    {
+        WriteBuild("Game.exe", Random(1000, 1));
+        await Publish("1.0.0");
+        var fallbackHandler = new FileRepoHandler(Repo);
+
+        using var client = new RepositoryClient(new Uri("http://primary.invalid/"), new Uri("http://fallback.test/"), fallbackHandler);
+        var channel = await client.GetChannelAsync("stable", CancellationToken.None);
+        Assert.Equal("1.0.0", channel.Version);
+    }
 }
 
 /// <summary>Needs Windows file locking (an open FileShare.None handle blocks replacing the file).</summary>

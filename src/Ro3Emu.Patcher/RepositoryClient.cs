@@ -8,32 +8,71 @@ public sealed class RepositoryClient : IDisposable
 {
     readonly HttpClient _http;
     readonly bool _ownsClient;
+    readonly Uri _primaryUri;
+    readonly Uri? _fallbackUri;
+    Uri _activeBaseUri;
 
     public RepositoryClient(Uri baseUri, HttpMessageHandler? handler = null)
+        : this(baseUri, fallbackUri: null, handler)
     {
-        if (!baseUri.AbsoluteUri.EndsWith('/'))
+    }
+
+    public RepositoryClient(Uri baseUri, Uri? fallbackUri, HttpMessageHandler? handler = null)
+    {
+        _primaryUri = EnsureTrailingSlash(baseUri);
+        _fallbackUri = fallbackUri is not null ? EnsureTrailingSlash(fallbackUri) : null;
+        _activeBaseUri = _primaryUri;
+
+        if (handler is null)
         {
-            baseUri = new Uri(baseUri.AbsoluteUri + "/");
-        }
-        _http = handler is null
-            ? new HttpClient(new SocketsHttpHandler
+            var sockets = new SocketsHttpHandler
             {
                 AutomaticDecompression = System.Net.DecompressionMethods.None,
-                MaxConnectionsPerServer = 16,
-                PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-            })
-            : new HttpClient(handler, disposeHandler: false);
+                MaxConnectionsPerServer = 32,
+                PooledConnectionLifetime = TimeSpan.FromMinutes(10),
+                PooledConnectionIdleTimeout = TimeSpan.FromMinutes(2),
+                EnableMultipleHttp2Connections = true,
+                KeepAlivePingDelay = TimeSpan.FromSeconds(30),
+                KeepAlivePingTimeout = TimeSpan.FromSeconds(10),
+            };
+            _http = new HttpClient(sockets)
+            {
+                DefaultRequestVersion = System.Net.HttpVersion.Version20,
+                DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
+                Timeout = TimeSpan.FromSeconds(45)
+            };
+        }
+        else
+        {
+            _http = new HttpClient(handler, disposeHandler: false);
+        }
+
         _ownsClient = true;
-        _http.BaseAddress = baseUri;
-        _http.Timeout = TimeSpan.FromSeconds(60);
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("Ro3EmuLauncher/1.0");
     }
 
-    public Uri BaseUri => _http.BaseAddress!;
+    static Uri EnsureTrailingSlash(Uri uri) => uri.AbsoluteUri.EndsWith('/') ? uri : new Uri(uri.AbsoluteUri + "/");
+
+    public Uri BaseUri => _activeBaseUri;
 
     public async Task<ChannelInfo> GetChannelAsync(string channel, CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"channels/{channel}.json");
+        try
+        {
+            return await FetchChannelFromUriAsync(_activeBaseUri, channel, ct);
+        }
+        catch (Exception) when (_fallbackUri != null && _activeBaseUri != _fallbackUri)
+        {
+            var result = await FetchChannelFromUriAsync(_fallbackUri, channel, ct);
+            _activeBaseUri = _fallbackUri;
+            return result;
+        }
+    }
+
+    async Task<ChannelInfo> FetchChannelFromUriAsync(Uri baseUri, string channel, CancellationToken ct)
+    {
+        var targetUri = new Uri(baseUri, $"channels/{channel}.json");
+        using var request = new HttpRequestMessage(HttpMethod.Get, targetUri);
         request.Headers.CacheControl = new CacheControlHeaderValue { NoCache = true };
         using var response = await _http.SendAsync(request, ct);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -49,7 +88,16 @@ public sealed class RepositoryClient : IDisposable
     public async Task<(Manifest Manifest, byte[] Raw)> GetManifestAsync(ChannelInfo channel, CancellationToken ct)
     {
         PathRules.ValidateRelative(channel.Manifest);
-        byte[] raw = await _http.GetByteArrayAsync(channel.Manifest, ct);
+        byte[] raw;
+        try
+        {
+            raw = await _http.GetByteArrayAsync(new Uri(_activeBaseUri, channel.Manifest), ct);
+        }
+        catch (Exception) when (_fallbackUri != null && _activeBaseUri != _fallbackUri)
+        {
+            _activeBaseUri = _fallbackUri;
+            raw = await _http.GetByteArrayAsync(new Uri(_activeBaseUri, channel.Manifest), ct);
+        }
         if (!string.Equals(Hashing.Sha256Hex(raw), channel.ManifestSha256, StringComparison.OrdinalIgnoreCase))
         {
             throw new PatcherException("The release manifest is corrupt (hash mismatch). Try again in a moment.");
@@ -60,7 +108,8 @@ public sealed class RepositoryClient : IDisposable
     /// <summary>Downloads one stored chunk; <paramref name="onBytes"/> reports compressed bytes as they arrive.</summary>
     public async Task<byte[]> GetChunkAsync(string hash, int storedSize, Action<int>? onBytes, CancellationToken ct)
     {
-        using var response = await _http.GetAsync(PathRules.ChunkRelative(hash), HttpCompletionOption.ResponseHeadersRead, ct);
+        var targetUri = new Uri(_activeBaseUri, PathRules.ChunkRelative(hash));
+        using var response = await _http.GetAsync(targetUri, HttpCompletionOption.ResponseHeadersRead, ct);
         response.EnsureSuccessStatusCode();
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         byte[] buffer = new byte[storedSize];
@@ -84,11 +133,19 @@ public sealed class RepositoryClient : IDisposable
 
     public async Task<byte[]?> TryGetBytesAsync(string relative, CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, relative);
+        var targetUri = new Uri(_activeBaseUri, relative);
+        using var request = new HttpRequestMessage(HttpMethod.Get, targetUri);
         request.Headers.CacheControl = new CacheControlHeaderValue { NoCache = true };
         using var response = await _http.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)
         {
+            if (_fallbackUri != null && _activeBaseUri != _fallbackUri)
+            {
+                using var fbReq = new HttpRequestMessage(HttpMethod.Get, new Uri(_fallbackUri, relative));
+                fbReq.Headers.CacheControl = new CacheControlHeaderValue { NoCache = true };
+                using var fbResp = await _http.SendAsync(fbReq, ct);
+                if (fbResp.IsSuccessStatusCode) return await fbResp.Content.ReadAsByteArrayAsync(ct);
+            }
             return null;
         }
         return await response.Content.ReadAsByteArrayAsync(ct);

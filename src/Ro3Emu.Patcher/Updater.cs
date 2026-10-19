@@ -250,11 +250,9 @@ public sealed class Updater
         progress?.Report(new UpdateProgress(UpdateStage.Downloading, 0, downloadTotal));
         await Parallel.ForEachAsync(missing.Values, new ParallelOptions { MaxDegreeOfParallelism = DownloadConcurrency, CancellationToken = ct }, async (chunk, token) =>
         {
-            await DownloadToCacheAsync(chunk, n =>
-            {
-                long done = Interlocked.Add(ref downloaded, n);
-                progress?.Report(new UpdateProgress(UpdateStage.Downloading, done, downloadTotal));
-            }, token);
+            await DownloadToCacheAsync(chunk, token);
+            long done = Interlocked.Add(ref downloaded, chunk.StoredSize);
+            progress?.Report(new UpdateProgress(UpdateStage.Downloading, done, downloadTotal));
         });
 
         // 4. Assemble each changed file into staging; every chunk is checked, the whole file too.
@@ -349,14 +347,13 @@ public sealed class Updater
 
     string CachePath(string hash) => Path.Combine(CacheDir, hash);
 
-    async Task DownloadToCacheAsync(ChunkRef chunk, Action<int> onBytes, CancellationToken ct)
+    async Task DownloadToCacheAsync(ChunkRef chunk, CancellationToken ct)
     {
         for (int attempt = 1; ; attempt++)
         {
-            long reported = 0;
             try
             {
-                byte[] stored = await _repo.GetChunkAsync(chunk.Hash, chunk.StoredSize, n => { reported += n; onBytes(n); }, ct);
+                byte[] stored = await _repo.GetChunkAsync(chunk.Hash, chunk.StoredSize, null, ct);
                 byte[] raw = Decompress(stored, chunk.Size);
                 if (!string.Equals(Hashing.Sha256Hex(raw), chunk.Hash, StringComparison.OrdinalIgnoreCase))
                 {
@@ -371,12 +368,14 @@ public sealed class Updater
             catch (Exception e) when (e is IOException or HttpRequestException or InvalidDataException
                                       || (e is TaskCanceledException && !ct.IsCancellationRequested))
             {
-                onBytes(checked((int)-reported));
-                if (attempt >= 5)
+                if (attempt >= 8)
                 {
                     throw new PatcherException("Downloading the update failed. Check your connection and try again.", e);
                 }
-                await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)), ct);
+                bool isRateLimit = e is HttpRequestException { StatusCode: System.Net.HttpStatusCode.TooManyRequests };
+                int baseDelay = isRateLimit ? 500 * attempt : (int)(120 * Math.Pow(1.5, attempt - 1));
+                int jitter = Random.Shared.Next(50, 200);
+                await Task.Delay(Math.Min(8000, baseDelay + jitter), ct);
             }
         }
     }
@@ -434,7 +433,7 @@ public sealed class Updater
             }
             File.Delete(cachePath);
         }
-        await DownloadToCacheAsync(chunk, _ => { }, ct);
+        await DownloadToCacheAsync(chunk, ct);
         return TryReadCached(await File.ReadAllBytesAsync(cachePath, ct), chunk)
             ?? throw new PatcherException($"Chunk {chunk.Hash[..12]} is corrupt after download.");
     }
