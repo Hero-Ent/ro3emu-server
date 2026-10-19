@@ -30,6 +30,28 @@ namespace Ro3Emu.ClientHooks
         private static readonly Dictionary<int, Sprite> Sprites = new Dictionary<int, Sprite>();
         private static readonly HashSet<int> Ours = new HashSet<int>();
 
+        private static string _diskDir;
+        private static string DiskDir
+        {
+            get
+            {
+                if (_diskDir == null)
+                {
+                    try
+                    {
+                        var dataPath = Application.dataPath;
+                        var clientDir = Path.GetDirectoryName(dataPath);
+                        _diskDir = Path.Combine(clientDir, "ro3emu", "textures");
+                    }
+                    catch
+                    {
+                        _diskDir = "";
+                    }
+                }
+                return _diskDir;
+            }
+        }
+
         private static Dictionary<string, string> Resources
         {
             get
@@ -44,7 +66,11 @@ namespace Ro3Emu.ClientHooks
         {
             try
             {
-                if (texture == null || Resources.Count == 0 || Ours.Contains(texture.GetInstanceID())) return texture;
+                if (texture == null || Ours.Contains(texture.GetInstanceID())) return texture;
+                if (texture.name != null && (texture.name.IndexOf("logo", StringComparison.OrdinalIgnoreCase) >= 0 || texture.name.IndexOf("login", StringComparison.OrdinalIgnoreCase) >= 0))
+                {
+                    Debug.Log($"[Ro3Emu.TextureSwap] MapTexture candidate: {texture.name} ({texture.width}x{texture.height})");
+                }
                 return TryGet(texture.name, out var replacement) ? replacement : texture;
             }
             catch (Exception e)
@@ -59,25 +85,34 @@ namespace Ro3Emu.ClientHooks
         {
             try
             {
-                if (sprite == null || Resources.Count == 0) return sprite;
+                if (sprite == null) return sprite;
                 int id = sprite.GetInstanceID();
                 if (Ours.Contains(id)) return sprite;
                 if (Sprites.TryGetValue(id, out var made)) return made;
+                if (sprite.name != null && (sprite.name.IndexOf("logo", StringComparison.OrdinalIgnoreCase) >= 0 || sprite.name.IndexOf("login", StringComparison.OrdinalIgnoreCase) >= 0))
+                {
+                    Debug.Log($"[Ro3Emu.TextureSwap] MapSprite candidate: sprite={sprite.name} tex={sprite.texture?.name} rect={sprite.rect}");
+                }
                 if (!TryGet(sprite.name, out var texture)) return sprite;
-                var rect = sprite.rect;
-                var pivot = new Vector2(rect.width > 0 ? sprite.pivot.x / rect.width : 0.5f, rect.height > 0 ? sprite.pivot.y / rect.height : 0.5f);
-                made = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), pivot,
-                    sprite.pixelsPerUnit * texture.width / Math.Max(1f, rect.width), 0, SpriteMeshType.FullRect, sprite.border);
-                made.name = sprite.name;
-                Sprites[id] = made;
-                Ours.Add(made.GetInstanceID());
-                return made;
+                return BuildSprite(texture, sprite);
             }
             catch (Exception e)
             {
                 Debug.LogError("[Ro3Emu.TextureSwap] " + e);
                 return sprite;
             }
+        }
+
+        private static Sprite BuildSprite(Texture2D texture, Sprite sprite)
+        {
+            var rect = sprite.rect;
+            var pivot = new Vector2(rect.width > 0 ? sprite.pivot.x / rect.width : 0.5f, rect.height > 0 ? sprite.pivot.y / rect.height : 0.5f);
+            var made = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), pivot,
+                sprite.pixelsPerUnit * texture.width / Math.Max(1f, rect.width), 0, SpriteMeshType.FullRect, sprite.border);
+            made.name = sprite.name;
+            Sprites[sprite.GetInstanceID()] = made;
+            Ours.Add(made.GetInstanceID());
+            return made;
         }
 
         /// <summary>
@@ -97,35 +132,101 @@ namespace Ro3Emu.ClientHooks
         /// <summary>Graphic.OnEnable: swap what a prefab serialized.</summary>
         public static void Enabled(UnityEngine.Object graphic)
         {
-            if (Resources.Count == 0) return;
             if (graphic is RawImage raw)
             {
-                var mapped = MapTexture(raw.texture);
-                if (mapped != raw.texture) raw.texture = mapped;
+                if (raw.texture != null)
+                {
+                    if (raw.name.IndexOf("logo", StringComparison.OrdinalIgnoreCase) >= 0 || (raw.texture.name != null && raw.texture.name.IndexOf("logo", StringComparison.OrdinalIgnoreCase) >= 0))
+                    {
+                        var rect = raw.rectTransform != null ? raw.rectTransform.rect : Rect.zero;
+                        Debug.Log($"[Ro3Emu.TextureSwap] Enabled RawImage: name={raw.name} tex={raw.texture.name} ({raw.texture.width}x{raw.texture.height}) rect={rect.width}x{rect.height}");
+                        string dumpPath = Path.Combine(Path.GetDirectoryName(Application.dataPath), "ro3emu", "dump", raw.texture.name + ".png");
+                        if (!File.Exists(dumpPath))
+                        {
+                            try
+                            {
+                                Diagnostics.SavePng(raw.texture, dumpPath);
+                                Debug.Log("[Ro3Emu.TextureSwap] Saved original texture to: " + dumpPath);
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.LogWarning("[Ro3Emu.TextureSwap] Failed to dump original: " + ex.Message);
+                            }
+                        }
+                    }
+                    var mapped = MapTexture(raw.texture);
+                    if (mapped == raw.texture && !string.IsNullOrEmpty(raw.name) && TryGet(raw.name, out var customTex))
+                    {
+                        mapped = customTex;
+                    }
+                    if (mapped != raw.texture) raw.texture = mapped;
+                }
             }
             else if (graphic is Image image)
             {
-                var mapped = MapSprite(image.sprite);
-                if (mapped != image.sprite) image.sprite = mapped;
+                if (image.sprite != null)
+                {
+                    if (image.name.IndexOf("logo", StringComparison.OrdinalIgnoreCase) >= 0 || (image.sprite.name != null && image.sprite.name.IndexOf("logo", StringComparison.OrdinalIgnoreCase) >= 0))
+                    {
+                        Debug.Log($"[Ro3Emu.TextureSwap] Enabled Image: name={image.name} sprite={image.sprite.name} tex={image.sprite.texture?.name}");
+                    }
+                    var mapped = MapSprite(image.sprite);
+                    if (mapped == image.sprite && !string.IsNullOrEmpty(image.name) && TryGet(image.name, out var customTex))
+                    {
+                        mapped = BuildSprite(customTex, image.sprite);
+                    }
+                    if (mapped != image.sprite) image.sprite = mapped;
+                }
             }
         }
 
         private static bool TryGet(string name, out Texture2D texture)
         {
             texture = null;
-            if (name == null || !Resources.TryGetValue(name, out var resource)) return false;
+            if (string.IsNullOrEmpty(name)) return false;
             if (Decoded.TryGetValue(name, out texture)) return texture != null;
-            byte[] png;
-            var asm = typeof(TextureSwap).Assembly;
-            using (var stream = asm.GetManifestResourceStream(resource))
-            using (var copy = new MemoryStream())
+
+            byte[] png = null;
+            try
             {
-                stream.CopyTo(copy);
-                png = copy.ToArray();
+                if (!string.IsNullOrEmpty(DiskDir))
+                {
+                    string diskPath = Path.Combine(DiskDir, name + ".png");
+                    if (File.Exists(diskPath))
+                    {
+                        png = File.ReadAllBytes(diskPath);
+                        Debug.Log("[Ro3Emu.TextureSwap] Loaded replacement from disk: " + diskPath);
+                    }
+                }
             }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[Ro3Emu.TextureSwap] disk load " + name + ": " + ex.Message);
+            }
+
+            if (png == null && Resources.TryGetValue(name, out var resource))
+            {
+                var asm = typeof(TextureSwap).Assembly;
+                using (var stream = asm.GetManifestResourceStream(resource))
+                using (var copy = new MemoryStream())
+                {
+                    stream.CopyTo(copy);
+                    png = copy.ToArray();
+                }
+            }
+
+            if (png == null) return false;
+
             var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false) { name = name };
-            if (!ImageConversion.LoadImage(tex, png, true)) tex = null;
-            else Ours.Add(tex.GetInstanceID());
+            if (!ImageConversion.LoadImage(tex, png, true))
+            {
+                tex = null;
+            }
+            else
+            {
+                Ours.Add(tex.GetInstanceID());
+                Debug.Log("[Ro3Emu.TextureSwap] Active replacement for " + name + " (" + tex.width + "x" + tex.height + ")");
+            }
             Decoded[name] = tex;
             texture = tex;
             return tex != null;

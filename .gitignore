@@ -47,6 +47,7 @@ Client/**/Ro3Emu.Server.exe
 Abrir_Launcher.cmd
 **/.ro3launcher/
 **/loc_misses.tsv
+**/ro3emu/dump/
 
 # Patch repository binaries and chunks
 patch-server/repo/**/*.exe

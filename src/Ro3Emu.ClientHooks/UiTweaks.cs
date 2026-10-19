@@ -40,7 +40,23 @@ namespace Ro3Emu.ClientHooks
                     var window = GameObject.Find(name);
                     if (window != null && Done.Add(window.GetInstanceID())) WidenStallName(window.transform);
                 }
-                if (Done.Count > 64) Done.Clear();
+                var uiroot = GameObject.Find("GameMain/NodeRoot/UINode");
+                if (uiroot != null)
+                {
+                    for (int i = 0; i < uiroot.transform.childCount; i++)
+                    {
+                        var child = uiroot.transform.GetChild(i);
+                        if (child.name.IndexOf("Login", StringComparison.OrdinalIgnoreCase) >= 0 && Done.Add(child.gameObject.GetInstanceID()))
+                        {
+                            Debug.Log("[Ro3Emu.UiTweaks] Login panel active: " + child.name);
+                            foreach (var raw in child.GetComponentsInChildren<RawImage>(true))
+                                Debug.Log($"[Ro3Emu.UiTweaks] Login RawImage: {raw.name} tex={(raw.texture != null ? raw.texture.name + " (" + raw.texture.width + "x" + raw.texture.height + ")" : "null")}");
+                            foreach (var img in child.GetComponentsInChildren<Image>(true))
+                                Debug.Log($"[Ro3Emu.UiTweaks] Login Image: {img.name} sprite={(img.sprite != null ? img.sprite.name : "null")} tex={(img.sprite?.texture != null ? img.sprite.texture.name : "null")}");
+                        }
+                    }
+                }
+                if (Done.Count > 128) Done.Clear();
                 QuitButton.Tick();
                 LuaPatches.Tick();
                 PassChallenges.Tick();

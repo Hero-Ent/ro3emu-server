@@ -21,7 +21,8 @@ public static class Launcher
             Console.WriteLine($"ro3.exe exited early with code {game.ExitCode}" + (game.ExitCode == 70 ? " (launcher proof rejected)" : ""));
             return game.ExitCode;
         }
-        return 0;
+        game.WaitForExit();
+        return game.ExitCode;
     }
 
     /// <summary>Starts the game and hands it the proof; returns once it has read it (or after it exited early).</summary>

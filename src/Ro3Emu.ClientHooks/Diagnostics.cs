@@ -25,6 +25,16 @@ namespace Ro3Emu.ClientHooks
                     case "find":
                         Find(parts.Length > 1 ? parts[1] : "weapon");
                         break;
+                    case "prefab":
+                    case "prefabs":
+                        Prefabs(parts.Length > 1 ? parts[1] : "Login");
+                        break;
+                    case "alltex":
+                        AllTextures(parts.Length > 1 ? parts[1] : "");
+                        break;
+                    case "dumpalltex":
+                        DumpAllTextures(parts.Length > 1 ? parts[1] : "");
+                        break;
                     case "panels":
                         Panels();
                         break;
@@ -76,6 +86,62 @@ namespace Ro3Emu.ClientHooks
                 }
             }
             Debug.Log("[Ro3Emu.Diag] find '" + filter + "': " + hits + " hit(s)" + sb);
+        }
+
+        /// <summary>Prefabs and loaded GameObjects matching <paramref name="filter"/>: components and images.</summary>
+        private static void Prefabs(string filter)
+        {
+            var all = Resources.FindObjectsOfTypeAll<GameObject>();
+            var sb = new StringBuilder();
+            int hits = 0;
+            foreach (var go in all)
+            {
+                if (go.name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                if (++hits > 60) break;
+                sb.Append("\n  go ").Append(go.name).Append(" (scene=").Append(go.scene.name ?? "asset").Append(")");
+                foreach (var r in go.GetComponentsInChildren<RawImage>(true))
+                    sb.Append("\n      raw ").Append(r.name).Append(" tex=").Append(r.texture != null ? r.texture.name + " (" + r.texture.width + "x" + r.texture.height + ")" : "null");
+                foreach (var img in go.GetComponentsInChildren<Image>(true))
+                    sb.Append("\n      img ").Append(img.name).Append(" sprite=").Append(img.sprite != null ? img.sprite.name : "null").Append(" tex=").Append(img.sprite != null && img.sprite.texture != null ? img.sprite.texture.name : "null");
+            }
+            Debug.Log("[Ro3Emu.Diag] prefabs '" + filter + "': " + hits + sb);
+        }
+
+        /// <summary>All loaded textures matching <paramref name="filter"/>.</summary>
+        private static void AllTextures(string filter)
+        {
+            var sb = new StringBuilder();
+            int hits = 0;
+            foreach (var tex in Resources.FindObjectsOfTypeAll<Texture>())
+            {
+                if (tex == null) continue;
+                if (!string.IsNullOrEmpty(filter) && tex.name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                if (++hits > 200) break;
+                sb.Append("\n  tex ").Append(tex.name).Append(" (").Append(tex.width).Append('x').Append(tex.height).Append(") ").Append(tex.GetType().Name);
+            }
+            Debug.Log("[Ro3Emu.Diag] alltex '" + filter + "': " + hits + sb);
+        }
+
+        /// <summary>Dumps loaded Texture2D objects matching <paramref name="filter"/> to ro3emu/dump/.</summary>
+        private static void DumpAllTextures(string filter)
+        {
+            string dir = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Application.dataPath), "ro3emu", "dump");
+            Directory.CreateDirectory(dir);
+            var sb = new StringBuilder();
+            int hits = 0;
+            foreach (var tex in Resources.FindObjectsOfTypeAll<Texture2D>())
+            {
+                if (tex == null) continue;
+                if (!string.IsNullOrEmpty(filter) && tex.name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                if (++hits > 60) break;
+                string safe = tex.name;
+                foreach (char c in System.IO.Path.GetInvalidFileNameChars()) safe = safe.Replace(c, '_');
+                string file = System.IO.Path.Combine(dir, (safe.Length > 0 ? safe : "tex" + hits) + ".png");
+                try { SavePng(tex, file); }
+                catch (Exception e) { file = "save failed: " + e.Message; }
+                sb.Append("\n  ").Append(tex.name).Append(" (").Append(tex.width).Append('x').Append(tex.height).Append(") -> ").Append(file);
+            }
+            Debug.Log("[Ro3Emu.Diag] dumpalltex '" + filter + "': " + hits + sb);
         }
 
         /// <summary>Open UI views: active objects named UI_Sys_* / UI_Com_* (the view prefabs' roots), outermost only.</summary>
