@@ -36,6 +36,12 @@ public sealed class MicroSessions(ILogger<MicroSessions> log)
     /// <summary>Tests: the session an account is bound to.</summary>
     internal MicroSession? For(string account) { lock (_sync) return _byAccount.GetValueOrDefault(account); }
 
+    /// <summary>Active signed-in accounts on the micro gate.</summary>
+    public IReadOnlyCollection<string> ActiveAccounts
+    {
+        get { lock (_sync) return _byAccount.Keys.ToArray(); }
+    }
+
     public void Remove(MicroSession session)
     {
         lock (_sync)

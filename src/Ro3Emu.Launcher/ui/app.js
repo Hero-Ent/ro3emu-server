@@ -9,7 +9,7 @@
   var state = { phase: "checking" };
   var busy = false;
   var stage = null;
-  var serverData = { online: false, players: null };
+  var serverData = { online: null, players: null };
   var remoteNews = null;
 
   var I18N = {
@@ -382,6 +382,11 @@
 
   function renderServerStatus() {
     var t = I18N[currentLang].server;
+    if (serverData.online === null) {
+      $("server").className = "server";
+      $("server-text").innerHTML = "<b>" + t.connecting + "</b>";
+      return;
+    }
     $("server").className = "server " + (serverData.online ? "on" : "off");
     if (serverData.online) {
       var pText = "";
@@ -572,9 +577,13 @@
     var setDirChange = $("set-dir-change");
     if (setDirChange) setDirChange.disabled = busy;
 
-    // Footer Version: e.g. "v1.0.1" or "v2.2.13"
-    var vStr = state.installed || state.remote || state.launcher || "1.0.1";
-    if (!vStr.startsWith("v")) vStr = "v" + vStr;
+    // Footer Version: Displays Launcher version and Game version clearly
+    var lVer = state.launcher || "1.0.2";
+    var vStr = "Launcher v" + lVer.replace(/^v/, "");
+    var cVer = state.installed || state.remote;
+    if (cVer) {
+      vStr += " · Jogo v" + cVer.replace(/^v/, "");
+    }
     $("ver-line").textContent = vStr;
   }
 

@@ -242,7 +242,7 @@ public sealed class LauncherController : IDisposable
             catch (Exception) { }
             if (_life.IsCancellationRequested) return;
             _post(new { type = "server", online, players });
-            try { await Task.Delay(TimeSpan.FromSeconds(30), _life.Token); }
+            try { await Task.Delay(TimeSpan.FromSeconds(5), _life.Token); }
             catch (TaskCanceledException) { return; }
         }
     }

@@ -289,8 +289,13 @@ public static class ServerHost
             });
         });
         // Public status for the launcher's online pill: only a count, never account or character names.
-        app.MapGet("/ro3emu/status", (SessionRegistry sessions) =>
-            Results.Json(new { online = true, players = sessions.All().Count(s => s.Role != null) }));
+        app.MapGet("/ro3emu/status", (SessionRegistry sessions, Micro.MicroSessions micro) =>
+        {
+            var gameAccounts = sessions.All().Where(s => s.Account != null).Select(s => s.Account!);
+            var microAccounts = micro.ActiveAccounts;
+            int total = gameAccounts.Concat(microAccounts).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+            return Results.Json(new { online = true, players = total });
+        });
         // A clean stop for RO3Emu.exe (loopback only): the same shutdown as Ctrl+C, the loop drains and the database closes.
         app.MapPost("/ro3emu/shutdown", (HttpContext context, IHostApplicationLifetime lifetime) =>
         {

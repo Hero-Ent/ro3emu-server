@@ -54,3 +54,7 @@ patch-server/repo/**/*.exe
 patch-server/repo/*.exe
 patch-server/repo/chunks/*
 !patch-server/repo/chunks/.gitkeep
+
+# Scratch deployment scripts
+check_vps.py
+deploy_to_vps.py
