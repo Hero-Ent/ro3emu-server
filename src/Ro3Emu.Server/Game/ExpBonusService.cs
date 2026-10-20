@@ -27,24 +27,53 @@ public sealed class ExpBonusService
         _options = options;
         _log = log;
 
-        string baseDir = AppContext.BaseDirectory;
-        string cwd = Directory.GetCurrentDirectory();
-
-        // Check if scripts/ folder exists or can be created in cwd or baseDir
-        string scriptsDir = Path.Combine(cwd, "scripts");
-        if (!Directory.Exists(scriptsDir) && Directory.Exists(Path.Combine(baseDir, "scripts")))
-        {
-            scriptsDir = Path.Combine(baseDir, "scripts");
-        }
-
-        try
-        {
-            if (!Directory.Exists(scriptsDir)) Directory.CreateDirectory(scriptsDir);
-        }
-        catch { /* Fallback to cwd */ }
-
-        _configFilePath = Path.Combine(scriptsDir, "exp_bonus.json");
+        _configFilePath = FindConfigFile(options.Value.DataDir);
         LoadOrInitialize();
+    }
+
+    private static string FindConfigFile(string? dataDir)
+    {
+        var checkedDirs = new List<string>();
+
+        // Check directory hierarchy upwards from BaseDirectory looking for Ro3Emu.slnx or scripts folder
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+        {
+            checkedDirs.Add(dir.FullName);
+            if (File.Exists(Path.Combine(dir.FullName, "Ro3Emu.slnx"))) break;
+        }
+
+        // Also check upwards from CurrentDirectory
+        for (var dir = new DirectoryInfo(Directory.GetCurrentDirectory()); dir != null; dir = dir.Parent)
+        {
+            if (!checkedDirs.Contains(dir.FullName)) checkedDirs.Add(dir.FullName);
+            if (File.Exists(Path.Combine(dir.FullName, "Ro3Emu.slnx"))) break;
+        }
+
+        if (!string.IsNullOrEmpty(dataDir))
+        {
+            if (!checkedDirs.Contains(dataDir)) checkedDirs.Add(dataDir);
+            var parent = Directory.GetParent(dataDir)?.FullName;
+            if (parent != null && !checkedDirs.Contains(parent)) checkedDirs.Add(parent);
+        }
+
+        // Check if scripts/exp_bonus.json exists in any of these
+        foreach (var dir in checkedDirs)
+        {
+            string candidate = Path.Combine(dir, "scripts", "exp_bonus.json");
+            if (File.Exists(candidate)) return Path.GetFullPath(candidate);
+        }
+
+        // Check if exp_bonus.json directly exists in any of these
+        foreach (var dir in checkedDirs)
+        {
+            string candidate = Path.Combine(dir, "exp_bonus.json");
+            if (File.Exists(candidate)) return Path.GetFullPath(candidate);
+        }
+
+        // Best target: repo root scripts/ if repo root found, else cwd/scripts
+        string root = checkedDirs.FirstOrDefault(d => File.Exists(Path.Combine(d, "Ro3Emu.slnx")))
+            ?? Directory.GetCurrentDirectory();
+        return Path.GetFullPath(Path.Combine(root, "scripts", "exp_bonus.json"));
     }
 
     /// <summary>The active bonus multiplier (0 = no bonus, 100 = 100x bonus).</summary>
@@ -160,13 +189,32 @@ public sealed class ExpBonusService
             var data = new
             {
                 multiplier = _multiplier,
-                description = "Multiplicador de bônus de EXP para o servidor Hero Saga (fase Beta). Exemplo: 0 = sem bônus (1x normal), 1 = +1x bônus (2x total), 10 = +10x bônus (11x total), 100 = +100x bônus (101x total)."
+                description = "Multiplicador de bônus de EXP para o servidor Hero Saga (fase Beta). Exemplo: 0 = sem bônus (1x normal), 1 = +1x bônus (2x total), 10 = +10x bônus (11x total), 50 = +50x bônus (51x total), 100 = +100x bônus (101x total)."
             };
             string dir = Path.GetDirectoryName(_configFilePath)!;
             if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
             string json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_configFilePath, json);
             _lastFileWriteTime = File.GetLastWriteTimeUtc(_configFilePath);
+
+            // Also synchronize any secondary scripts folders if present
+            var secondaries = new[]
+            {
+                Path.Combine(AppContext.BaseDirectory, "scripts", "exp_bonus.json"),
+                Path.Combine(Directory.GetCurrentDirectory(), "scripts", "exp_bonus.json")
+            };
+            foreach (var sec in secondaries)
+            {
+                try
+                {
+                    if (!sec.Equals(_configFilePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        string sDir = Path.GetDirectoryName(sec)!;
+                        if (Directory.Exists(sDir)) File.WriteAllText(sec, json);
+                    }
+                }
+                catch { /* Ignore secondary sync errors */ }
+            }
         }
         catch (Exception ex)
         {

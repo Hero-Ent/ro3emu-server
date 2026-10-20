@@ -62,18 +62,18 @@ public sealed class InGameRegistrationAndExpBonusTests
             var options = Options.Create(new ServerOptions { DataDir = tempDir });
             var service = new ExpBonusService(options);
 
-            // Default is 100x
-            service.SetMultiplier(100, saveToFile: false);
-            Assert.Equal(100, service.Multiplier);
+            // Default is 50x or 100x
+            service.SetMultiplier(50, saveToFile: false);
+            Assert.Equal(50, service.Multiplier);
 
-            // Base EXP = 10, Bonus = 10 * 100 = 1000
-            Assert.Equal(1000, service.CalculateBonus(10));
+            // Base EXP = 10, Bonus = 10 * 50 = 500
+            Assert.Equal(500, service.CalculateBonus(10));
 
             long baseExp = 15;
             long jobExp = 20;
             service.ApplyBonus(ref baseExp, ref jobExp);
-            Assert.Equal(15 + 15 * 100, baseExp); // 1515
-            Assert.Equal(20 + 20 * 100, jobExp);  // 2020
+            Assert.Equal(15 + 15 * 50, baseExp); // 765
+            Assert.Equal(20 + 20 * 50, jobExp);  // 1020
 
             // Multiplier 0: no bonus
             service.SetMultiplier(0, saveToFile: false);
@@ -98,5 +98,25 @@ public sealed class InGameRegistrationAndExpBonusTests
         {
             try { Directory.Delete(tempDir, true); } catch (IOException) { }
         }
+    }
+
+    [Fact]
+    public void GmAccessRestrictedToDesignatedAccountsWhenConfigured()
+    {
+        var options = new ServerOptions
+        {
+            GmAccounts = ["hero", "Hero", "admin", "Admin"],
+            GmOpenWhenEmpty = false
+        };
+
+        Assert.True(GmCommands.Allowed(options, "hero", loopbackTool: false));
+        Assert.True(GmCommands.Allowed(options, "Hero", loopbackTool: false));
+        Assert.True(GmCommands.Allowed(options, "admin", loopbackTool: false));
+        Assert.True(GmCommands.Allowed(options, "Admin", loopbackTool: false));
+
+        // Normal player does not have GM
+        Assert.False(GmCommands.Allowed(options, "regular_player", loopbackTool: false));
+        Assert.False(GmCommands.Allowed(options, "teste", loopbackTool: false));
+        Assert.False(GmCommands.Allowed(options, null, loopbackTool: false));
     }
 }

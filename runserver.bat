@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
 title RO3Emu Server - rAthena Console Mode
 cd /d "%~dp0"
@@ -105,14 +105,15 @@ echo [Status]: Executavel       : %SERVER_EXE%
 if not "%DATADIR%"=="" (
     echo [Status]: Pasta de Dados   : %DATADIR%
 )
+echo [Status]: GM Restrito      : hero, admin (Acesso normal desativado)
 echo ============================================================
 echo.
 
 :RUN_LOOP
 if not "%DATADIR%"=="" (
-    "%SERVER_EXE%" --Ro3Emu:DataDir="%DATADIR%" --Ro3Emu:PreloadGameData=true %*
+    "%SERVER_EXE%" --Ro3Emu:DataDir="%DATADIR%" --Ro3Emu:PreloadGameData=true --Ro3Emu:GmOpenWhenEmpty=false --Ro3Emu:GmAccounts:0=hero --Ro3Emu:GmAccounts:1=admin %*
 ) else (
-    "%SERVER_EXE%" --Ro3Emu:PreloadGameData=true %*
+    "%SERVER_EXE%" --Ro3Emu:PreloadGameData=true --Ro3Emu:GmOpenWhenEmpty=false --Ro3Emu:GmAccounts:0=hero --Ro3Emu:GmAccounts:1=admin %*
 )
 
 set "EXIT_CODE=%ERRORLEVEL%"

@@ -171,7 +171,10 @@ public sealed class RewardService
             baseExp = Math.Max(1, baseExp * teams.ExpBonus(player) / 10000);
         }
         // BaseExpAddConfig catch-up below the server level raises Base EXP only (CharacterService.LevelRules).
-        return (items, character.WithPursueBonus(player.Progress!.Level, baseExp), baseExp);
+        long resolvedBaseExp = character.WithPursueBonus(player.Progress!.Level, baseExp);
+        long resolvedJobExp = baseExp;
+        (resolvedBaseExp, resolvedJobExp) = character.WithExpBonus(resolvedBaseExp, resolvedJobExp);
+        return (items, resolvedBaseExp, resolvedJobExp);
     }
 
     private async Task KilledAsync(GameSession player, MonsterUnit monster)
