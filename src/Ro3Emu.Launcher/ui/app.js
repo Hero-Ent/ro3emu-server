@@ -37,25 +37,25 @@
       },
       defaultNews: [
         {
-          tag: "WELCOME",
-          color: "blue",
-          title: "Prepare-se para o lançamento",
-          text: "Os portões de Midgard se abrem em breve. Junte-se ao nosso Discord oficial para acompanhar tudo!",
-          date: "2026-10-19"
+          tag: "PATCH 0.0.3",
+          color: "green",
+          title: "Patch Notes v0.0.3 - Melhorias no Login",
+          text: "• Tecla TAB: alterna diretamente entre Usuário e Senha sem falhas.\n• Tecla ENTER: entra no jogo direto pelo teclado na tela de login.\n• Servidor oficial nomeado para Hero Saga Ro3.\n• Novo aviso do Closed Beta e link oficial do Discord integrado.\n• Versão do jogo sincronizada e exibida no atualizador.",
+          date: "2026-10-20"
         },
         {
-          tag: "STATUS",
-          color: "red",
-          title: "Servidores em preparação",
-          text: "Estamos ajustando os detalhes finais para o lançamento. Verifique o Discord para avisos.",
-          date: "2026-10-18"
+          tag: "WELCOME",
+          color: "blue",
+          title: "Closed Beta do Hero Saga RO3",
+          text: "Os portões de Midgard estão abertos! Junte-se ao nosso Discord oficial para acompanhar novidades, eventos e suporte.",
+          date: "2026-10-20"
         },
         {
           tag: "UPDATES",
           color: "orange",
           title: "Atualizações automáticas",
           text: "O inicializador baixa e atualiza todos os arquivos necessários de forma rápida e segura.",
-          date: "2026-10-15"
+          date: "2026-10-18"
         }
       ],
       steps: {
@@ -126,25 +126,25 @@
       },
       defaultNews: [
         {
-          tag: "WELCOME",
-          color: "blue",
-          title: "Get ready for launch",
-          text: "The gates of Midgard will open soon. Join our official Discord to follow all the latest news!",
-          date: "2026-10-19"
+          tag: "PATCH 0.0.3",
+          color: "green",
+          title: "Patch Notes v0.0.3 - Login Improvements",
+          text: "• TAB key: smoothly cycles between Username and Password.\n• ENTER key: quick login from the keyboard.\n• Official server name set to Hero Saga Ro3.\n• Updated Closed Beta notice and Discord link.\n• Game version synchronized and displayed in the launcher.",
+          date: "2026-10-20"
         },
         {
-          tag: "STATUS",
-          color: "red",
-          title: "Servers under preparation",
-          text: "We are putting the final touches on Hero Saga for release. Check Discord for announcements.",
-          date: "2026-10-18"
+          tag: "WELCOME",
+          color: "blue",
+          title: "Closed Beta Hero Saga RO3",
+          text: "The gates of Midgard are open! Join our official Discord to follow updates, events and support.",
+          date: "2026-10-20"
         },
         {
           tag: "UPDATES",
           color: "orange",
           title: "Automatic updates",
           text: "The launcher downloads and keeps all necessary game files up to date automatically.",
-          date: "2026-10-15"
+          date: "2026-10-18"
         }
       ],
       steps: {
@@ -215,25 +215,25 @@
       },
       defaultNews: [
         {
-          tag: "WELCOME",
-          color: "blue",
-          title: "Prepárate para el lanzamiento",
-          text: "Las puertas de Midgard se abrirán pronto. ¡Únete a nuestro Discord oficial para seguir todas las novedades!",
-          date: "2026-10-19"
+          tag: "PATCH 0.0.3",
+          color: "green",
+          title: "Notas del Parche v0.0.3 - Mejoras en el Login",
+          text: "• Tecla TAB: alterna fluidamente entre Usuario y Contraseña.\n• Tecla ENTER: inicia sesión directamente desde el teclado.\n• Nombre oficial del servidor actualizado a Hero Saga Ro3.\n• Nuevo aviso de Closed Beta y enlace de Discord actualizado.\n• Versión del juego sincronizada y visible en el actualizador.",
+          date: "2026-10-20"
         },
         {
-          tag: "STATUS",
-          color: "red",
-          title: "Servidores en preparación",
-          text: "Estamos afinando los últimos detalles para el lanzamiento. Consulta Discord para avisos.",
-          date: "2026-10-18"
+          tag: "WELCOME",
+          color: "blue",
+          title: "Closed Beta de Hero Saga RO3",
+          text: "¡Las puertas de Midgard están abiertas! Únete a nuestro Discord oficial para seguir novedades, eventos y soporte.",
+          date: "2026-10-20"
         },
         {
           tag: "UPDATES",
           color: "orange",
           title: "Actualizaciones automáticas",
           text: "El lanzador descarga y actualiza todos los archivos necesarios de forma rápida y segura.",
-          date: "2026-10-15"
+          date: "2026-10-18"
         }
       ],
       steps: {
