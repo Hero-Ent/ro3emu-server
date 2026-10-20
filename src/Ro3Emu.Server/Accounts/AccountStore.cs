@@ -542,6 +542,9 @@ public sealed partial class AccountStore : IDisposable
         return ban is { IsBanned: true };
     }
 
+    /// <summary>The account's website group (web_account_meta.group_id), 0 when it has none.</summary>
+    public int GroupId(string account) => ReadSync<int>(new AccountGroupRead(account));
+
     public readonly record struct SignIn(LoginResult Result, string Account);
     private static Task<bool> MatchesAsync(string password, AccountCredentials existing)
         => Task.Run(() => CryptographicOperations.FixedTimeEquals(existing.Hash, AccountHash.Hash(password, existing.Salt)));

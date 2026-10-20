@@ -94,6 +94,13 @@ public sealed class ServerOptions
     /// </summary>
     public bool? GmOpenWhenEmpty { get; set; }
 
+    /// <summary>
+    /// Website group that also grants GM in game: an account whose web_account_meta.group_id is at least this value is a
+    /// GM even when it is not in <see cref="GmAccounts"/> (the site's own scale: 10 = Game Master, 99 = Administrator).
+    /// 0 turns the database check off. docs/guide/gm-access.md.
+    /// </summary>
+    public int GmMinGroupId { get; set; } = 10;
+
     /// <summary>In-game bug reports (FeedbackService, docs/guide/feedback.md).</summary>
     public FeedbackOptions Feedback { get; set; } = new();
 

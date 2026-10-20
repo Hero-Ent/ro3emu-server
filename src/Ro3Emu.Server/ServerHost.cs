@@ -440,6 +440,8 @@ public static class ServerHost
         if (options.GmAccounts.Length > 0)
         {
             logger.LogInformation("GM accounts: {Accounts}", string.Join(", ", options.GmAccounts));
+            if (options.GmMinGroupId > 0)
+                logger.LogInformation("GM also: accounts whose website group (web_account_meta.group_id) is {Min} or more", options.GmMinGroupId);
             return;
         }
         if (options.GmOpenWhenEmpty == false)

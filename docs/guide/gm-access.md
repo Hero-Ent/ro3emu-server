@@ -19,6 +19,14 @@ At startup the server logs who has GM. With an empty list it warns loudly in bot
 - Production and nobody has GM: `!!! Production: Ro3Emu:GmAccounts is empty, so NO account has GM commands in game.`
 - GM open to everyone on a public address (`PublicHost` not loopback): `!!! Ro3Emu:GmAccounts is empty and GM is open: EVERY account can use GM commands in game ...`
 
+## Website groups (`Ro3Emu:GmMinGroupId`)
+
+An account whose website group (`web_account_meta.group_id`, set in the site's admin panel) is at least
+`GmMinGroupId` is also a GM in game, on top of `GmAccounts`. The default is `10`, the site's own scale: `10` = Game
+Master, `99` = Administrator, `0` = player. `GmMinGroupId=0` turns the database check off. A change on the site
+reaches the game within 30 seconds. The probe of the client's GM panel and every refused GM line are logged with the
+account name (`GM panel probe from account ...`, `GM refused for account ...`).
+
 ## Configuration
 
 Like every `Ro3Emu:` option, the list can be set in `appsettings.json`:

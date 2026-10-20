@@ -90,6 +90,27 @@ internal sealed class AccountTokenRead(string kind, string? token, long now) : D
     }
 }
 
+/// <summary>The website group of an account (web_account_meta.group_id); 0 when the account or the table is missing.</summary>
+internal sealed class AccountGroupRead(string name) : DbReadPlan
+{
+    internal override int Bytes => 64 + Encoding.UTF8.GetByteCount(name);
+    internal override string Label => "account/group";
+    internal override object? Execute(SqliteConnection db, SqliteTransaction tx)
+    {
+        try
+        {
+            using var cmd = DbSql.Command(db, tx,
+                "SELECT COALESCE(group_id,0) FROM web_account_meta WHERE account_name=$name COLLATE NOCASE LIMIT 1");
+            cmd.Parameters.AddWithValue("$name", name);
+            return cmd.ExecuteScalar() is { } value and not DBNull ? Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture) : 0;
+        }
+        catch (SqliteException)
+        {
+            return 0; // the website has not created web_account_meta yet
+        }
+    }
+}
+
 internal sealed record AccountBanInfo(bool IsBanned, bool IsUnverified, string? Reason, string? Type, string? ExpiresAt);
 
 /// <summary>

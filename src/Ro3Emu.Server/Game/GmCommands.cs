@@ -39,7 +39,36 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
     public bool IsCommand(string text) => text.StartsWith('!') && text.Length > 1;
 
     /// <summary>Shared account allowlist for every GM wire entry point.</summary>
-    public bool Allowed(GameSession session) => Allowed(options.Value, session.Account, loopbackTool: false);
+    public bool Allowed(GameSession session) => Allowed(session.Account, loopbackTool: false);
+
+    /// <summary>The configured list (<see cref="Allowed(ServerOptions, string?, bool)"/>) or the website group (GmMinGroupId).</summary>
+    private bool Allowed(string? account, bool loopbackTool) =>
+        Allowed(options.Value, account, loopbackTool) || GroupGm(account);
+
+    /// <summary>How long a website group read is reused, so a change on the site reaches the game within this time.</summary>
+    private static readonly TimeSpan GroupCacheTime = TimeSpan.FromSeconds(30);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (bool Gm, DateTime Until)> _groupGm =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>web_account_meta.group_id at least GmMinGroupId (the site's Game Master / Administrator groups).</summary>
+    private bool GroupGm(string? account)
+    {
+        int min = options.Value.GmMinGroupId;
+        if (min <= 0 || string.IsNullOrEmpty(account)) return false;
+        var now = DateTime.UtcNow;
+        if (_groupGm.TryGetValue(account, out var cached) && cached.Until > now) return cached.Gm;
+        bool gm = false;
+        try
+        {
+            if (services.GetService<Accounts.AccountStore>() is { } store) gm = store.GroupId(account) >= min;
+        }
+        catch (Exception e)
+        {
+            log.LogWarning(e, "GM group check failed for {Account}", account);
+        }
+        _groupGm[account] = (gm, now + GroupCacheTime);
+        return gm;
+    }
 
     /// <summary>
     /// A listed account always may. An empty list means everyone for the loopback HTTP tool (unchanged), and in game
@@ -84,8 +113,9 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
 
     private async Task RunCoreAsync(GameSession session, string line, bool loopbackTool)
     {
-        if (!Allowed(options.Value, session.Account, loopbackTool))
+        if (!Allowed(session.Account, loopbackTool))
         {
+            log.LogInformation("GM refused for account {Account}: {Line}", session.Account, line);
             await ReplyAsync(session, "GM commands are not enabled for this account.");
             return;
         }
@@ -112,7 +142,9 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
         string param = req.ParamString ?? "";
         if (param.StartsWith(PanelProbe, StringComparison.Ordinal))
         {
-            await session.SendGameAsync(GeneralProcGm, new GeneralGMProcRsp { Result = 0, ErrInfo = param + (Allowed(session) ? ":1" : ":0") });
+            bool gm = Allowed(session);
+            log.LogInformation("GM panel probe from account {Account}: {Answer}", session.Account, gm ? "GM" : "not GM");
+            await session.SendGameAsync(GeneralProcGm, new GeneralGMProcRsp { Result = 0, ErrInfo = param + (gm ? ":1" : ":0") });
             return;
         }
         string reply;

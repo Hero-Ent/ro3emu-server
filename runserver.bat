@@ -105,7 +105,7 @@ echo [Status]: Executavel       : %SERVER_EXE%
 if not "%DATADIR%"=="" (
     echo [Status]: Pasta de Dados   : %DATADIR%
 )
-echo [Status]: GM Restrito      : hero, admin (Acesso normal desativado)
+echo [Status]: GM Restrito      : hero, admin + contas com group_id ^>= 10 no site (demais jogadores sem GM)
 echo ============================================================
 echo.
 
@@ -119,24 +119,25 @@ if not "%DATADIR%"=="" (
 set "EXIT_CODE=%ERRORLEVEL%"
 echo.
 echo ============================================================
-if "%EXIT_CODE%"=="0" (
-    echo [Status]: Servidor finalizado normalmente (Codigo: 0).
-    echo ============================================================
-    pause
-    exit /b 0
-) else (
-    echo [Error]: O servidor parou ou travou com codigo de erro: %EXIT_CODE%
-    echo ============================================================
-    echo.
-    set "RESTART=N"
-    set /p RESTART="[Notice]: Deseja reiniciar o servidor automaticamente? [S/N, padrao S]: "
-    if "%RESTART%"=="" set "RESTART=S"
-    if /i "%RESTART%"=="S" (
-        echo.
-        echo [Status]: Reiniciando servidor...
-        echo.
-        goto RUN_LOOP
-    )
-    pause
-    exit /b %EXIT_CODE%
-)
+if not "%EXIT_CODE%"=="0" goto FALHOU
+echo [Status]: Servidor finalizado normalmente - Codigo 0.
+echo ============================================================
+pause
+exit /b 0
+
+:FALHOU
+echo [Error]: O servidor parou ou travou com codigo de erro: %EXIT_CODE%
+echo ============================================================
+echo.
+set "RESTART="
+set /p "RESTART=[Notice]: Deseja reiniciar o servidor automaticamente? [S/N, padrao S]: "
+if "%RESTART%"=="" set "RESTART=S"
+if /i not "%RESTART%"=="S" goto FIM
+echo.
+echo [Status]: Reiniciando servidor...
+echo.
+goto RUN_LOOP
+
+:FIM
+pause
+exit /b %EXIT_CODE%
