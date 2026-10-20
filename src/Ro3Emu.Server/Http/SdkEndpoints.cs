@@ -29,7 +29,7 @@ public static class SdkEndpoints
     {
         app.MapGet(GateKeyPath, (Net.GateCrypto crypto) => Results.Text(crypto.PublicKeyPem, "application/x-pem-file"));
 
-        app.MapPost(LoginPath, async (HttpRequest request, CredentialLimiter limiter, AccountStore accounts, ILogger<AccountStore> log) =>
+        app.MapPost(LoginPath, async (HttpRequest request, CredentialLimiter limiter, AccountStore accounts, IOptions<ServerOptions> options, ILogger<AccountStore> log) =>
         {
             if (!limiter.TryAcquire(request.HttpContext.Connection.RemoteIpAddress)) return Results.StatusCode(StatusCodes.Status429TooManyRequests);
             var form = await request.ReadFormAsync();
@@ -39,7 +39,11 @@ public static class SdkEndpoints
             {
                 return Results.Json(new { code = 401 });
             }
-            var (result, account) = await accounts.SignInAsync(identity, credential);
+            var (result, account) = await accounts.SignInAsync(identity, credential, allowRegister: options.Value.AllowInGameRegistration == true);
+            if (result == AccountStore.LoginResult.NotFound)
+            {
+                return Results.Json(new { code = 404, msg = "Conta não encontrada. Crie sua conta pelo nosso site.", message = "Conta não encontrada. Crie sua conta pelo nosso site." });
+            }
             log.LogInformation("SDK login {Identity}: {Result}", account, result);
             if (result == AccountStore.LoginResult.BadPassword)
             {

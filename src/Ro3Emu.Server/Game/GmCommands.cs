@@ -251,6 +251,44 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
         ["zeny"] = ("<amount>", Zeny),
         ["lvl"] = ("<base> [job]", (s, a) => Op(s, OpSetLevel, a)),
         ["exp"] = ("<base> [job]", (s, a) => Op(s, OpAddExp, a)),
+        ["expbonus"] = ("[multiplier, 0 = off, 100 = 100x]", async (s, a) =>
+        {
+            var expBonus = character.ExpBonus;
+            if (expBonus == null)
+            {
+                await ReplyAsync(s, "ExpBonusService não está ativo.");
+                return;
+            }
+            if (a.Length == 0)
+            {
+                await ReplyAsync(s, $"Bônus de EXP atual: {expBonus.Multiplier}x (EXP total: {expBonus.Multiplier + 1}x a base). Use !expbonus <n> para alterar.");
+                return;
+            }
+            if (!long.TryParse(a[0], out long val) || val < 0)
+            {
+                await ReplyAsync(s, "Uso: !expbonus <multiplicador> (ex: 0 para desativar, 100 para 100x).");
+                return;
+            }
+            expBonus.SetMultiplier(val);
+            await ReplyAsync(s, val == 0
+                ? "Bônus de EXP desativado (0x). Taxa padrão normal 1x restaurada."
+                : $"Bônus de EXP configurado com sucesso para {val}x (+{val}x a mais de exp).");
+        }),
+        ["rate"] = ("[multiplier]", async (s, a) =>
+        {
+            var expBonus = character.ExpBonus;
+            if (expBonus == null) return;
+            if (a.Length == 0)
+            {
+                await ReplyAsync(s, $"Bônus de EXP atual: {expBonus.Multiplier}x. Use !rate <n> para alterar.");
+                return;
+            }
+            if (long.TryParse(a[0], out long val) && val >= 0)
+            {
+                expBonus.SetMultiplier(val);
+                await ReplyAsync(s, $"Bônus de EXP configurado para {val}x.");
+            }
+        }),
         ["points"] = ("<n>", (s, a) => Op(s, OpAddAttrPnt, a)),
         ["job"] = ("<jobId>", (s, a) => Op(s, OpSetJob, a)),
         ["clearbag"] = ("", (s, a) => Op(s, OpClearPack, a)),

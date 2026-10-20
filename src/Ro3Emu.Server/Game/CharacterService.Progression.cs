@@ -79,6 +79,7 @@ public sealed partial class CharacterService
         int oldLevel = p.Level, oldJob = p.JobLevel;
         // BaseExpAddConfig catch-up bonus below the server level (CharacterService.LevelRules).
         baseExp = WithPursueBonus(p.Level, Math.Max(0, baseExp));
+        (baseExp, jobExp) = WithExpBonus(baseExp, Math.Max(0, jobExp));
         var staged = CloneProgress(p);
         ApplyExp(staged, baseExp, Math.Max(0, jobExp));
         var builder = roles.NewTransaction();

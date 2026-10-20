@@ -15,8 +15,20 @@ namespace Ro3Emu.Server.Game;
 /// requests that change them. Numbers come from the client's own tables (AttriBaseLvConfig, AttributeConversionConfig,
 /// BaseLvConfig, JobLvConfig, BasePointConfig, EquipConfig).
 /// </summary>
-public sealed partial class CharacterService(RoleStore roles, ItemStore itemStore, GameData data, World world, ILogger<CharacterService> log)
+public sealed partial class CharacterService(RoleStore roles, ItemStore itemStore, GameData data, World world, ILogger<CharacterService> log, ExpBonusService? expBonus = null)
 {
+    public ExpBonusService? ExpBonus => expBonus;
+
+    public (long BaseExp, long JobExp) WithExpBonus(long baseExp, long jobExp)
+    {
+        if (expBonus is { Multiplier: > 0 } bonus)
+        {
+            if (baseExp > 0) baseExp = checked(baseExp + bonus.CalculateBonus(baseExp));
+            if (jobExp > 0) jobExp = checked(jobExp + bonus.CalculateBonus(jobExp));
+        }
+        return (baseExp, jobExp);
+    }
+
     public const uint RoleBaseInfoSync = 5066;
     public const uint BaseAttrSync = 5067;
     public const uint ItemsSync = 5009;

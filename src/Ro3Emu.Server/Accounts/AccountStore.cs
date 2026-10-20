@@ -146,7 +146,7 @@ public sealed partial class AccountStore : IDisposable
         catch { db.Dispose(); throw; }
     }
 
-    public enum LoginResult { Ok, Registered, BadPassword, Banned, Unverified }
+    public enum LoginResult { Ok, Registered, BadPassword, Banned, Unverified, NotFound }
 
     private bool OnLoop => _loop?.IsOnLoop == true || _metrics != null && ReferenceEquals(ServerMetrics.LoopOwner, _metrics);
     private DbWriter Writer { get { lock (_runtimeGate) { ObjectDisposedException.ThrowIf(_disposed, this); return _writer.Value; } } }
@@ -493,10 +493,19 @@ public sealed partial class AccountStore : IDisposable
     /// Login or first-time registration. <see cref="SignIn.Account"/> is the account's stored name, which can differ
     /// from <paramref name="name"/> in letter case; tokens and sessions must carry it, never the typed spelling.
     /// </summary>
-    public async Task<SignIn> SignInAsync(string name, string password)
+    /// <summary>Registers an account explicitly (used by admin CLI or external website registration).</summary>
+    public async Task<bool> RegisterAsync(string name, string password)
+    {
+        byte[] salt = RandomNumberGenerator.GetBytes(16);
+        byte[] hash = await Task.Run(() => AccountHash.Hash(password, salt)).ConfigureAwait(false);
+        return await WriteAsync<bool>(new AccountRegisterPlan(name, hash, salt, DateTime.UtcNow.ToString("O"))).ConfigureAwait(false);
+    }
+
+    public async Task<SignIn> SignInAsync(string name, string password, bool allowRegister = true)
     {
         var existing = await ReadAsync<AccountCredentials?>(new AccountCredentialsRead(name)).ConfigureAwait(false);
         if (existing != null) return await Check(existing).ConfigureAwait(false);
+        if (!allowRegister) return new(LoginResult.NotFound, name);
         byte[] salt = RandomNumberGenerator.GetBytes(16);
         byte[] hash = await Task.Run(() => AccountHash.Hash(password, salt)).ConfigureAwait(false);
         if (await WriteAsync<bool>(new AccountRegisterPlan(name, hash, salt, DateTime.UtcNow.ToString("O"))).ConfigureAwait(false))

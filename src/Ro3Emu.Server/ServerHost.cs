@@ -53,6 +53,7 @@ public static class ServerHost
         builder.Services.AddSingleton<AuctionStore>();
         builder.Services.AddSingleton<GuildStore>();
         builder.Services.AddSingleton<ItemStore>();
+        builder.Services.AddSingleton<ExpBonusService>();
         builder.Services.AddSingleton<CharacterService>();
         builder.Services.AddSingleton<SkillService>();
         builder.Services.AddSingleton<FunctionService>();
@@ -411,10 +412,19 @@ public static class ServerHost
     private static ServerOptions Resolve(IConfiguration configuration, Action<ServerOptions>? configure)
     {
         var options = configuration.GetSection("Ro3Emu").Get<ServerOptions>() ?? new ServerOptions();
-        configure?.Invoke(options);
+        if (configure != null)
+        {
+            options.AllowInGameRegistration = true;
+            configure(options);
+        }
+        else
+        {
+            options.AllowInGameRegistration ??= false;
+        }
         // An empty GM list means nobody on a host started as Production on purpose (docs/guide/gm-access.md). Only an explicit
         // environment counts: the host's own default is also "Production", and tests and local play set none.
         options.GmOpenWhenEmpty ??= !ExplicitProduction(configuration);
+
         // A relative data dir is relative to the repository root (the folder holding Ro3Emu.slnx), else to the binary.
         if (!Path.IsPathRooted(options.DataDir)) options.DataDir = Path.GetFullPath(Path.Combine(RepositoryRoot(), options.DataDir));
         return options;

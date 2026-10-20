@@ -108,6 +108,12 @@ public sealed class ServerOptions
     /// <summary>Tests: the credential limit applies to loopback too.</summary>
     public bool LoginLimitIncludesLoopback { get; set; }
 
+    /// <summary>
+    /// Whether in-game login (/sdk/login) automatically creates/registers unknown accounts.
+    /// When null, ServerHost decides: false for the real server, true for test hosts.
+    /// </summary>
+    public bool? AllowInGameRegistration { get; set; }
+
     /// <summary>Team voice relay proof of concept (Voice/, docs TBD). Off until a port is set.</summary>
     public VoiceOptions Voice { get; set; } = new();
 
