@@ -531,8 +531,48 @@
       return KNOWN_MESSAGES.checking[lang];
     }
 
+    // Not enough disk space
+    var mDisk = rawMsg.match(/Not enough disk space:\s*the update needs\s+([\w\.\s]+)\s+free on\s+([\w\:\\]+),\s*there is\s+([\w\.\s]+)/i);
+    if (mDisk) {
+      if (lang === "pt-br") return "Espaço insuficiente: precisa de " + mDisk[1] + " livres em " + mDisk[2] + " (disponível: " + mDisk[3] + ").";
+      if (lang === "es") return "Espacio insuficiente: requiere " + mDisk[1] + " libres en " + mDisk[2] + " (disponible: " + mDisk[3] + ").";
+      return "Not enough disk space: " + mDisk[1] + " needed on " + mDisk[2] + " (available: " + mDisk[3] + ").";
+    }
+
+    // Access denied / Unauthorized
+    if (rawMsg.indexOf("Access to the path") !== -1 || rawMsg.indexOf("Acesso negado") !== -1 || rawMsg.indexOf("UnauthorizedAccessException") !== -1) {
+      if (lang === "pt-br") return "Acesso negado: execute como Administrador ou extraia o ZIP para outra pasta.";
+      if (lang === "es") return "Acceso denegado: ejecute como Administrador o extraiga a otra carpeta.";
+      return "Access denied: please run as Administrator or extract to another folder.";
+    }
+
+    // File in use / Process lock
+    if (rawMsg.indexOf("used by another process") !== -1 || rawMsg.indexOf("sendo usado por outro processo") !== -1) {
+      if (lang === "pt-br") return "O jogo já está em execução. Feche o ro3.exe no Gerenciador de Tarefas.";
+      if (lang === "es") return "El juego ya está en ejecución. Cierre ro3.exe en el Administrador de tareas.";
+      return "The game is already running. Please close ro3.exe in Task Manager.";
+    }
+
+    // Download failed / Connection
+    if (rawMsg.indexOf("Downloading the update failed") !== -1 || rawMsg.indexOf("Check your connection") !== -1) {
+      if (lang === "pt-br") return "Falha no download: verifique sua conexão com a internet e tente novamente.";
+      if (lang === "es") return "Fallo en la descarga: verifique su conexión e intente nuevamente.";
+      return "Download failed: check your internet connection and try again.";
+    }
+
+    // Chunk hash verification fail
+    if (rawMsg.indexOf("did not verify after the update") !== -1 || rawMsg.indexOf("corrupt") !== -1) {
+      if (lang === "pt-br") return "Arquivo corrompido após download. Use o botão Reparar para corrigir.";
+      if (lang === "es") return "Archivo dañado tras la descarga. Use el botón Reparar para corregir.";
+      return "Corrupt file after download. Use Repair to fix.";
+    }
+
+    if (phase === "error") {
+      return rawMsg;
+    }
+
     var phText = I18N[lang].phases[phase];
-    return (phText && phText.text) ? phText.text : rawMsg;
+    return rawMsg || (phText && phText.text ? phText.text : "");
   }
 
   function render() {
@@ -578,7 +618,7 @@
     if (setDirChange) setDirChange.disabled = busy;
 
     // Footer Version: Displays Launcher version and Game version clearly
-    var lVer = state.launcher || "1.0.5";
+    var lVer = state.launcher || "1.0.6";
     var vStr = "Launcher v" + lVer.replace(/^v/, "");
     var cVer = state.installed || state.remote;
     if (cVer) {

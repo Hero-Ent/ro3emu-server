@@ -134,8 +134,9 @@ public sealed class LauncherController : IDisposable
             else if (updater.QuickVerify(check.Installed) is { Count: > 0 } changed) PostState("repair", $"{changed.Count} game files differ from the release.");
             else PostState("ready");
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            PatcherLog.Log($"[LauncherController] CheckAsync exception: {ex}");
             _installed = new Updater(_layout, _repo).LoadState();
             // Offline but installed: the game can still start (the update server and the game server are separate).
             PostState(_installed is not null ? "ready" : "offline", _installed is not null ? "Can't reach the update server; playing the installed version." : null);
@@ -178,6 +179,7 @@ public sealed class LauncherController : IDisposable
         {
             _work?.Dispose();
             _work = null;
+            PatcherLog.Log($"[LauncherController] UpdateAsync exception: {e}");
             PostState("error", e.Message);
         }
     }
@@ -197,6 +199,7 @@ public sealed class LauncherController : IDisposable
         }
         catch (Exception e)
         {
+            PatcherLog.Log($"[LauncherController] PlayAsync exception: {e}");
             PostState("error", e.Message);
         }
     }
