@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace Ro3Emu.ClientHooks
@@ -24,6 +25,7 @@ namespace Ro3Emu.ClientHooks
 
         private static readonly HashSet<int> Done = new HashSet<int>();
         private static int _frame;
+        private static int _lastActiveInputIndex = 0;
 
         /// <summary>Called every frame; looks for the views every 10th frame (GameObject.Find only sees active objects).</summary>
         public static void Tick()
@@ -113,11 +115,6 @@ namespace Ro3Emu.ClientHooks
 
                 if (loginPanel == null) return;
 
-                bool tabPressed = Input.GetKeyDown(KeyCode.Tab);
-                bool enterPressed = Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter);
-
-                if (!tabPressed && !enterPressed) return;
-
                 var tmpInputs = loginPanel.GetComponentsInChildren<TMPro.TMP_InputField>(true)
                     .Where(f => f != null && f.gameObject.activeInHierarchy && f.interactable)
                     .OrderByDescending(f => f.transform.position.y)
@@ -130,14 +127,47 @@ namespace Ro3Emu.ClientHooks
                         .ToList()
                     : null;
 
+                var currentSelected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
+
+                // Continuously track which input field is currently active/selected by user interaction
+                if (tmpInputs.Count >= 2)
+                {
+                    for (int i = 0; i < tmpInputs.Count; i++)
+                    {
+                        if (tmpInputs[i].isFocused || (currentSelected != null && (currentSelected == tmpInputs[i].gameObject || currentSelected.transform.IsChildOf(tmpInputs[i].transform))))
+                        {
+                            _lastActiveInputIndex = i;
+                            break;
+                        }
+                    }
+                }
+                else if (uiInputs != null && uiInputs.Count >= 2)
+                {
+                    for (int i = 0; i < uiInputs.Count; i++)
+                    {
+                        if (uiInputs[i].isFocused || (currentSelected != null && (currentSelected == uiInputs[i].gameObject || currentSelected.transform.IsChildOf(uiInputs[i].transform))))
+                        {
+                            _lastActiveInputIndex = i;
+                            break;
+                        }
+                    }
+                }
+
+                bool tabPressed = Input.GetKeyDown(KeyCode.Tab);
+                bool enterPressed = Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter);
+
+                if (!tabPressed && !enterPressed) return;
+
                 if (tabPressed)
                 {
+                    bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+
                     if (tmpInputs.Count >= 2)
                     {
                         int currentIndex = -1;
                         for (int i = 0; i < tmpInputs.Count; i++)
                         {
-                            if (tmpInputs[i].isFocused)
+                            if (tmpInputs[i].isFocused || (currentSelected != null && (currentSelected == tmpInputs[i].gameObject || currentSelected.transform.IsChildOf(tmpInputs[i].transform))))
                             {
                                 currentIndex = i;
                                 break;
@@ -147,24 +177,52 @@ namespace Ro3Emu.ClientHooks
                         int nextIndex;
                         if (currentIndex >= 0)
                         {
-                            nextIndex = (currentIndex + 1) % tmpInputs.Count;
-                            tmpInputs[currentIndex].DeactivateInputField();
+                            nextIndex = shift
+                                ? (currentIndex - 1 + tmpInputs.Count) % tmpInputs.Count
+                                : (currentIndex + 1) % tmpInputs.Count;
                         }
                         else
                         {
-                            nextIndex = (!string.IsNullOrEmpty(tmpInputs[0].text) && string.IsNullOrEmpty(tmpInputs[1].text)) ? 1 : 0;
+                            // If neither field was actively focused, toggle from the last active index
+                            nextIndex = shift
+                                ? (_lastActiveInputIndex - 1 + tmpInputs.Count) % tmpInputs.Count
+                                : (_lastActiveInputIndex + 1) % tmpInputs.Count;
                         }
 
-                        tmpInputs[nextIndex].Select();
-                        tmpInputs[nextIndex].ActivateInputField();
-                        tmpInputs[nextIndex].caretPosition = tmpInputs[nextIndex].text.Length;
+                        // Deactivate other input fields
+                        for (int i = 0; i < tmpInputs.Count; i++)
+                        {
+                            if (i != nextIndex)
+                            {
+                                tmpInputs[i].DeactivateInputField();
+                            }
+                        }
+
+                        // Clean any stray tab characters
+                        for (int i = 0; i < tmpInputs.Count; i++)
+                        {
+                            if (tmpInputs[i].text != null && tmpInputs[i].text.IndexOf('\t') >= 0)
+                            {
+                                tmpInputs[i].text = tmpInputs[i].text.Replace("\t", "");
+                            }
+                        }
+
+                        var target = tmpInputs[nextIndex];
+                        if (EventSystem.current != null)
+                        {
+                            EventSystem.current.SetSelectedGameObject(target.gameObject);
+                        }
+                        target.Select();
+                        target.ActivateInputField();
+                        target.caretPosition = target.text.Length;
+                        _lastActiveInputIndex = nextIndex;
                     }
                     else if (uiInputs != null && uiInputs.Count >= 2)
                     {
                         int currentIndex = -1;
                         for (int i = 0; i < uiInputs.Count; i++)
                         {
-                            if (uiInputs[i].isFocused)
+                            if (uiInputs[i].isFocused || (currentSelected != null && (currentSelected == uiInputs[i].gameObject || currentSelected.transform.IsChildOf(uiInputs[i].transform))))
                             {
                                 currentIndex = i;
                                 break;
@@ -174,17 +232,42 @@ namespace Ro3Emu.ClientHooks
                         int nextIndex;
                         if (currentIndex >= 0)
                         {
-                            nextIndex = (currentIndex + 1) % uiInputs.Count;
-                            uiInputs[currentIndex].DeactivateInputField();
+                            nextIndex = shift
+                                ? (currentIndex - 1 + uiInputs.Count) % uiInputs.Count
+                                : (currentIndex + 1) % uiInputs.Count;
                         }
                         else
                         {
-                            nextIndex = (!string.IsNullOrEmpty(uiInputs[0].text) && string.IsNullOrEmpty(uiInputs[1].text)) ? 1 : 0;
+                            nextIndex = shift
+                                ? (_lastActiveInputIndex - 1 + uiInputs.Count) % uiInputs.Count
+                                : (_lastActiveInputIndex + 1) % uiInputs.Count;
                         }
 
-                        uiInputs[nextIndex].Select();
-                        uiInputs[nextIndex].ActivateInputField();
-                        uiInputs[nextIndex].caretPosition = uiInputs[nextIndex].text.Length;
+                        for (int i = 0; i < uiInputs.Count; i++)
+                        {
+                            if (i != nextIndex)
+                            {
+                                uiInputs[i].DeactivateInputField();
+                            }
+                        }
+
+                        for (int i = 0; i < uiInputs.Count; i++)
+                        {
+                            if (uiInputs[i].text != null && uiInputs[i].text.IndexOf('\t') >= 0)
+                            {
+                                uiInputs[i].text = uiInputs[i].text.Replace("\t", "");
+                            }
+                        }
+
+                        var target = uiInputs[nextIndex];
+                        if (EventSystem.current != null)
+                        {
+                            EventSystem.current.SetSelectedGameObject(target.gameObject);
+                        }
+                        target.Select();
+                        target.ActivateInputField();
+                        target.caretPosition = target.text.Length;
+                        _lastActiveInputIndex = nextIndex;
                     }
                 }
 

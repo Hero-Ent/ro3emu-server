@@ -5,8 +5,9 @@ Goodbye, imitators! Only the real RO can fight!	Adventure awaits across Rune-Mid
 # Auction list cell (PUBLIC lot): the shipped sentence overflows the cell on both sides.
 Fixed price purchases will become available after the listing period ends.	Buyout opens when the listing ends.
 # Versão do Client (canto superior esquerdo da tela de login)
-0.0.1_1.1.0	0.0.2
-0.0.1	0.0.2
+0.0.1_1.1.0	0.0.3
+0.0.1	0.0.3
+0.0.2	0.0.3
 # Nome do Servidor
 RO3Emu	Hero Saga Ro3
 # Aviso tela de login e discord link
