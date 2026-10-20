@@ -149,6 +149,7 @@ public sealed partial class GenreService(
 
     private int ApplyCooldownError(GameSession s, Stage next)
     {
+        if ((s.StatusBits & (1L << 15)) != 0) return ErrorCodes.ActionInBattle;
         if (next.Skills.CurrentPlanIndex != s.SkillPlans!.CurrentPlanIndex)
         {
             int error = skills.PlanSwitchCooldownError(s);

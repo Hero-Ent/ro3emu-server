@@ -152,6 +152,11 @@ public sealed partial class CharacterService
     public async Task AllocateAsync(GameSession session, AllocateAttrPointReq req)
     {
         using var _ = await LockAsync(session);
+        if ((session.StatusBits & (1L << 15)) != 0)
+        {
+            await session.SendGameAsync(AllocateAttrPoints, new AllocateAttrPointRsp { Result = ErrorCodes.ActionInBattle, PlanIndex = req.PlanIndex });
+            return;
+        }
         var p = CloneProgress(session.Progress!);
         var plans = session.StatPlans.Info.Clone();
         if (!plans.AllPlanBaseProperty.TryGetValue(req.PlanIndex, out var selected))
@@ -191,6 +196,12 @@ public sealed partial class CharacterService
     public async Task ResetStatsAsync(GameSession session, ResetAttrPointReq? req = null)
     {
         using var _ = await LockAsync(session);
+        if ((session.StatusBits & (1L << 15)) != 0)
+        {
+            int idx = req?.PlanIndex ?? session.StatPlans.Info.CurPlanIndex;
+            await session.SendGameAsync(ResetAttrPoints, new ResetAttrPointResp { Result = ErrorCodes.ActionInBattle, PlanIndex = idx });
+            return;
+        }
         var p = CloneProgress(session.Progress!);
         var plans = session.StatPlans.Info.Clone();
         int index = req?.PlanIndex ?? plans.CurPlanIndex;

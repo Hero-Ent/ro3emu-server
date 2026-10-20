@@ -30,6 +30,7 @@ public sealed partial class CharacterService
         session.Pets = null; // The next role's pets load before 5056; never reuse a previous role's stat contributions.
         session.Items = itemStore.Load(role.Id);
         session.BagState = new RoleBagState(roles.LoadBagState(role.Id));
+        NormalizeShortcutBar(session.BagState.Info.ShortcutBarInfos);
         session.ItemCds.Clear();
         session.ItemGroupCds.Clear();
         long nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();

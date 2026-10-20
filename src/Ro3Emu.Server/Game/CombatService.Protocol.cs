@@ -197,7 +197,7 @@ public sealed partial class CombatService
 
     /// <summary>Server-timed bullet only when a skill script owns projectile travel.</summary>
     public Task SendSkillBulletAsync(GameSession source, SkillFixTimeBulletNotify bullet, bool highLevel = false) =>
-        source.Role != null && bullet.SourceId == source.Role.Id && bullet.EffectId > 0 && bullet.FixedTime > 0
+        source.Role != null && bullet.EffectId > 0 && bullet.FixedTime > 0
             && data.Row("SkillConfig", bullet.SkillConfigId) != null
             ? ToPlayerAndViewersAsync(source, highLevel ? SkillBulletHigh : SkillBullet, bullet) : Task.CompletedTask;
 

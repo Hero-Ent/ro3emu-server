@@ -61,6 +61,8 @@ public sealed partial class CombatService : IGameTicker
     /// <summary>Monsters whose fight bit is set: the out-of-combat check walks these instead of every unit of every
     /// map each tick. Entries leave on the clear or when the unit leaves the world.</summary>
     private readonly HashSet<MonsterUnit> _fightingMonsters = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<long, int> _hitEffects = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<long, int> _bulletEffects = new();
 
     /// <summary>A monster died by this player: rewards (RewardService), quest kill targets (TaskService).</summary>
     public List<Func<GameSession, MonsterUnit, Task>> Killed { get; } = new();
@@ -295,13 +297,55 @@ public sealed partial class CombatService : IGameTicker
         log.LogDebug("{Name} locks {Target}", s.Role?.Name, req.EnemyId);
     }
 
-    /// <summary>The template's damage EffectData (hit fx + flinch): the first with m_kDamage in [show*100, show*100+99].</summary>
-    private int HitEffect(long scriptShow)
+    /// <summary>The template's damage EffectData (hit fx + flinch): the first with m_kDamage.m_kActionDamge matching the script show prefix.</summary>
+    private int HitEffect(long scriptShow) => _hitEffects.GetOrAdd(scriptShow, show =>
     {
         var effects = data.SkillTemplateTable("Lua_Config_EffectData");
-        for (long id = scriptShow * 100; id < scriptShow * 100 + 100; id++)
-            if (effects.TryGetValue(id.ToString(), out var e) && e.TryGetProperty("m_kDamage", out _)) return (int)id;
-        return 1000002;
+        string prefix = show.ToString();
+        int action = 0, fallback = 0;
+        foreach (var (k, v) in effects)
+        {
+            if (k.StartsWith(prefix) && v.TryGetProperty("m_kDamage", out var dmg))
+            {
+                if (int.TryParse(k, out int id))
+                {
+                    if (dmg.TryGetProperty("m_kActionDamge", out _) && action == 0) action = id;
+                    if (fallback == 0) fallback = id;
+                }
+            }
+        }
+        return action != 0 ? action : fallback != 0 ? fallback : 1000002;
+    });
+
+    /// <summary>The template's projectile EffectData: the first with m_kDamage.m_kBulletData matching the script show prefix.</summary>
+    private int BulletEffect(long scriptShow) => _bulletEffects.GetOrAdd(scriptShow, show =>
+    {
+        var effects = data.SkillTemplateTable("Lua_Config_EffectData");
+        string prefix = show.ToString();
+        foreach (var (k, v) in effects)
+        {
+            if (k.StartsWith(prefix) && v.TryGetProperty("m_kDamage", out var dmg)
+                && dmg.TryGetProperty("m_kBulletData", out _))
+            {
+                if (int.TryParse(k, out int id)) return id;
+            }
+        }
+        return 0;
+    });
+
+    private int BulletLifeTime(int bulletEffectId, float distance = 10f)
+    {
+        var effects = data.SkillTemplateTable("Lua_Config_EffectData");
+        if (effects.TryGetValue(bulletEffectId.ToString(), out var e)
+            && e.TryGetProperty("m_kDamage", out var dmg)
+            && dmg.TryGetProperty("m_kBulletData", out var b))
+        {
+            if (b.TryGetProperty("m_fBulletLifeTime", out var life) && life.GetDouble() > 50)
+                return (int)Math.Round(life.GetDouble());
+            if (b.TryGetProperty("m_fBulletSpeed", out var speed) && speed.GetDouble() > 0)
+                return (int)Math.Clamp(Math.Round(distance / speed.GetDouble() * 1000.0), 100, 500);
+        }
+        return Math.Clamp((int)Math.Round(distance * 30), 150, 400);
     }
 
     // ---- monsters hitting players ----

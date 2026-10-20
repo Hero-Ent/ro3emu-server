@@ -97,6 +97,12 @@ public sealed partial class CharacterService
         var p = session.Progress!;
         var info = new DBItemsInfo { AutoDecomposeSetting = session.AutoDecompose.Clone() };
         var preferences = session.BagState.Info;
+        NormalizeShortcutBar(preferences.ShortcutBarInfos);
+        foreach (var slot in preferences.ShortcutBarInfos)
+        {
+            if (slot.ItemGuid != 0 && !session.Items.Any(i => i.Guid == slot.ItemGuid && i.Grid == 0))
+                slot.ItemGuid = 0;
+        }
         info.QuickUseInfos.Add(preferences.QuickUseInfos);
         info.ShortcutBarInfos.Add(preferences.ShortcutBarInfos);
         info.MedicinesAutoUse = preferences.MedicinesAutoUse?.Clone();

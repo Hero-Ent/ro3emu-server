@@ -132,6 +132,54 @@ public sealed partial class CombatService
                 row, action.Request.SkillId, HitEffect(GameData.Int(row, "_iScriptShow")), action.Id, CanApplyMoreEffects);
         }
         if (!CanApplyMoreEffects()) return; // player publication can yield before any monster hit is committed
+        int bulletEffect = BulletEffect(GameData.Int(row, "_iScriptShow"));
+        if (bulletEffect > 0 && field == null)
+        {
+            float maxDist = targets.Select(t => Distance(action.Origin, t.Pos))
+                .Concat(playerTargets.Select(p => Distance(action.Origin, p.Position)))
+                .DefaultIfEmpty(10f).Max();
+            int flyTime = BulletLifeTime(bulletEffect, maxDist);
+            bool highLevel = GameData.Int(row, "_iSkillEffectLevel") > 0;
+            foreach (var target in targets)
+            {
+                var bullet = new SkillFixTimeBulletNotify
+                {
+                    SourceId = action.SourceId,
+                    TargetId = target.Uid,
+                    EffectId = bulletEffect,
+                    FixedTime = flyTime,
+                    Split = 1,
+                    TargetPosition = target.Pos,
+                    SkillConfigId = (int)GameData.Int(row, "_iID"),
+                    MasterId = action.SourceId,
+                    SourcePosition = action.Origin,
+                    StartTimestampMs = Now,
+                };
+                await SendSkillBulletAsync(s, bullet, highLevel: highLevel);
+            }
+            foreach (var pTarget in playerTargets)
+            {
+                var bullet = new SkillFixTimeBulletNotify
+                {
+                    SourceId = action.SourceId,
+                    TargetId = pTarget.Role!.Id,
+                    EffectId = bulletEffect,
+                    FixedTime = flyTime,
+                    Split = 1,
+                    TargetPosition = pTarget.Position,
+                    SkillConfigId = (int)GameData.Int(row, "_iID"),
+                    MasterId = action.SourceId,
+                    SourcePosition = action.Origin,
+                    StartTimestampMs = Now,
+                };
+                await SendSkillBulletAsync(s, bullet, highLevel: highLevel);
+            }
+            if (flyTime > 50 && (targets.Count > 0 || playerTargets.Length > 0))
+            {
+                await Task.Delay(flyTime);
+                if (!CanApplyMoreEffects()) return;
+            }
+        }
         bool friendly = Relation(row, true, true) || Relation(row, true);
         var allies = new List<GameSession>();
         if (friendly)

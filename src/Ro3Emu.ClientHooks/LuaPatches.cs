@@ -59,6 +59,22 @@ namespace Ro3Emu.ClientHooks
         /// <summary>A Lua method called as self:Method().</summary>
         public delegate void SelfMethod(Obf_R.Obf_ff self);
 
+        /// <summary>self:GetDataFormAsset(assetName, assetData)</summary>
+        public delegate void GetDataFormAssetDelegate(Obf_R.Obf_ff self, object assetName, object assetData);
+        private static readonly GetDataFormAssetDelegate BagModelGetDataFormAssetWrapper = BagModelGetDataFormAsset;
+
+        private static readonly string[] BagModelModules =
+        {
+            "ui_sys_bagpanelmodel",
+            "ui_sys_bagbreakdownpanelmodel",
+            "ui_sys_bagbreakdownpoppanelmodel",
+            "ui_sys_bagsynthesisbreakpanelmodel",
+            "ui_sys_bagsynthesisbreakwindowmodel",
+        };
+
+        private static readonly System.Collections.Generic.Dictionary<string, Obf_R.Obf_Ef> _bagModelOriginals =
+            new System.Collections.Generic.Dictionary<string, Obf_R.Obf_Ef>();
+
         /// <summary>From UiTweaks.Tick (every 10th frame); works every 30th: (re)applies when the LuaEnv is (re)created.</summary>
         public static void Tick()
         {
@@ -74,6 +90,7 @@ namespace Ro3Emu.ClientHooks
                 MapModules.Install(env, global); // own once-per-LuaEnv guard; needs only package.loaded
                 if (ReferenceEquals(env, _doneEnv)) { ServerDayGates.Probe(); return; }
                 _topBarClass = _evePanelClass = null;
+                _bagModelOriginals.Clear();
                 // GlobalRequire sets LC_ItemShowHelper once the game's modules are up; before that, requiring is unsafe.
                 if (global == null || global.Obf_RuA<object>("LC_ItemShowHelper") == null) { Report("game helpers not loaded"); return; }
                 var item = Module(manager, global, "lc_itemshowfunc");
@@ -92,6 +109,7 @@ namespace Ro3Emu.ClientHooks
                 if (param != null) param.Obf_luA<string, object>("StallsNameCharacterLimit", (long)StallNameMaxLength);
                 _doneEnv = env;
                 PatchCountdowns(manager, global);
+                PatchBagModels(manager, global);
                 var functionHelper = Module(manager, global, "lc_functionhelper");
                 FeedbackButton.Install(global, functionHelper);
                 PassChallenges.Install(global);
@@ -143,6 +161,76 @@ namespace Ro3Emu.ClientHooks
                 _evePanelOriginal = panel.Obf_RuA<Obf_R.Obf_Ef>("_refreshTimeText");
                 if (_evePanelOriginal != null) panel.Obf_luA<string, SelfMethod>("_refreshTimeText", EvePanelWrapper);
                 Debug.Log("[Ro3Emu.LuaPatches] Prelude panel countdown " + (_evePanelOriginal != null ? "wrapped" : "method not found"));
+            }
+        }
+
+        /// <summary>
+        /// Fixes bags not updating immediately on incremental item changes (AutoSync 5009). When items are gained
+        /// during gameplay, LC_DAL_Knapsack updates PackItems in-place and notifies via LC_AssetManager. The UI bag
+        /// models assign self.Property.m_kAllItems = assetData, but because assetData is the exact same table reference
+        /// already stored in self._privatefield.m_kAllItems, the MVVM __newindex equality check (old == new) early-returns
+        /// without notifying observers. Clearing m_kAllItems in _privatefield before setting it ensures the Property setter
+        /// detects the change and triggers _refreshAllItemsAndTrolleyState / RefreshSortedItems immediately.
+        /// </summary>
+        private static void PatchBagModels(LA_LuaManager manager, Obf_R.Obf_ff global)
+        {
+            foreach (var moduleName in BagModelModules)
+            {
+                try
+                {
+                    var modelClass = Module(manager, global, moduleName);
+                    if (modelClass == null) continue;
+                    if (modelClass.Obf_RuA<object>("__orig_GetDataFormAsset") != null) continue;
+
+                    var original = modelClass.Obf_RuA<Obf_R.Obf_Ef>("GetDataFormAsset");
+                    if (original == null) continue;
+
+                    modelClass.Obf_luA<string, object>("__orig_GetDataFormAsset", original);
+                    _bagModelOriginals[moduleName] = original;
+                    var cname = modelClass.Obf_RuA<string>("__cname");
+                    if (!string.IsNullOrEmpty(cname)) _bagModelOriginals[cname] = original;
+
+                    modelClass.Obf_luA<string, GetDataFormAssetDelegate>("GetDataFormAsset", BagModelGetDataFormAssetWrapper);
+                    Debug.Log("[Ro3Emu.LuaPatches] " + moduleName + " GetDataFormAsset wrapped (incremental PackItems UI sync)");
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning("[Ro3Emu.LuaPatches] " + moduleName + " patch failed: " + e.Message);
+                }
+            }
+        }
+
+        private static void BagModelGetDataFormAsset(Obf_R.Obf_ff self, object assetName, object assetData)
+        {
+            if (self == null) return;
+            try
+            {
+                var orig = self.Obf_RuA<Obf_R.Obf_Ef>("__orig_GetDataFormAsset");
+                if (orig == null)
+                {
+                    var cname = self.Obf_RuA<string>("__cname");
+                    if (cname != null) _bagModelOriginals.TryGetValue(cname, out orig);
+                }
+                orig?.Obf_HuA(self, assetName, assetData);
+
+                if (string.Equals(assetName as string, "PackItems", StringComparison.Ordinal) ||
+                    string.Equals(assetName?.ToString(), "PackItems", StringComparison.Ordinal))
+                {
+                    var privateField = self.Obf_RuA<Obf_R.Obf_ff>("_privatefield");
+                    if (privateField != null)
+                    {
+                        privateField.Obf_luA<string, object>("m_kAllItems", null);
+                    }
+                    var property = self.Obf_RuA<Obf_R.Obf_ff>("Property");
+                    if (property != null)
+                    {
+                        property.Obf_luA<string, object>("m_kAllItems", assetData);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[Ro3Emu.LuaPatches] BagModelGetDataFormAsset: " + e.Message);
             }
         }
 

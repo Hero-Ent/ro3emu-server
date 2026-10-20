@@ -41,6 +41,13 @@ tools/unluac-batch/*.class
 *.zip
 *.tar.gz
 Client/**/Ro3Emu.Server.exe
+Client/**/server/*.dll
+Client/**/server/*.pdb
+Client/**/server/*.deps.json
+Client/**/server/*.runtimeconfig.json
+Client/**/server/*.staticwebassets*
+Client/**/server/runtimes/
+Client/**/server/web.config
 /Launcher-Dist/
 /Launcher-Local/
 /HeroLauncher.exe

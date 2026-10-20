@@ -1,6 +1,13 @@
 {
   "items": [
     {
+      "tag": "PATCH 0.0.4",
+      "color": "green",
+      "title": "Patch Notes v0.0.4 - Correções e Melhorias",
+      "text": "• Mochila / Inventário: itens obtidos agora aparecem instantaneamente na tela sem precisar relogar ou mudar de mapa.\n• Efeitos Visuais: restauradas as animações e efeitos de magias de 1ª classe (Lança de Fogo, Lança de Gelo, etc.).\n• Atalhos: agora é possível substituir habilidades e itens arrastando diretamente sobre slots já ocupados.\n• Carrinho: corrigida a transferência em lote de múltiplos itens (Add Multiple) para o carrinho do Mercador.\n• Combate: bloqueada a troca de distribuição de atributos durante o combate para maior equilíbrio.",
+      "date": "2026-10-20"
+    },
+    {
       "tag": "PATCH 0.0.3",
       "color": "green",
       "title": "Patch Notes v0.0.3 - Melhorias no Login",
@@ -13,13 +20,6 @@
       "title": "Closed Beta do Hero Saga RO3",
       "text": "Os portões de Midgard estão abertos! Junte-se ao nosso Discord oficial para acompanhar novidades, eventos e suporte.",
       "date": "2026-10-20"
-    },
-    {
-      "tag": "UPDATES",
-      "color": "orange",
-      "title": "Atualizações automáticas",
-      "text": "O inicializador baixa e atualiza todos os arquivos necessários de forma rápida e segura.",
-      "date": "2026-10-18"
     }
   ]
 }

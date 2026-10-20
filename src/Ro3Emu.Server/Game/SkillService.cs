@@ -521,7 +521,7 @@ public sealed class SkillService
     private static bool InCombat(GameSession session) => (session.StatusBits & FightBit) != 0;
 
     /// <summary>Shared gate for direct skill switches and Build-window child switches.</summary>
-    internal int PlanSwitchCooldownError(GameSession session) => InCombat(session) ? ErrorCodes.Parameter
+    internal int PlanSwitchCooldownError(GameSession session) => InCombat(session) ? ErrorCodes.ActionInBattle
         : DateTime.UtcNow - session.SkillPlanSwitchUtc < TimeSpan.FromSeconds(Parameter("SchemeCD", 3))
             ? ErrorCodes.Cooldown : 0;
 
@@ -684,8 +684,6 @@ public sealed class SkillService
             if (group <= 0 || learned <= 0 || !IsActive(group)
                 || (IsNormalGroup(p, group) && p.Career != 1000)
                 || req.Info!.SkillLevel < 1 || req.Info.SkillLevel > learned
-                || op == 1 && target < loadList.Count && loadList[target].SkillId > 0
-                    && loadList[target].SkillId != group
                 || op == 3 && (target >= loadList.Count || loadList[target].SkillId != req.ReplaceInfo?.SkillId))
                 code = ErrorCodes.SkillNotLearned;
         }

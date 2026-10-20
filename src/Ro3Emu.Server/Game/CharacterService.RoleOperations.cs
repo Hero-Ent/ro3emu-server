@@ -35,7 +35,18 @@ public sealed partial class CharacterService
         [(1600301, 50), (1600501, 55), (1600502, 60), (1600503, 70), (1600504, 80), (1600505, 90)];
     private const int StatPlanCount = 5; // PublicParamConfig.SchemeNum=5 (inferred for attribute plans).
     private const int StatPlanNameLimit = 8; // PublicParamConfig.SchemeNameNumMax=8.
-    private const int ShortcutSlotLimit = 12; // (inferred) bounded by the visible bar; no server field declares its size.
+    public const int ShortcutSlotLimit = 12; // (inferred) bounded by the visible bar; no server field declares its size.
+
+    public static void NormalizeShortcutBar(Google.Protobuf.Collections.RepeatedField<ShortcutBarInfo> list, int count = ShortcutSlotLimit)
+    {
+        var map = new Dictionary<int, long>();
+        foreach (var info in list)
+            if (info.SlotIndex >= 0 && info.SlotIndex < count)
+                map[info.SlotIndex] = info.ItemGuid;
+        list.Clear();
+        for (int i = 0; i < count; i++)
+            list.Add(new ShortcutBarInfo { SlotIndex = i, ItemGuid = map.GetValueOrDefault(i, 0) });
+    }
 
     private void LoadStatPlans(GameSession session)
     {
@@ -82,6 +93,7 @@ public sealed partial class CharacterService
         int dest = req.DestPlanIndex;
         old.AllPlanBaseProperty.TryGetValue(dest, out var plan);
         int result = dest is < 0 or >= StatPlanCount || plan == null ? ErrorCodes.Parameter : 0;
+        if (result == 0 && (session.StatusBits & (1L << 15)) != 0) result = ErrorCodes.ActionInBattle;
         if (result == 0 && plan!.BaseProperty.Count != 6) result = ErrorCodes.Parameter;
         var wanted = result == 0 ? Enumerable.Range(1, 6).Select(i => (int)plan!.BaseProperty.GetValueOrDefault(i)).ToArray() : [];
         if (result == 0 && (wanted.Any(v => v is < 1 or > MaxStat) || wanted.Sum(StatCost) > TotalPoints(session.Progress!)))
@@ -236,32 +248,64 @@ public sealed partial class CharacterService
         var next = session.Items.Select(i => i.Clone()).ToList();
         if (result == 0)
         {
+            int movedAny = 0;
             foreach (var (guid, count) in req.ItemGuidCountMap)
             {
                 var item = next.FirstOrDefault(i => i.Guid == guid && i.Grid == 0 && (source == 0 ? i.Pack != 100 : i.Pack == 100));
-                if (item == null) { result = ErrorCodes.ItemMissing; break; }
-                if (count <= 0 || count > item.Stack) { result = count <= 0 ? ErrorCodes.Parameter : ErrorCodes.ItemsShort; break; }
-                if (item.IsLocked) { result = ErrorCodes.ItemLocked; break; }
-                if (TotemService.IsReserved(session, item)) { result = ErrorCodes.ItemLocked; break; }
-                if (data.Row("ItemConfig", item.Entry) is not { } row) { result = ErrorCodes.ItemNoConfig; break; }
-                if (source == 0 && GameData.Int(row, "_kCanCart") == 0) { result = ErrorCodes.Parameter; break; }
+                if (item == null) { if (req.ItemGuidCountMap.Count == 1) { result = ErrorCodes.ItemMissing; break; } continue; }
+                if (count <= 0 || count > item.Stack) { if (req.ItemGuidCountMap.Count == 1) { result = count <= 0 ? ErrorCodes.Parameter : ErrorCodes.ItemsShort; break; } continue; }
+                if (item.IsLocked || TotemService.IsReserved(session, item)) { if (req.ItemGuidCountMap.Count == 1) { result = ErrorCodes.ItemLocked; break; } continue; }
+                if (data.Row("ItemConfig", item.Entry) is not { } row) { if (req.ItemGuidCountMap.Count == 1) { result = ErrorCodes.ItemNoConfig; break; } continue; }
+                if (source == 0 && GameData.Int(row, "_kCanCart") == 0) { if (req.ItemGuidCountMap.Count == 1) { result = ErrorCodes.Parameter; break; } continue; }
                 int destination = source == 0 ? 100 : TotemService.IsTotem(data, item.Entry) ? 4
                     : EmblemService.IsEmblem(data, item.Entry) ? 5 : ConfigPack(row);
-                if (count == item.Stack)
+                int stackLimit = GameData.Int(row, "_iType") == ItemTypeEquip ? 1 : (int)Math.Max(1, GameData.Int(row, "_iStackLimit"));
+
+                long remainingCount = count;
+                if (stackLimit > 1 && (item.Attrs?.Count ?? 0) == 0 && (item.StringAttrs?.Count ?? 0) == 0 && item.Enchantments.Count == 0)
                 {
-                    item.Pack = destination;
-                    item.Sort = next.Where(i => i.Grid == 0 && i.Pack == destination && i != item).Select(i => i.Sort).DefaultIfEmpty(0).Max() + 1;
+                    foreach (var destItem in next.Where(i => i.Grid == 0 && i.Pack == destination && CanStackGrant(i, item.Entry, stackLimit, item.BindType, item.BindExpire)))
+                    {
+                        if (remainingCount <= 0) break;
+                        int canAdd = Math.Min((int)remainingCount, stackLimit - destItem.Stack);
+                        if (canAdd > 0)
+                        {
+                            destItem.Stack += canAdd;
+                            item.Stack -= canAdd;
+                            remainingCount -= canAdd;
+                        }
+                    }
                 }
-                else
+
+                if (item.Stack <= 0)
                 {
-                    item.Stack -= (int)count;
-                    var moved = item.Clone();
-                    moved.Guid = 0;
-                    moved.Stack = (int)count;
-                    moved.Pack = destination;
-                    moved.Sort = next.Where(i => i.Grid == 0 && i.Pack == destination).Select(i => i.Sort).DefaultIfEmpty(0).Max() + 1;
-                    next.Add(moved);
+                    next.Remove(item);
+                    movedAny++;
                 }
+                else if (remainingCount > 0)
+                {
+                    if (remainingCount == item.Stack)
+                    {
+                        item.Pack = destination;
+                        item.Sort = next.Where(i => i.Grid == 0 && i.Pack == destination && i != item).Select(i => i.Sort).DefaultIfEmpty(0).Max() + 1;
+                        movedAny++;
+                    }
+                    else
+                    {
+                        item.Stack -= (int)remainingCount;
+                        var moved = item.Clone();
+                        moved.Guid = 0;
+                        moved.Stack = (int)remainingCount;
+                        moved.Pack = destination;
+                        moved.Sort = next.Where(i => i.Grid == 0 && i.Pack == destination).Select(i => i.Sort).DefaultIfEmpty(0).Max() + 1;
+                        next.Add(moved);
+                        movedAny++;
+                    }
+                }
+            }
+            if (result == 0 && movedAny == 0 && req.ItemGuidCountMap.Count > 0)
+            {
+                result = ErrorCodes.Parameter;
             }
             if (result == 0)
             {
@@ -278,28 +322,37 @@ public sealed partial class CharacterService
             await CommitCharacterAsync(session, "career-transfer", nextItems: next);
         }
         await session.SendGameAsync(CareerSpecialTransfer, new CareerSpecialTransferItemsRsp { Result = result });
-        if (result == 0) await SyncItemsAsync(session);
+        await SyncItemsAsync(session);
     }
 
     /// <summary>31336 stores an owned GUID at a zero-based slot. GUID 0 clears it.</summary>
     public async Task ShortcutBarSaveAsync(GameSession session, ShortcutBarSaveReq req)
     {
         using var gate = await LockAsync(session);
+        var item = req.ItemGuid != 0 ? session.Items.FirstOrDefault(i => i.Guid == req.ItemGuid && i.Grid == 0) : null;
+        var row = item != null ? data.Row("ItemConfig", item.Entry) : null;
         int result = req.SlotIndex is < 0 or >= ShortcutSlotLimit ? ErrorCodes.Parameter
-            : req.ItemGuid != 0 && !session.Items.Any(i => i.Guid == req.ItemGuid && i.Grid == 0) ? ErrorCodes.ItemMissing
-            : req.ItemGuid != 0 && session.Items.First(i => i.Guid == req.ItemGuid) is { } item
-                && (data.Row("ItemConfig", item.Entry) is not { } row || !CanUseItemEffects(row))
-                ? ErrorCodes.FeatureUnavailable : 0;
+            : req.ItemGuid != 0 && item == null ? ErrorCodes.ItemMissing
+            : req.ItemGuid != 0 && (row == null || (GameData.Int(row.Value, "_iIsUse") == 0 && GameData.Int(row.Value, "_iType") is not (2 or 5 or 9)))
+                ? ErrorCodes.ItemUseForbidden : 0;
         if (result == 0)
         {
             var next = session.BagState.Info.Clone();
-            var list = next.ShortcutBarInfos;
-            foreach (var old in list.Where(i => i.SlotIndex == req.SlotIndex).ToList()) list.Remove(old);
-            if (req.ItemGuid != 0) list.Add(new ShortcutBarInfo { SlotIndex = req.SlotIndex, ItemGuid = req.ItemGuid });
+            NormalizeShortcutBar(next.ShortcutBarInfos, ShortcutSlotLimit);
+            if (req.ItemGuid != 0)
+            {
+                foreach (var slot in next.ShortcutBarInfos)
+                    if (slot.ItemGuid == req.ItemGuid && slot.SlotIndex != req.SlotIndex)
+                        slot.ItemGuid = 0;
+            }
+            if (req.SlotIndex >= 0 && req.SlotIndex < next.ShortcutBarInfos.Count)
+            {
+                next.ShortcutBarInfos[req.SlotIndex].ItemGuid = req.ItemGuid;
+            }
             await CommitBagAsync(session, "bag-setting", next);
         }
         await session.SendGameAsync(ShortcutBarSave, new ShortcutBarSaveRes { Result = result });
-        if (result == 0) await SyncItemsAsync(session);
+        await SyncItemsAsync(session);
     }
 
     /// <summary>31337 uses the bound item through the same validated 31323 effect path (inferred), then echoes the slot.</summary>

@@ -104,7 +104,8 @@ public static class AutoSync
                 // A list of messages the client already has with the same length: element-wise increments
                 // (ParseRepeatedTypeIncrement merges by position, so change handlers on [field, i] fire).
                 var incList = wrapper.Descriptor.FindFieldByName("inc");
-                if (old is IList oldList && oldList.Count == list.Count && field.FieldType == FieldType.Message
+                if (field.Name != "quickUseInfos"
+                    && old is IList oldList && oldList.Count == list.Count && field.FieldType == FieldType.Message
                     && incList?.FieldType == FieldType.Message && incList.MessageType.FindFieldByName("value") is { } incValues
                     && incValues.FieldType == FieldType.Message)
                 {

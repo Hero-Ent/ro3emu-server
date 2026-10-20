@@ -37,6 +37,13 @@
       },
       defaultNews: [
         {
+          tag: "PATCH 0.0.4",
+          color: "green",
+          title: "Patch Notes v0.0.4 - Correções e Melhorias",
+          text: "• Mochila / Inventário: itens obtidos agora aparecem instantaneamente na tela sem precisar relogar ou mudar de mapa.\n• Efeitos Visuais: restauradas as animações e efeitos de magias de 1ª classe (Lança de Fogo, Lança de Gelo, etc.).\n• Atalhos: agora é possível substituir habilidades e itens arrastando diretamente sobre slots já ocupados.\n• Carrinho: corrigida a transferência em lote de múltiplos itens (Add Multiple) para o carrinho do Mercador.\n• Combate: bloqueada a troca de distribuição de atributos durante o combate para maior equilíbrio.",
+          date: "2026-10-20"
+        },
+        {
           tag: "PATCH 0.0.3",
           color: "green",
           title: "Patch Notes v0.0.3 - Melhorias no Login",
@@ -49,13 +56,6 @@
           title: "Closed Beta do Hero Saga RO3",
           text: "Os portões de Midgard estão abertos! Junte-se ao nosso Discord oficial para acompanhar novidades, eventos e suporte.",
           date: "2026-10-20"
-        },
-        {
-          tag: "UPDATES",
-          color: "orange",
-          title: "Atualizações automáticas",
-          text: "O inicializador baixa e atualiza todos os arquivos necessários de forma rápida e segura.",
-          date: "2026-10-18"
         }
       ],
       steps: {
@@ -126,6 +126,13 @@
       },
       defaultNews: [
         {
+          tag: "PATCH 0.0.4",
+          color: "green",
+          title: "Patch Notes v0.0.4 - Fixes & Improvements",
+          text: "• Inventory / Backpack: gained items now appear instantly on screen without map change or relog.\n• Visual Effects: restored spell animations and particle effects for 1st class skills (Fire Bolt, Cold Bolt, etc.).\n• Hotbar Slots: skills and items can now be swapped directly onto occupied slots.\n• Merchant Cart: fixed batch transfer (Add Multiple) into the cart.\n• Combat: attribute build switching is now properly restricted during combat.",
+          date: "2026-10-20"
+        },
+        {
           tag: "PATCH 0.0.3",
           color: "green",
           title: "Patch Notes v0.0.3 - Login Improvements",
@@ -138,13 +145,6 @@
           title: "Closed Beta Hero Saga RO3",
           text: "The gates of Midgard are open! Join our official Discord to follow updates, events and support.",
           date: "2026-10-20"
-        },
-        {
-          tag: "UPDATES",
-          color: "orange",
-          title: "Automatic updates",
-          text: "The launcher downloads and keeps all necessary game files up to date automatically.",
-          date: "2026-10-18"
         }
       ],
       steps: {
@@ -215,6 +215,13 @@
       },
       defaultNews: [
         {
+          tag: "PATCH 0.0.4",
+          color: "green",
+          title: "Notas del Parche v0.0.4 - Correcciones y Mejoras",
+          text: "• Inventario / Mochila: los objetos obtenidos ahora aparecen al instante sin cambiar de mapa ni reloguear.\n• Efectos Visuales: restauradas as animaciones y efectos mágicos de 1ª clase (Lanza de Fuego, Lanza de Hielo, etc.).\n• Barra de Accesos: ahora puedes reemplazar habilidades y objetos arrastrándolos directamente sobre slots ocupados.\n• Carro: corregida la transferencia múltiple de objetos hacia el carro del Mercader.\n• Combate: bloqueado el cambio de atributos durante el combate.",
+          date: "2026-10-20"
+        },
+        {
           tag: "PATCH 0.0.3",
           color: "green",
           title: "Notas del Parche v0.0.3 - Mejoras en el Login",
@@ -227,13 +234,6 @@
           title: "Closed Beta de Hero Saga RO3",
           text: "¡Las puertas de Midgard están abiertas! Únete a nuestro Discord oficial para seguir novedades, eventos y soporte.",
           date: "2026-10-20"
-        },
-        {
-          tag: "UPDATES",
-          color: "orange",
-          title: "Actualizaciones automáticas",
-          text: "El lanzador descarga y actualiza todos los archivos necesarios de forma rápida y segura.",
-          date: "2026-10-18"
         }
       ],
       steps: {
@@ -618,8 +618,8 @@
     if (setDirChange) setDirChange.disabled = busy;
 
     // Footer Version: Displays Launcher version and Game version clearly
-    var lVer = state.launcher || "1.0.7";
-    var cVer = state.installed || state.remote || "0.0.3";
+    var lVer = state.launcher || "1.0.8";
+    var cVer = state.installed || state.remote || "0.0.4";
     var vStr = "Launcher v" + lVer.replace(/^v/, "") + " · Jogo versão " + cVer.replace(/^v/, "");
     $("ver-line").textContent = vStr;
   }
@@ -714,8 +714,8 @@
         state.launcher = m.launcher;
         var setVer = $("set-version");
         if (setVer) {
-          var gameV = state.installed || state.remote || "0.0.3";
-          setVer.textContent = "Launcher v" + (m.launcher || "1.0.7") + " · Jogo versão " + gameV.replace(/^v/, "");
+          var gameV = state.installed || state.remote || "0.0.4";
+          setVer.textContent = "Launcher v" + (m.launcher || "1.0.8") + " · Jogo versão " + gameV.replace(/^v/, "");
         }
         render();
         break;

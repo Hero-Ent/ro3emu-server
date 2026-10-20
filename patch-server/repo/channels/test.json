@@ -1,12 +1,12 @@
 {
-  "channel": "live",
-  "version": "0.0.3",
-  "manifest": "manifests/0.0.3.json.zst",
-  "manifestSha256": "e56a64fb86216fd6ad783eea26f5acb96db3323443cbd24f2b7b3d994bd40217",
-  "published": "2026-10-20T15:32:17.1938729+00:00",
+  "channel": "test",
+  "version": "0.0.4",
+  "manifest": "manifests/0.0.4.json.zst",
+  "manifestSha256": "7ce5dabd3cc46073c27c995980f746a2706ad0ad6a9743e5f71e1f0e7ef755d1",
+  "published": "2026-10-20T20:39:03.8704769+00:00",
   "launcher": {
-    "version": "1.0.7",
-    "url": "launcher/1.0.7/Ro3EmuLauncher.exe",
-    "sha256": "dae3d27c8e273cebf7b35b1893c74a67342daa5efabff1bd5924d6f088150a47"
+    "version": "1.0.8",
+    "url": "launcher/1.0.8/Ro3EmuLauncher.exe",
+    "sha256": "463587954e120b64d0105a30a6810ed45965946d87eb326d86af051cd35db5fc"
   }
 }
