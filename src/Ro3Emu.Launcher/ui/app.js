@@ -618,12 +618,9 @@
     if (setDirChange) setDirChange.disabled = busy;
 
     // Footer Version: Displays Launcher version and Game version clearly
-    var lVer = state.launcher || "1.0.6";
-    var vStr = "Launcher v" + lVer.replace(/^v/, "");
-    var cVer = state.installed || state.remote;
-    if (cVer) {
-      vStr += " · Jogo v" + cVer.replace(/^v/, "");
-    }
+    var lVer = state.launcher || "1.0.7";
+    var cVer = state.installed || state.remote || "0.0.3";
+    var vStr = "Launcher v" + lVer.replace(/^v/, "") + " · Jogo versão " + cVer.replace(/^v/, "");
     $("ver-line").textContent = vStr;
   }
 
@@ -716,7 +713,10 @@
         if (dirEl) dirEl.textContent = m.dir;
         state.launcher = m.launcher;
         var setVer = $("set-version");
-        if (setVer) setVer.textContent = "Launcher v" + m.launcher;
+        if (setVer) {
+          var gameV = state.installed || state.remote || "0.0.3";
+          setVer.textContent = "Launcher v" + (m.launcher || "1.0.7") + " · Jogo versão " + gameV.replace(/^v/, "");
+        }
         render();
         break;
       case "news":

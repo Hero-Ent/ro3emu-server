@@ -61,6 +61,11 @@ public static class ReleaseBuilder
                 files.Add(new(relative, Path.Combine(stagedManaged, extra!)));
         }
         Console.WriteLine($"publishing {files.Count} files as {channel}/{version} into {repoDir}");
+        string enOverrides = Path.Combine(clientDir, "ro3emu", "en_overrides.tsv");
+        if (File.Exists(enOverrides) && !files.Any(f => string.Equals(f.Key, "ro3emu/en_overrides.tsv", StringComparison.OrdinalIgnoreCase)))
+        {
+            files.Add(new("ro3emu/en_overrides.tsv", enOverrides));
+        }
 
         var progress = new Progress<string>(Console.WriteLine);
         var result = await Publisher.PublishAsync(new PublishOptions
