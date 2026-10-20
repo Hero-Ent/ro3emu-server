@@ -79,7 +79,21 @@ namespace Ro3Emu.Loc
                     {
                         int tab = line.IndexOf('\t');
                         if (line.Length == 0 || line[0] == '#' || tab <= 0) continue;
-                        map[Unescape(line.Substring(0, tab)).TrimStart('﻿')] = Unescape(line.Substring(tab + 1));
+                        map[Unescape(line.Substring(0, tab)).TrimStart(new[] { '﻿' })] = Unescape(line.Substring(tab + 1));
+                    }
+                }
+                string disk = Path.Combine(AppDomain.CurrentDomain.BaseDirectory ?? ".", "ro3emu", "en_overrides.tsv");
+                if (File.Exists(disk))
+                {
+                    using (var reader = new StreamReader(disk, Encoding.UTF8))
+                    {
+                        string line;
+                        while ((line = reader.ReadLine()) != null)
+                        {
+                            int tab = line.IndexOf('\t');
+                            if (line.Length == 0 || line[0] == '#' || tab <= 0) continue;
+                            map[Unescape(line.Substring(0, tab)).TrimStart(new[] { '﻿' })] = Unescape(line.Substring(tab + 1));
+                        }
                     }
                 }
             }

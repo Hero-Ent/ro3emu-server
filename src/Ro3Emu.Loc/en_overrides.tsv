@@ -4,3 +4,5 @@ Welcome to RO Ragnarok Online 3!	Welcome to Ragnarok Online 3!
 Goodbye, imitators! Only the real RO can fight!	Adventure awaits across Rune-Midgard!
 # Auction list cell (PUBLIC lot): the shipped sentence overflows the cell on both sides.
 Fixed price purchases will become available after the listing period ends.	Buyout opens when the listing ends.
+# Versão do Client (canto superior esquerdo da tela de login)
+0.0.1_1.1.0	0.0.1
