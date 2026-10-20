@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -11,6 +12,8 @@ namespace Ro3Emu.ClientHooks
     /// <list type="bullet">
     /// <item>Mode selection ("Select Mode", first world entry and Settings → PC Mode): the Mobile column (in development
     /// in this build) is removed and Classic PC / Modern PC are centred, keeping the original spacing.</item>
+    /// <item>Login keyboard navigation: TAB cycles between account and password; ENTER triggers login button (login screen only).</item>
+    /// <item>Announcement window: ensures closed beta text and discord links point to Hero Saga.</item>
     /// </list>
     /// </summary>
     public static class UiTweaks
@@ -27,6 +30,7 @@ namespace Ro3Emu.ClientHooks
         {
             Diagnostics.AutoDump();
             TextFit.Tick();
+            HandleLoginKeyboard(); // Must be checked EVERY frame for responsive keyboard input!
             if (++_frame % 10 != 0) return;
             try
             {
@@ -46,6 +50,8 @@ namespace Ro3Emu.ClientHooks
                     for (int i = 0; i < uiroot.transform.childCount; i++)
                     {
                         var child = uiroot.transform.GetChild(i);
+                        if (!child.gameObject.activeInHierarchy) continue;
+
                         if (child.name.IndexOf("Login", StringComparison.OrdinalIgnoreCase) >= 0 && Done.Add(child.gameObject.GetInstanceID()))
                         {
                             Debug.Log("[Ro3Emu.UiTweaks] Login panel active: " + child.name);
@@ -53,6 +59,11 @@ namespace Ro3Emu.ClientHooks
                                 Debug.Log($"[Ro3Emu.UiTweaks] Login RawImage: {raw.name} tex={(raw.texture != null ? raw.texture.name + " (" + raw.texture.width + "x" + raw.texture.height + ")" : "null")}");
                             foreach (var img in child.GetComponentsInChildren<Image>(true))
                                 Debug.Log($"[Ro3Emu.UiTweaks] Login Image: {img.name} sprite={(img.sprite != null ? img.sprite.name : "null")} tex={(img.sprite?.texture != null ? img.sprite.texture.name : "null")}");
+                        }
+
+                        if (child.name.IndexOf("Announcement", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            TweakAnnouncement(child);
                         }
                     }
                 }
@@ -65,6 +76,271 @@ namespace Ro3Emu.ClientHooks
             catch (Exception e)
             {
                 Debug.LogError("[Ro3Emu.UiTweaks] " + e);
+            }
+        }
+
+        /// <summary>
+        /// Handles TAB (cycle focus between account and password) and ENTER (submit login) strictly on the login screen.
+        /// Does nothing once the player is in character select or in the game world.
+        /// </summary>
+        private static void HandleLoginKeyboard()
+        {
+            try
+            {
+                var uiroot = GameObject.Find("GameMain/NodeRoot/UINode");
+                if (uiroot == null) return;
+
+                Transform loginPanel = null;
+                for (int i = 0; i < uiroot.transform.childCount; i++)
+                {
+                    var child = uiroot.transform.GetChild(i);
+                    if (!child.gameObject.activeInHierarchy) continue;
+
+                    // If any modal (announcement, server selection, loading) is open, do not handle login keys
+                    if (child.name.IndexOf("Announcement", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        child.name.IndexOf("ChoiceServer", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        child.name.IndexOf("Loading", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        return;
+                    }
+
+                    if (child.name.IndexOf("LoginPanel", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        child.name.IndexOf("LoginWidget", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        loginPanel = child;
+                    }
+                }
+
+                if (loginPanel == null) return;
+
+                bool tabPressed = Input.GetKeyDown(KeyCode.Tab);
+                bool enterPressed = Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter);
+
+                if (!tabPressed && !enterPressed) return;
+
+                var tmpInputs = loginPanel.GetComponentsInChildren<TMPro.TMP_InputField>(true)
+                    .Where(f => f != null && f.gameObject.activeInHierarchy && f.interactable)
+                    .OrderByDescending(f => f.transform.position.y)
+                    .ToList();
+
+                var uiInputs = tmpInputs.Count == 0
+                    ? loginPanel.GetComponentsInChildren<InputField>(true)
+                        .Where(f => f != null && f.gameObject.activeInHierarchy && f.interactable)
+                        .OrderByDescending(f => f.transform.position.y)
+                        .ToList()
+                    : null;
+
+                if (tabPressed)
+                {
+                    if (tmpInputs.Count >= 2)
+                    {
+                        int currentIndex = -1;
+                        for (int i = 0; i < tmpInputs.Count; i++)
+                        {
+                            if (tmpInputs[i].isFocused)
+                            {
+                                currentIndex = i;
+                                break;
+                            }
+                        }
+
+                        int nextIndex;
+                        if (currentIndex >= 0)
+                        {
+                            nextIndex = (currentIndex + 1) % tmpInputs.Count;
+                            tmpInputs[currentIndex].DeactivateInputField();
+                        }
+                        else
+                        {
+                            nextIndex = (!string.IsNullOrEmpty(tmpInputs[0].text) && string.IsNullOrEmpty(tmpInputs[1].text)) ? 1 : 0;
+                        }
+
+                        tmpInputs[nextIndex].Select();
+                        tmpInputs[nextIndex].ActivateInputField();
+                        tmpInputs[nextIndex].caretPosition = tmpInputs[nextIndex].text.Length;
+                    }
+                    else if (uiInputs != null && uiInputs.Count >= 2)
+                    {
+                        int currentIndex = -1;
+                        for (int i = 0; i < uiInputs.Count; i++)
+                        {
+                            if (uiInputs[i].isFocused)
+                            {
+                                currentIndex = i;
+                                break;
+                            }
+                        }
+
+                        int nextIndex;
+                        if (currentIndex >= 0)
+                        {
+                            nextIndex = (currentIndex + 1) % uiInputs.Count;
+                            uiInputs[currentIndex].DeactivateInputField();
+                        }
+                        else
+                        {
+                            nextIndex = (!string.IsNullOrEmpty(uiInputs[0].text) && string.IsNullOrEmpty(uiInputs[1].text)) ? 1 : 0;
+                        }
+
+                        uiInputs[nextIndex].Select();
+                        uiInputs[nextIndex].ActivateInputField();
+                        uiInputs[nextIndex].caretPosition = uiInputs[nextIndex].text.Length;
+                    }
+                }
+
+                if (enterPressed)
+                {
+                    TriggerLoginButton(loginPanel);
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("[Ro3Emu.UiTweaks] HandleLoginKeyboard: " + e);
+            }
+        }
+
+        private static void TriggerLoginButton(Transform loginPanel)
+        {
+            Button targetButton = null;
+            var buttons = loginPanel.GetComponentsInChildren<Button>(true);
+
+            // 1. By text
+            foreach (var btn in buttons)
+            {
+                if (!btn.gameObject.activeInHierarchy || !btn.interactable) continue;
+                var tmp = btn.GetComponentInChildren<TMPro.TMP_Text>(true);
+                var txt = btn.GetComponentInChildren<Text>(true);
+                string label = (tmp != null ? tmp.text : (txt != null ? txt.text : "")) ?? "";
+                if (label.IndexOf("Entrar", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    label.IndexOf("Login", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    label.IndexOf("Start", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    targetButton = btn;
+                    break;
+                }
+            }
+
+            // 2. By GameObject name
+            if (targetButton == null)
+            {
+                foreach (var btn in buttons)
+                {
+                    if (!btn.gameObject.activeInHierarchy || !btn.interactable) continue;
+                    string name = btn.gameObject.name;
+                    if (name.IndexOf("Login", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        name.IndexOf("Enter", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        name.IndexOf("Start", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        targetButton = btn;
+                        break;
+                    }
+                }
+            }
+
+            // 3. Fallback: first interactable button
+            if (targetButton == null)
+            {
+                targetButton = buttons.FirstOrDefault(b => b.gameObject.activeInHierarchy && b.interactable);
+            }
+
+            if (targetButton != null)
+            {
+                Debug.Log("[Ro3Emu.UiTweaks] Enter pressed -> triggering login button: " + targetButton.gameObject.name);
+                targetButton.onClick.Invoke();
+
+                try
+                {
+                    var eventData = new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current)
+                    {
+                        button = UnityEngine.EventSystems.PointerEventData.InputButton.Left
+                    };
+                    UnityEngine.EventSystems.ExecuteEvents.Execute(targetButton.gameObject, eventData, UnityEngine.EventSystems.ExecuteEvents.pointerClickHandler);
+                    UnityEngine.EventSystems.ExecuteEvents.Execute(targetButton.gameObject, eventData, UnityEngine.EventSystems.ExecuteEvents.submitHandler);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning("[Ro3Emu.UiTweaks] ExecuteEvents: " + ex.Message);
+                }
+            }
+            else
+            {
+                // Fallback for custom click handlers
+                foreach (var clickHandler in loginPanel.GetComponentsInChildren<UnityEngine.EventSystems.IPointerClickHandler>(true))
+                {
+                    var mb = clickHandler as MonoBehaviour;
+                    if (mb == null || !mb.gameObject.activeInHierarchy) continue;
+                    string name = mb.gameObject.name;
+                    if (name.IndexOf("Login", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        name.IndexOf("Enter", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        name.IndexOf("Start", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        var eventData = new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current)
+                        {
+                            button = UnityEngine.EventSystems.PointerEventData.InputButton.Left
+                        };
+                        clickHandler.OnPointerClick(eventData);
+                        break;
+                    }
+                }
+            }
+        }
+
+        private static void TweakAnnouncement(Transform window)
+        {
+            foreach (var tmp in window.GetComponentsInChildren<TMPro.TMP_Text>(true))
+            {
+                if (string.IsNullOrEmpty(tmp.text)) continue;
+                string t = tmp.text;
+                bool changed = false;
+                if (t.IndexOf("Obrigado por participar do Closed Beta de Ragnarok Online 3.", StringComparison.Ordinal) >= 0)
+                {
+                    t = t.Replace("Obrigado por participar do Closed Beta de Ragnarok Online 3.", "Closed Beta do Hero Saga RO3");
+                    changed = true;
+                }
+                else if (t.IndexOf("Closed Beta de Ragnarok Online 3", StringComparison.Ordinal) >= 0)
+                {
+                    t = t.Replace("Closed Beta de Ragnarok Online 3", "Closed Beta do Hero Saga RO3");
+                    changed = true;
+                }
+                if (t.IndexOf("https://discord.com/invite/ro3global", StringComparison.Ordinal) >= 0)
+                {
+                    t = t.Replace("https://discord.com/invite/ro3global", "https://discord.com/invite/mnUBY54jAe");
+                    changed = true;
+                }
+                else if (t.IndexOf("ro3global", StringComparison.Ordinal) >= 0)
+                {
+                    t = t.Replace("ro3global", "mnUBY54jAe");
+                    changed = true;
+                }
+                if (changed) tmp.text = t;
+            }
+
+            foreach (var txt in window.GetComponentsInChildren<Text>(true))
+            {
+                if (string.IsNullOrEmpty(txt.text)) continue;
+                string t = txt.text;
+                bool changed = false;
+                if (t.IndexOf("Obrigado por participar do Closed Beta de Ragnarok Online 3.", StringComparison.Ordinal) >= 0)
+                {
+                    t = t.Replace("Obrigado por participar do Closed Beta de Ragnarok Online 3.", "Closed Beta do Hero Saga RO3");
+                    changed = true;
+                }
+                else if (t.IndexOf("Closed Beta de Ragnarok Online 3", StringComparison.Ordinal) >= 0)
+                {
+                    t = t.Replace("Closed Beta de Ragnarok Online 3", "Closed Beta do Hero Saga RO3");
+                    changed = true;
+                }
+                if (t.IndexOf("https://discord.com/invite/ro3global", StringComparison.Ordinal) >= 0)
+                {
+                    t = t.Replace("https://discord.com/invite/ro3global", "https://discord.com/invite/mnUBY54jAe");
+                    changed = true;
+                }
+                else if (t.IndexOf("ro3global", StringComparison.Ordinal) >= 0)
+                {
+                    t = t.Replace("ro3global", "mnUBY54jAe");
+                    changed = true;
+                }
+                if (changed) txt.text = t;
             }
         }
 

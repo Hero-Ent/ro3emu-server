@@ -107,7 +107,17 @@ namespace Ro3Emu.Loc
         private static string MapFrom(string text, int hook)
         {
             if (text == null || text.Length == 0) return text;
-            if (EnglishOverrides.Count != 0 && EnglishOverrides.TryGetValue(text, out var replaced)) return replaced;
+            if (EnglishOverrides.Count != 0)
+            {
+                if (EnglishOverrides.TryGetValue(text, out var replaced)) return replaced;
+                foreach (var kvp in EnglishOverrides)
+                {
+                    if (kvp.Key.Length > 3 && text.IndexOf(kvp.Key, StringComparison.Ordinal) >= 0)
+                    {
+                        text = text.Replace(kvp.Key, kvp.Value);
+                    }
+                }
+            }
             if (!HasCjk(text)) return text;
             try
             {

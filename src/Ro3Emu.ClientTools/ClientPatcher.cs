@@ -80,7 +80,7 @@ public static class ClientPatcher
             Func<ModuleDefinition, string>? extra = file switch
             {
                 "Assembly-CSharp.dll" => m => RedirectChat(m, hooksDll) + "; " + VoiceStubPatch.Patch(m, hooksDll) + "; " + VoiceEnablePatch.Patch(m)
-                    + "; " + TextSink.PatchLanguageGet(m, locDll),
+                    + "; " + TextSink.PatchLanguageGet(m, locDll) + "; " + RedirectOpenUrl(m, hooksDll),
                 "Happyengine.Base.Runtime.dll" when VerboseLogs => ForceShowLog,
                 "Unity.TextMeshPro.dll" => m => TextSink.PatchTmp(m, locDll, hooksDll),
                 "HUD.dll" => m => TextSink.PatchHud(m, locDll),
@@ -486,6 +486,32 @@ public static class ClientPatcher
         vil.Append(vil.Create(OpCodes.Ldc_I4_1));
         vil.Append(vil.Create(OpCodes.Ret));
         return "chat -> ServerImAdapter";
+    }
+
+    private static string RedirectOpenUrl(ModuleDefinition module, string hooksDll)
+    {
+        using var hooks = AssemblyDefinition.ReadAssembly(hooksDll, new ReaderParameters { InMemory = true });
+        var targetMethod = hooks.MainModule.GetType("Ro3Emu.ClientHooks.UrlRedirect")?.Methods.SingleOrDefault(m => m.Name == "OpenURL")
+            ?? throw new InvalidOperationException("UrlRedirect.OpenURL not found in hooks");
+        var target = module.ImportReference(targetMethod);
+        int count = 0;
+        foreach (var type in module.Types)
+        {
+            foreach (var method in type.Methods)
+            {
+                if (!method.HasBody) continue;
+                foreach (var inst in method.Body.Instructions)
+                {
+                    if (inst.OpCode == OpCodes.Call && inst.Operand is MethodReference mr &&
+                        mr.DeclaringType.FullName == "UnityEngine.Application" && mr.Name == "OpenURL")
+                    {
+                        inst.Operand = target;
+                        count++;
+                    }
+                }
+            }
+        }
+        return $"OpenURL -> UrlRedirect ({count})";
     }
 
     /// <summary>The hooks DLL ships inside this tool (EmbeddedResource); a repo build is the fallback for development.</summary>

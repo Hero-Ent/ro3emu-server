@@ -51,7 +51,7 @@ public sealed class ServerOptions
 
     public int ClusterId { get; set; } = 1;
 
-    public string ClusterName { get; set; } = "RO3Emu";
+    public string ClusterName { get; set; } = "Hero Saga Ro3";
 
     /// <summary>The server (area) inside the cluster: the login screen shows the cluster name above it.</summary>
     public string AreaName { get; set; } = "Prontera";
