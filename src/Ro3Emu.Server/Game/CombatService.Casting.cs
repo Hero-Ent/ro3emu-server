@@ -425,6 +425,17 @@ public sealed partial class CombatService
             Independent = independent,
         };
         if (!independent) s.SkillCast = action;
+        // A chanted skill that may not be cast on the move (_bMovement 0 = enum_SkillLockMoveType.Lock) holds the caster
+        // still from the press until the cast ends; the client stops the walk and resumes the player's path afterwards.
+        if (!independent && actor == null && action.ChantMs > 0 && GameData.Int(row, "_bMovement") == 0)
+        {
+            await buffs.SetCastWalkLockAsync(s, id);
+            ScheduleRuntime(action.WorldScene, TimeSpan.FromMilliseconds(action.ChantMs + action.ActionMs), async () =>
+            {
+                if (s.CastWalkLock == id) await buffs.SetCastWalkLockAsync(s, 0);
+            });
+        }
+        else if (!independent && s.CastWalkLock != 0) await buffs.SetCastWalkLockAsync(s, 0);
         s.WorldState.ResurrectionCastId = Script(row) == "Resurrection" ? id : 0;
         s.Face = face;
         req.Face = face;
@@ -688,6 +699,7 @@ public sealed partial class CombatService
         if (s.SkillCast is not { } action) return;
         action.Cancelled = true;
         s.SkillCast = null;
+        if (s.CastWalkLock == action.Id) await buffs.SetCastWalkLockAsync(s, 0);
         await ToPlayerAndViewersAsync(s, SkillEnd, new SkillEndNotify
         {
             SrcID = action.SourceId, SessionId = action.Id, Type = SkillEndNotify.Types.SkillEndType.Interrupted,

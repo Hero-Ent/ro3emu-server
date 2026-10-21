@@ -54,6 +54,24 @@ public sealed partial class SkillCombatTests
     }
 
     [ClientDataFact]
+    public async Task AChantedSkillHoldsTheCasterStillUntilTheCastEnds()
+    {
+        await using var alice = await InWorld("Alice");
+        await Gm("alice", "!job 2100"); await Teach("alice", 12004);
+        var target = await Target("alice", stationary: true);
+        var origin = Session("alice").Position.Clone();
+        await Loop.InvokeAsync(() => { target.Hp = 50_000_000; target.Moving = false; target.X = origin.X; target.Z = origin.Z + 1; return Task.CompletedTask; });
+        await alice.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1200401, TargetId = target.Uid });
+        var accepted = await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser);
+        Assert.Equal(0, accepted.Result);
+        // Fire Bolt (chant 1 s, _bMovement 0): the Walk forbidden bit (4) holds the caster while it casts...
+        await Next(alice, CombatService.AoiAttrChange, AOIAttrChange.Parser, x => x.ForbidInfo != null && (x.ForbidInfo.Data.Values[0] & 4) != 0);
+        await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.SessionId == accepted.SessionId);
+        // ...and is released when the cast ends, so the client resumes the player's path.
+        await Next(alice, CombatService.AoiAttrChange, AOIAttrChange.Parser, x => x.ForbidInfo != null && (x.ForbidInfo.Data.Values[0] & 4) == 0);
+        Assert.Equal(0, await Loop.InvokeAsync(() => Task.FromResult(Session("alice").CastWalkLock)));
+    }
+    [ClientDataFact]
     public async Task DoubleAttackReleasesItsExtraHitWithADagger()
     {
         Combat.Rolls = new AlwaysProcRolls();

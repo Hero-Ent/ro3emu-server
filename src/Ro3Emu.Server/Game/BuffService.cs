@@ -358,6 +358,18 @@ public sealed partial class BuffService : IGameTicker
         || (p.ImmuneDeathOffer != null && ordinal == 9)
         || (p.ImmuneRecoveryUntilMs > MonsterService.NowMs && ordinal is 3 or 4 or 5 or 9);
 
+    /// <summary>
+    /// Holds the caster still for a cast (or releases it with 0): the Walk forbidden bit (enum_ForbiddenState.Walk 4),
+    /// which is how the client blocks local movement (LC_Unit_Player.IsSkillBlockMove); it stops the walk, caches the
+    /// player's move input and resumes it when the bit clears (CachedMoveData).
+    /// </summary>
+    public async Task SetCastWalkLockAsync(GameSession p, long castId)
+    {
+        if (p.CastWalkLock == castId) return;
+        p.CastWalkLock = castId;
+        await RefreshControlAsync(p);
+    }
+
     private async Task RefreshControlAsync(GameSession p)
     {
         if (p.Role == null) return;
@@ -402,6 +414,7 @@ public sealed partial class BuffService : IGameTicker
             status |= (1UL << 24) | (1UL << 8) | (1UL << 9); // Invincible/CanNotMove/CanNotSkill.
             forbidden |= ForbiddenMask(3) | ForbiddenMask(4) | ForbiddenMask(5) | ForbiddenMask(9);
         }
+        if (p.CastWalkLock != 0) forbidden |= ForbiddenMask(3); // a chanted skill holds the caster still (Walk)
         p.StatusBits = (long)(((ulong)p.StatusBits & ~p.BuffStatusBits) | status);
         p.BuffStatusBits = status;
         p.ForbiddenBits = forbidden;
