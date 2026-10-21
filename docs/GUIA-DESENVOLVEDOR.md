@@ -81,7 +81,7 @@ As duas são geradas juntas, automaticamente, pelo `PUBLICAR_ATUALIZACAO.cmd`.
 | **Patchar o cliente** | Trocar as DLLs do jogo pelas nossas, já com o endereço do servidor |
 | **`ro3emu-backup`** | Pasta dentro do cliente com as DLLs **originais** do jogo. Nunca apague |
 | **Upstream** | O projeto original de onde o nosso veio: `https://github.com/aethai/ro3emu-server` |
-| **Origin** | O nosso repositório: `https://github.com/heroragnarok/ro3emu-server` |
+| **Origin** | O nosso repositório: `https://github.com/Hero-Ent/ro3emu-server` |
 
 ---
 
@@ -126,7 +126,7 @@ Recomendamos usar exatamente a pasta `D:\ro3emu-server` (alguns scripts e o site
 
 ```powershell
 cd D:\
-git clone https://github.com/heroragnarok/ro3emu-server.git
+git clone https://github.com/Hero-Ent/ro3emu-server.git
 cd ro3emu-server
 git remote add upstream https://github.com/aethai/ro3emu-server.git
 ```
