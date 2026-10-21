@@ -275,6 +275,93 @@ public sealed partial class SkillCombatTests : IAsyncLifetime
     }
 
     [ClientDataFact]
+    public async Task Rect360HitsTheLineInFrontOfTheCaster()
+    {
+        // Sonic Wave (Rect360, _kRange [1300, 500]): 13 m long and 5 m wide, starting at the caster along its facing.
+        await using var alice = await InWorld("Alice");
+        await Gm("alice", "!job 1400"); await Teach("alice", 11309);
+        var ahead = await Target("alice", stationary: true);
+        var aside = await Target("alice", stationary: true);
+        var behind = await Target("alice", stationary: true);
+        var origin = Session("alice").Position.Clone();
+        await Loop.InvokeAsync(() =>
+        {
+            // Face 0 looks along +Z.
+            ahead.X = origin.X; ahead.Z = origin.Z + 8;
+            aside.X = origin.X + 4; aside.Z = origin.Z + 1;
+            behind.X = origin.X; behind.Z = origin.Z - 3;
+            foreach (var m in new[] { ahead, aside, behind }) { m.Hp = 1_000_000; m.Moving = false; }
+            return Task.CompletedTask;
+        });
+        await alice.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1130901, Face = 0, TargetPos = origin });
+        var accepted = await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser);
+        Assert.Equal(0, accepted.Result);
+        var hit = await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.SessionId == accepted.SessionId);
+        var hitIds = hit.Dsts.Select(d => d.DstID).ToHashSet();
+        Assert.Contains(ahead.Uid, hitIds);
+        Assert.DoesNotContain(aside.Uid, hitIds);
+        Assert.DoesNotContain(behind.Uid, hitIds);
+    }
+
+    [ClientDataFact]
+    public async Task AxeTornadoKeepsHittingAroundTheWalkingCaster()
+    {
+        // Axe Tornado lv1: 6 ticks of 100% around the caster while it walks, then a 150% final blow (total 750%).
+        await using var alice = await InWorld("Alice");
+        await Gm("alice", "!job 6400"); await Teach("alice", 16304);
+        var start = await Target("alice", stationary: true);
+        var later = await Target("alice", stationary: true);
+        var caster = Session("alice");
+        var origin = caster.Position.Clone();
+        await Loop.InvokeAsync(() =>
+        {
+            start.Hp = later.Hp = 1_000_000; start.Moving = later.Moving = false;
+            later.X = origin.X + 20; later.Z = origin.Z; // far from where the spin started
+            return Task.CompletedTask;
+        });
+        await alice.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1630401, Face = 0, TargetPos = origin });
+        var accepted = await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser);
+        Assert.Equal(0, accepted.Result);
+        var first = await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.SessionId == accepted.SessionId);
+        Assert.Contains(first.Dsts, d => d.DstID == start.Uid);
+        // The caster walks over to the other monster while spinning.
+        await Loop.InvokeAsync(() => { caster.Position = new Vec3 { X = origin.X + 19, Y = origin.Y, Z = origin.Z }; return Task.CompletedTask; });
+        var reached = await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser,
+            h => h.SessionId == accepted.SessionId && h.Dsts.Any(d => d.DstID == later.Uid));
+        Assert.DoesNotContain(reached.Dsts, d => d.DstID == start.Uid);
+        Assert.Equal(6, CombatService.SpinTicks(SkillRow(1630401)));
+    }
+
+    [ClientDataFact]
+    public async Task HighEnergyImpactSlamsWhereTheCasterLands()
+    {
+        // High-Energy Impact: take off at once, slam at the template's last attack point where the caster has flown.
+        await using var alice = await InWorld("Alice");
+        await Gm("alice", "!job 6400"); await Teach("alice", 16307);
+        var takeoff = await Target("alice", stationary: true);
+        var landing = await Target("alice", stationary: true);
+        var caster = Session("alice");
+        var origin = caster.Position.Clone();
+        await Loop.InvokeAsync(() =>
+        {
+            takeoff.Hp = landing.Hp = 1_000_000; takeoff.Moving = landing.Moving = false;
+            landing.X = origin.X + 20; landing.Z = origin.Z;
+            return Task.CompletedTask;
+        });
+        await alice.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1630701, TargetPos = origin });
+        var accepted = await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser);
+        Assert.Equal(0, accepted.Result);
+        await Loop.InvokeAsync(() => { caster.Position = new Vec3 { X = origin.X + 19, Y = origin.Y, Z = origin.Z }; return Task.CompletedTask; });
+        var slam = await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.SessionId == accepted.SessionId);
+        Assert.Contains(slam.Dsts, d => d.DstID == landing.Uid);
+        Assert.DoesNotContain(slam.Dsts, d => d.DstID == takeoff.Uid);
+        Assert.Equal(1_000_000, takeoff.Hp);
+    }
+
+    private System.Text.Json.JsonElement SkillRow(int id) =>
+        app.Services.GetRequiredService<Ro3Emu.Server.Data.GameData>().Row("SkillConfig", id)!.Value;
+
+    [ClientDataFact]
     public async Task GroundNpcUsesRequestedPositionAndDespawnsOnTeardown()
     {
         await using var alice = await InWorld("Alice"); await using var bob = await InWorld("Bob");

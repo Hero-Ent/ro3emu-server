@@ -37,39 +37,51 @@ public sealed partial class CombatService
 {
     private long _skillObjectIds = 0x600000000000L;
 
-    private async Task ResolveCastAsync(GameSession s, ActiveSkillCast action)
+    /// <summary>
+    /// One damage moment of a cast. Ordinary casts have one (null = defaults); a spin (Axe Tornado) has several and a
+    /// leap (High-Energy Impact) lands later. Branch selects _kDamageParam1/_kShowDmg, Split overrides the segments,
+    /// First owns the one-time cast work (handlers, fields, caster displacement), SelfEffects the _kBuff1 grant and
+    /// AtCaster centres a ground shape on where the caster is now.
+    /// </summary>
+    private sealed record Impact(int Branch, int? Split, bool First, bool SelfEffects, bool AtCaster);
+
+    private async Task ResolveCastAsync(GameSession s, ActiveSkillCast action, Impact? impact = null)
     {
         var row = action.Row;
         if (!CurrentCastMap(s, action)) return;
-        foreach (var handler in CastLanded)
+        if (impact is not { First: false })
         {
-            await handler(s, row);
+            foreach (var handler in CastLanded)
+            {
+                await handler(s, row);
+                if (!CurrentCastMap(s, action)) return;
+            }
+            if (Script(row) == "Resurrection")
+            {
+                var target = FindPlayer(s, action.Request.TargetId, dead: true);
+                if (target == null || target.SceneLoading || buffs.HasForbidden(target, 16)
+                    || s.WorldState.ResurrectionCastId != action.Id
+                    || Distance(s.Position, target.Position) > Range(row) + 1.5f) return;
+                s.WorldState.ResurrectionCastId = 0;
+                if (action.Request.SkillId == PublicSkill("WorldTreeSkillId"))
+                {
+                    if (ReviveItemSkill != null && await ReviveItemSkill(s, target, row))
+                        await buffs.NotifyWorldTreeReviveAsync(s, target.Role!.Name);
+                }
+                else if (ReviveOffer != null) await ReviveOffer(s, target, row);
+                return;
+            }
+            if (await CreateSkillObjectAsync(s, action)) return;
+            if (!CurrentCastMap(s, action)) return;
+            // SkillConfig._bMovement is enum_SkillLockMoveType (may the caster walk while casting), not a displacement.
+            await MoveCasterAsync(s, action);
             if (!CurrentCastMap(s, action)) return;
         }
-        if (Script(row) == "Resurrection")
-        {
-            var target = FindPlayer(s, action.Request.TargetId, dead: true);
-            if (target == null || target.SceneLoading || buffs.HasForbidden(target, 16)
-                || s.WorldState.ResurrectionCastId != action.Id
-                || Distance(s.Position, target.Position) > Range(row) + 1.5f) return;
-            s.WorldState.ResurrectionCastId = 0;
-            if (action.Request.SkillId == PublicSkill("WorldTreeSkillId"))
-            {
-                if (ReviveItemSkill != null && await ReviveItemSkill(s, target, row))
-                    await buffs.NotifyWorldTreeReviveAsync(s, target.Role!.Name);
-            }
-            else if (ReviveOffer != null) await ReviveOffer(s, target, row);
-            return;
-        }
-        if (await CreateSkillObjectAsync(s, action)) return;
-        if (!CurrentCastMap(s, action)) return;
-        // SkillConfig._bMovement is enum_SkillLockMoveType (may the caster walk while casting), not a displacement.
-        await MoveCasterAsync(s, action);
-        if (!CurrentCastMap(s, action)) return;
-        await ApplyEffectsAsync(s, action, action.Request.TargetPos ?? action.Origin);
+        var center = impact?.AtCaster == true ? s.Position.Clone() : action.Request.TargetPos ?? action.Origin;
+        await ApplyEffectsAsync(s, action, center, impact: impact);
     }
 
-    private List<MonsterUnit> SelectEnemies(GameSession s, ActiveSkillCast action, Vec3 center, float? radiusOverride = null)
+    private List<MonsterUnit> SelectEnemies(GameSession s, ActiveSkillCast action, Vec3 center, float? radiusOverride = null, bool field = false)
     {
         var row = action.Row;
         int max = (int)Math.Max(1, GameData.Int(row, "_iTargetMax"));
@@ -78,8 +90,12 @@ public sealed partial class CombatService
             var target = FindMonster(s.WorldScene, action.Request.TargetId);
             return target != null && target.Hp > 0 && CanHitMonster(s, target) && Relation(row, false, race: target.Template.Race) ? [target] : [];
         }
+        // enum_SkillReleaseType (Lua_CFG_SkillConfig): 1 Lock, 2 FixCircle, 3 FixRect, 4 Fan, 5 Arrow, 6 Rect360,
+        // 7 DragRect, 8 DragCircle. The caster-anchored shapes (2-6) are measured from where the caster is at the
+        // impact, not where the cast started: Axe Tornado is cast while walking and keeps hitting around the caster.
         int release = (int)GameData.Int(row, "_iRelease");
-        if (release is not (1 or 7 or 8) && radiusOverride == null) center = action.Origin;
+        if (release is not (1 or 7 or 8) && radiusOverride == null && !field)
+            center = action.Operator?.Pos ?? (s.WorldScene == action.WorldScene ? s.Position : action.Origin);
         var range = Numbers(row, "_kRange");
         float radius = radiusOverride ?? (float)(range.FirstOrDefault(300) / 100);
         float height = GameData.Int(row, "_iAreaHeightRange") / 100f;
@@ -90,7 +106,15 @@ public sealed partial class CombatService
             double radians = action.Request.Face * Math.PI / 180;
             double forward = dx * Math.Sin(radians) + dz * Math.Cos(radians), side = dx * Math.Cos(radians) - dz * Math.Sin(radians);
             if (radiusOverride == null && release is 3 or 5 or 6 or 7)
-                return Math.Abs(side) <= radius / 2 && Math.Abs(forward) <= (range.Length > 1 ? range[1] / 200 : radius);
+            {
+                // (verified) _kRange[0] is the length along the facing and [1] the width: GetIndicatorRange returns
+                // {_kRange[0], _kRange[1]} / 100 for these, and the descriptions agree (Pinpoint Attack 950x400
+                // "9m-long, 4m-wide", Heavy Cannon Shot 1600x500 "5 * 15-meter area in front", Fire Wall 100x300
+                // "each 3*1"). A dragged rectangle (7) is centred on the chosen point; the others start at the caster.
+                float length = radius, width = range.Length > 1 ? (float)(range[1] / 100) : radius;
+                if (Math.Abs(side) > width / 2) return false;
+                return release == 7 ? Math.Abs(forward) <= length / 2 : forward >= -0.5 && forward <= length;
+            }
             if (Distance(center, m.Pos) > radius + 0.1f) return false;
             return radiusOverride != null || release != 4 || Math.Atan2(Math.Abs(side), forward) <= (range.Length > 1 ? range[1] : 90) * Math.PI / 360;
         }
@@ -98,7 +122,7 @@ public sealed partial class CombatService
             .OrderBy(m => Distance(center, m.Pos)).ThenBy(m => m.Uid).Take(max).ToList();
     }
 
-    private async Task ApplyEffectsAsync(GameSession s, ActiveSkillCast action, Vec3 center, SkillObject? field = null)
+    private async Task ApplyEffectsAsync(GameSession s, ActiveSkillCast action, Vec3 center, SkillObject? field = null, Impact? impact = null)
     {
         if (s.Dead || s.Role?.Id != action.OwnerId || s.WorldScene != action.WorldScene || s.SceneLoading
             || s.SceneGeneration != action.SceneGeneration || field?.Removing == true
@@ -117,9 +141,10 @@ public sealed partial class CombatService
             && ReferenceEquals(s.Attachment, action.Attachment)
             && sessions.All().Contains(s);
         string script = Script(row);
-        // Heal's enemy branch is [1] for damage, and so is its segment count.
-        int split = HitSplit(row, script == "Heal" ? 1 : 0);
-        var targets = SelectEnemies(s, action, center, field?.Trap == true ? field.Radius : null);
+        // Heal's enemy branch is [1] for damage, and so is its segment count; a spin's final hit is branch [1] too.
+        int branch = impact?.Branch ?? (script == "Heal" ? 1 : 0);
+        int split = impact?.Split ?? HitSplit(row, branch);
+        var targets = SelectEnemies(s, action, center, field?.Trap == true ? field.Radius : null, field: field != null);
         var playerTargets = GameData.Int(row, "_iRangeType") == 2 ? EventAreaTargets(s, row)
             : EventTarget(s, action.Request.TargetId) is { } eventTarget
                 && PlayerDistance(s, eventTarget) <= Range(row) + 1.5f ? new[] { eventTarget } : [];
@@ -224,7 +249,7 @@ public sealed partial class CombatService
             {
                 var defender = new Fighter(0, 0, target.Template.Flee, 0, target.Template.Level, target.Template.Element)
                 { Def = target.Template.Def, Mdef = target.Template.Mdef, Flee = target.Template.Flee };
-                var (amount, result) = Damage(attacker, defender, row, script == "Heal" ? 1 : 0);
+                var (amount, result) = Damage(attacker, defender, row, branch);
                 if (amount > 0)
                 {
                     foreach (var modifier in DamageAdjusters) amount = Math.Max(0, modifier(s, target, row, result, amount));
@@ -263,7 +288,7 @@ public sealed partial class CombatService
         foreach (var recipient in friendly ? allies : new List<GameSession> { s })
         {
             if (!CanApplyMoreEffects()) break;
-            if (field == null)
+            if (field == null && impact?.SelfEffects != false)
                 foreach (var tuple in Tuples(row, "_kBuff1"))
                     if (CanApplyMoreEffects() && RollBuff(tuple, out int id, out int duration)) await buffs.AddAsync(recipient, id, duration, castingRole.Id);
             if (friendly && damage)

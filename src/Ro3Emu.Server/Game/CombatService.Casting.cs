@@ -404,19 +404,76 @@ public sealed partial class CombatService
         }, highLevel: GameData.Int(row, "_iSkillEffectLevel") > 0, extra: actor != null || req.IsExtraSkill);
         var template = data.SkillTemplate(GameData.Int(row, "_iScriptShow"));
         var points = template is { } t ? Numbers(t, "m_kAtkPoints") : [];
-        double point = points.FirstOrDefault(0.2);
-        int at = Script(row) == "Resurrection" ? action.ChantMs : ImpactOffset(template, point, action.ChantMs, action.ActionMs);
-        ScheduleRuntime(action.WorldScene, TimeSpan.FromMilliseconds(at), async () =>
+        int Ms(double p) => ImpactOffset(template, p, action.ChantMs, action.ActionMs);
+        int last = 0;
+        foreach (var (at, impact) in CastImpacts(row, points, Ms, action))
         {
-            if (!Live(s, action)) return;
-            action.Resolved = true;
-            await ResolveCastAsync(s, action);
-        });
-        ScheduleRuntime(action.WorldScene, TimeSpan.FromMilliseconds(Math.Max(at, action.ChantMs + action.ActionMs) + 1), () =>
+            last = Math.Max(last, at);
+            ScheduleRuntime(action.WorldScene, TimeSpan.FromMilliseconds(at), async () =>
+            {
+                if (!Live(s, action)) return;
+                if (impact is not { First: false }) action.Resolved = true;
+                await ResolveCastAsync(s, action, impact);
+            });
+        }
+        // A leap grants its _kBuff1 (High-Energy Impact's flight shield) on take-off; the slam comes at landing.
+        if (Script(row) == LeapSlamScript && points.Length > 1)
+            ScheduleRuntime(action.WorldScene, TimeSpan.FromMilliseconds(Ms(points[0])), async () =>
+            {
+                if (!Live(s, action)) return;
+                foreach (var tuple in Tuples(row, "_kBuff1"))
+                    if (Live(s, action) && RollBuff(tuple, out int buff, out int duration)) await buffs.AddAsync(s, buff, duration, s.Role!.Id);
+            });
+        ScheduleRuntime(action.WorldScene, TimeSpan.FromMilliseconds(Math.Max(last, action.ChantMs + action.ActionMs) + 1), () =>
         {
             if (ReferenceEquals(s.SkillCast, action)) s.SkillCast = null;
             return Task.CompletedTask;
         });
+    }
+
+    /// <summary>Axe Tornado: spins while the caster walks, hitting around it, then a final blow.</summary>
+    internal const string SpinScript = "AxeTornado";
+
+    /// <summary>High-Energy Impact: flies (the caster moves) and slams the ground where it lands.</summary>
+    internal const string LeapSlamScript = "AxeLeapAttack";
+
+    /// <summary>
+    /// When a cast deals its damage. Ordinarily once, at the template's first attack point (attack-point count is not a
+    /// hit count: Basic Attack has [0.15, 0.15]). Two scripts are scheduled from their descriptions instead:
+    /// - Axe Tornado "spins, dealing total PATK * ${3}%": _kDamageParam1 = [per tick, final]
+    ///   (lv1 [10000, 15000], ${3}=750 = 6 x 100 + 150; enhanced 1438 = 10 x 115 + 288). The ticks are spread between
+    ///   the second and the next-to-last attack points (16304 [0.017, 0.2, 2.4]: 6 ticks over 0.2-2.4 s, final at
+    ///   2.4 s), each around where the caster is then, and the final blow uses branch [1] (_kShowDmg [3, 1]).
+    /// - High-Energy Impact takes off at its first attack point (0) and "attacks below" at its last (3.37 s), around
+    ///   where the caster has flown to.
+    /// </summary>
+    private static List<(int At, Impact? Impact)> CastImpacts(JsonElement row, double[] points, Func<double, int> ms, ActiveSkillCast action)
+    {
+        string script = Script(row);
+        if (script == "Resurrection") return [(action.ChantMs, null)];
+        if (script == SpinScript && points.Length >= 2 && SpinTicks(row) is var ticks and > 0)
+        {
+            double start = points.Length >= 3 ? points[1] : points[0];
+            double end = points.Length >= 4 ? points[^2] : points[^1];
+            var impacts = new List<(int, Impact?)>();
+            for (int i = 0; i < ticks; i++)
+                impacts.Add((ms(start + (end - start) * i / ticks), new Impact(0, 1, First: i == 0, SelfEffects: i == 0, AtCaster: true)));
+            impacts.Add((ms(points[^1]), new Impact(1, null, First: false, SelfEffects: false, AtCaster: true)));
+            return impacts;
+        }
+        if (script == LeapSlamScript && points.Length > 1)
+            return [(ms(points[^1]), new Impact(0, null, First: true, SelfEffects: false, AtCaster: true))];
+        return [(ms(points.FirstOrDefault(0.2)), null)];
+    }
+
+    /// <summary>Spin ticks so that ticks x _kDamageParam1[0] + _kDamageParam1[1] is the description's total (${3}).</summary>
+    internal static int SpinTicks(JsonElement row)
+    {
+        var damage = Numbers(row, "_kDamageParam1");
+        var desc = Numbers(row, "_kDescData");
+        if (damage.Length < 2 || damage[0] <= 0 || desc.Length < 3) return 0;
+        double ticks = (desc[2] - damage[1] / 100) / (damage[0] / 100);
+        return ticks is > 0 and <= 60 ? (int)Math.Round(ticks) : 0;
     }
 
     /// <summary>Piecewise template time mapping; same scale as LC_Skill_RunTimeContext (inferred for attack points).</summary>
@@ -445,6 +502,19 @@ public sealed partial class CombatService
 
     public async Task InterruptAsync(GameSession s, SkillInterruptReq? req = null)
     {
+        // High-Energy Impact: "tap the skill again or wait until the Flying duration ends to attack below" (inferred:
+        // the early tap arrives as the player's own interrupt). The slam lands now, where the caster is, instead of
+        // cancelling the flight; the scheduled landing then finds the cast finished.
+        if (req != null && s.SkillCast is { Resolved: false, Cancelled: false } leap && Script(leap.Row) == LeapSlamScript
+            && (req.InterruptSkillId == 0 || req.InterruptSkillId == leap.Request.SkillId) && Live(s, leap))
+        {
+            leap.Resolved = true;
+            s.SkillCast = null;
+            await ResolveCastAsync(s, leap, new Impact(0, null, First: true, SelfEffects: false, AtCaster: true));
+            await s.SendGameAsync(SkillInterrupt, new SkillInterruptResp { IsInterruptSucc = true });
+            if (req.NxtSkill is { } after) await CastAsync(s, after);
+            return;
+        }
         bool valid = req == null || req.InterruptSkillId == 0 || req.InterruptSkillId == s.SkillCast?.Request.SkillId
             || req.InterruptSkillId == s.Attack?.SkillId || eventAttacks.TryGetValue(s, out var eventAttack) && req.InterruptSkillId == eventAttack.SkillId;
         bool interrupted = valid && (s.SkillCast != null || s.Attack != null || eventAttacks.ContainsKey(s));
