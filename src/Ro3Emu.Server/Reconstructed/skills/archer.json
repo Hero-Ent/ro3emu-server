@@ -33,7 +33,8 @@
     },
     "13323": {
       "name": "Warg Hunt",
-      "why": "'Commands «3» wolf followers to attack ... dealing «3» hits of Neutral melee Physical damage totaling Physical ATK*«110»%': P1 11000 is the total, but _kShowDmg is empty, so it showed as one number; split 3 like its melee/ranged rows 13329/13330 (_kShowDmg [3]). The dash when farther than «5» m is not modelled.",
+      "why": "'Commands «3» wolf followers to attack ... dealing «3» hits of Neutral melee Physical damage totaling Physical ATK*«110»%': P1 11000 is the total, but _kShowDmg is empty, so it showed as one number; split 3 like its melee/ranged rows 13329/13330 (_kShowDmg [3]). The dash when farther than «5» m goes to 1 m in front of the target (inferred stop); the melee/ranged row choice is not modelled.",
+      "dash": { "stop": 1, "minDistance": 5 },
       "hits": {
         "points": [
           0

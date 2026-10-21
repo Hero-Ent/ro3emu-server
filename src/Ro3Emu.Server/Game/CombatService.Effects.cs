@@ -501,6 +501,7 @@ public sealed partial class CombatService
             ["HighspeedSlide"] = (DisplaceKind.CasterForward, 0),
             ["HighspeedSlideMecha"] = (DisplaceKind.CasterForward, 0),
             ["PinpointAttack"] = (DisplaceKind.CasterForward, 3),
+            ["PinpointAttack2"] = (DisplaceKind.CasterForward, 3), // Fearless Charge "Move «12» meters in that direction"
             ["ArrowRepel"] = (DisplaceKind.TargetPush, 3),
             ["PileBunker"] = (DisplaceKind.TargetPush, 5),
             ["PhantomThrust"] = (DisplaceKind.TargetPull, -1),
@@ -571,6 +572,7 @@ public sealed partial class CombatService
         var destination = target?.Pos ?? action.Request.TargetPos;
         if (destination == null) return;
         float dx = destination.X - s.Position.X, dz = destination.Z - s.Position.Z, length = MathF.Sqrt(dx * dx + dz * dz);
+        if (length < mechanic.DashMinDistance) return; // "If you are more than «5» meters from the target, you also Charge"
         float travel = length - (target != null ? stop : 0);
         if (travel <= 0.2f) return;
         var start = s.Position.Clone();

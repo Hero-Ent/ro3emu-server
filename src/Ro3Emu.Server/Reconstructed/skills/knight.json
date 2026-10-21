@@ -90,17 +90,29 @@
     },
     "11124": {
       "name": "Heavy Blow (Basic Attack talent proc)",
-      "why": "Talent 16120020 'Using [Basic Attack] triggers Splash damage, dealing Physical ATK*«50»% ... to «2» other enemies within «4» meters of the target' (row P1 5000 matches): _kRange [0] makes the splash radius 0; 4 m around the target. maxTargets 3 = target + 2 others because the selector cannot exclude the locked target (the target takes an extra 50%; see findings).",
+      "why": "Talent 16120020 'Using [Basic Attack] triggers Splash damage, dealing Physical ATK*«50»% ... to «2» other enemies within «4» meters of the target' (row P1 5000 matches): _kRange [0] makes the splash radius 0; 4 m around the target, the target itself excluded ('other'), 2 enemies.",
       "anchor": "target",
       "shape": { "circle": 4 },
-      "maxTargets": 3
+      "maxTargets": 2,
+      "excludeTarget": true
     },
     "11301": {
       "name": "Rift Impact",
-      "why": "'Dives toward a designated location within «15» meters. Upon landing, deals ... PATK * «250»% ... to up to «5» enemies within a «5»-meter radius' (mode 1: «300»%, same «5» m): the template takes off at attack point 0 (0 s) and lands at point 1 (0.53 s); generic hit at take-off. Hit once at landing, around the requested ground point, 5 m (_kRange 600 = 6 m).",
+      "why": "'Dives toward a designated location within «15» meters. Upon landing, deals ... PATK * «250»% ... to up to «5» enemies within a «5»-meter radius' (mode 1: «300»%, same «5» m): the template takes off at attack point 0 (0 s) and lands at point 1 (0.53 s); generic hit at take-off. Hit once at landing, around the requested ground point, 5 m (_kRange 600 = 6 m). The caster ends at that point ('Dives toward a designated location'), as the client draws it.",
       "hits": { "points": [1] },
       "anchor": "point",
-      "shape": { "circle": 5 }
+      "shape": { "circle": 5 },
+      "dash": { "stop": 0, "to": "point" }
+    },
+    "11112": {
+      "name": "Charge Attack",
+      "why": "'Charge at a designated ST enemy within «12» meters, dealing Physical ATK*«60»%+«100» ...': the caster ends in front of the target (1 m short, inferred) before the hit; the damage and 1 s Stun are already in the row.",
+      "dash": { "stop": 1 }
+    },
+    "10032": {
+      "name": "Warg Strike",
+      "why": "'Deals PATK * «50»% ... to the designated ST enemy within «8» meters. If you are more than «5» meters from the target, you also Charge directly in front of it': dash to 1 m in front of the target (inferred) only from farther than 5 m.",
+      "dash": { "stop": 1, "minDistance": 5 }
     },
     "11302": {
       "name": "Cleaving Slash",

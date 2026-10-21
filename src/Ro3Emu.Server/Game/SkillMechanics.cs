@@ -70,7 +70,8 @@ public static class SkillMechanics
         int MatkPercent = 0,
         IReadOnlyList<int>? Cleanse = null,
         bool AtkFromMatk = false,
-        IReadOnlyList<int>? ResetCooldown = null);
+        IReadOnlyList<int>? ResetCooldown = null,
+        float DashMinDistance = 0);
 
     /// <summary>
     /// After the main hit, the attack jumps <see cref="Count"/> times to a random other enemy within
@@ -284,7 +285,8 @@ public static class SkillMechanics
             e.TryGetProperty("matkPercent", out var mp) ? mp.GetInt32() : 0,
             e.TryGetProperty("cleanse", out var cl) ? cl.EnumerateArray().Select(v => v.GetInt32()).ToList() : null,
             e.TryGetProperty("stat", out var st) && (st.GetString() is "matk" ? true : throw new InvalidDataException($"{file}: skill {group} stat '{st.GetString()}'")),
-            e.TryGetProperty("resetCooldown", out var rc) ? rc.EnumerateArray().Select(v => v.GetInt32()).ToList() : null);
+            e.TryGetProperty("resetCooldown", out var rc) ? rc.EnumerateArray().Select(v => v.GetInt32()).ToList() : null,
+            e.TryGetProperty("dash", out var dash3) && dash3.TryGetProperty("minDistance", out var dmin) ? dmin.GetSingle() : 0);
     }
 
     private static List<int> Ints(JsonElement e, string block, string key) =>

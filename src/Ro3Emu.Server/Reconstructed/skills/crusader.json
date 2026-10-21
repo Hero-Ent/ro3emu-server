@@ -56,6 +56,88 @@
     }
   },
   "skills": {
+    "11610": {
+      "name": "Shield Cast",
+      "why": "Mode 0: 'Deals Neutral Melee Physical DMG equal to PATK * «100»% to up to «5» enemies within a «5»-meter radius ... Against Monsters, the percentage DMG multiplier increases by «100»%': P1 [10000, 20000] -> branch 1 (200%) against monsters, 5 m around the caster (_kRange 600 = 6 m). Modes 1 and 2 have their own neutral entries below so this does not leak into them.",
+      "hits": {
+        "points": [
+          0
+        ],
+        "branch": 1
+      },
+      "anchor": "caster",
+      "shape": {
+        "circle": 5
+      }
+    },
+    "11610:1": {
+      "name": "Shield Cast (talent mode 1)",
+      "why": "Mode 1 has a single P1 [40000] (no monster branch) and keeps the generic row behaviour; this empty entry only stops the mode 0 entry from applying."
+    },
+    "11610:2": {
+      "name": "Holy Light Suppression (Shield Cast mode 2)",
+      "why": "Mode 2 is a Rect360 '«4» * «8»-meter area in front' that the generic rectangle rule already draws from _kRange; this empty entry only stops the mode 0 circle from applying."
+    },
+    "11624:2": {
+      "name": "Earthshaker (Fearless Charge mode 2)",
+      "why": "'Continuously spins ... dealing a total of PATK * «350»% ... within a «8»-meter radius ... The final HIT inflicts Knockback': P1 [1000, 25000] with 11 attack points = 10 ticks x 10% at points 0-9 plus a final 250% (branch 1) at point 10 = 350%, around the caster (_kRange 800).",
+      "hits": {
+        "points": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "final": {
+          "point": 10,
+          "branch": 1
+        }
+      },
+      "anchor": "caster",
+      "shape": {
+        "circle": 8
+      }
+    },
+    "11624:3": {
+      "name": "Earthshaker (Fearless Charge mode 3)",
+      "why": "Same row data and text as mode 2 (P1 [1000, 25000], 11 attack points, «8»-meter radius): 10 x 10% then a final 250%.",
+      "hits": {
+        "points": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "final": {
+          "point": 10,
+          "branch": 1
+        }
+      },
+      "anchor": "caster",
+      "shape": {
+        "circle": 8
+      }
+    },
+    "11607": {
+      "name": "Twilight",
+      "why": "'Leap to a selected area within «15» meters, dealing ... to up to «N» enemies within «6» meters of the target area': the damage already lands on the dragged point (DragCircle 6 m); the caster now also moves there (its show has the displacement effect 1160707).",
+      "dash": {
+        "stop": 0,
+        "to": "point"
+      }
+    },
     "11411": {
       "name": "Holy Cross",
       "why": "'Deals Holy melee Physical damage ... to a designated ST enemy within «3» meters': single target, but the row is an area selector (_iRangeType 2, Lock, _kRange [0], _iTargetMax 5), so the 0 m splash around the locked target can also catch monsters standing on it. Both modes (0, 1) say ST.",
@@ -107,15 +189,18 @@
     },
     "11624": {
       "name": "Fearless Charge",
-      "why": "'Deals ... PATK * «50»% and inflicts Knockback on up to «5» enemies ... Move ${12} meters in that direction, then inflict Knock-Up and deal ... PATK * «200»% to the targets': _kDamageParam1 [5000, 20000] = first strike (branch 0) at attack point 0 (0.05 s) and the landing strike (branch 1) at the last attack point 2 (0.87 s); generic only dealt the 50%. Modes 2/3 of this group are Earthshaker (P1 [1000, 25000], 11 points) and also get these two moments (10% + 250% instead of the described 350%; still closer than the generic 10%). Shape (8 x 12 m) and the 12 m move are left to the findings because the Earthshaker modes are a circle.",
-      "hits": { "points": [0], "final": { "point": 2, "branch": 1 } }
+      "why": "'Deals ... PATK * «50»% and inflicts Knockback on up to «5» enemies ... Move ${12} meters in that direction, then inflict Knock-Up and deal ... PATK * «200»% to the targets': _kDamageParam1 [5000, 20000] = first strike (branch 0) at attack point 0 (0.05 s) and the landing strike (branch 1) at the last attack point 2 (0.87 s); generic only dealt the 50%. Modes 2/3 of this group are Earthshaker (P1 [1000, 25000], 11 points) and also get these two moments (10% + 250% instead of the described 350%; still closer than the generic 10%). Modes 2/3 (Earthshaker) now have their own entries, so this one covers Fearless Charge only: the '«8» * «12»-meter area in front' is a 12 m long, 8 m wide strip from where the charge started (anchor origin), since the caster moves 12 m along it (PinpointAttack2 displacement, _kDescData[3] = 12) before the landing strike.",
+      "hits": { "points": [0], "final": { "point": 2, "branch": 1 } },
+      "anchor": "origin",
+      "shape": { "rect": [12, 8] }
     },
     "11628": {
       "name": "Spear Formation - Crescent Moon",
-      "why": "'Deals @{1} hits of ... PATK * «50»% to up to «5» enemies within a «5»-meter radius ... You can Move while casting': P1 5000 is per hit; the template has three attack points (0.13, 0.58, 1.12 s) and the sibling EatChicken_2006 row says '@{3} times' with _kDescData 318 = 3 x its P1 10600, so three hits around the caster's current position, 5 m (_kRange 650 = 6.5 m; mode 1 also says «5»).",
+      "why": "'Deals @{1} hits of ... PATK * «50»% to up to «5» enemies within a «5»-meter radius ... You can Move while casting': P1 5000 is per hit; the template has three attack points (0.13, 0.58, 1.12 s) and the sibling EatChicken_2006 row says '@{3} times' with _kDescData 318 = 3 x its P1 10600, so three hits around the caster's current position, 5 m (_kRange 650 = 6.5 m; mode 1 also says «5»). 'Pulls the targets closer' gives no distance: each hit draws them toward the caster, up to the 5 m radius, stopping 1 m short (inferred).",
       "hits": { "points": [0, 1, 2] },
       "anchor": "caster",
-      "shape": { "circle": 5 }
+      "shape": { "circle": 5 },
+      "pull": 5
     },
     "11636": {
       "name": "Powerful Shield Bash",
