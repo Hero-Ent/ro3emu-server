@@ -615,6 +615,38 @@ public sealed partial class CombatService
         s.PreviousPosition = start;
         s.Position = end;
         await world.MoveAsync(s, new WalkReq { Pos = end, Dir = s.Face, Face = s.Face, BStop = true }, forceTeleport: true);
+        ConfirmSkillMoveEnd(s, end, move.Ms > 0 ? move.Ms : action.ActionMs);
+    }
+
+    /// <summary>
+    /// A SkillStartMove only animates the caster's model; the local player's movement controller kept the cast spot, so
+    /// its next walk started from there and the character snapped back. When the move ends the server pins the
+    /// controlled unit to the destination with MOVEMENT_CHANGE transType 1 ResetPos (LC_Unit_Player.ResetPos: StopMove +
+    /// m_kMovement:SetPos, applied to the controlled unit in every scene; SceneService.TeleportInMapAsync). Skipped when
+    /// the player has already moved on (inferred timing: right after the authored move time).
+    /// </summary>
+    private void ConfirmSkillMoveEnd(GameSession s, Vec3 end, int moveMs)
+    {
+        var role = s.Role;
+        long scene = s.WorldScene, generation = s.SceneGeneration;
+        var at = end.Clone();
+        ScheduleRuntime(scene, TimeSpan.FromMilliseconds(Math.Max(50, moveMs) + 30), async () =>
+        {
+            if (role == null || !ReferenceEquals(s.Role, role) || s.WorldScene != scene || s.SceneGeneration != generation || s.SceneLoading || s.Dead) return;
+            if (s.Walking) return; // already walking on from wherever it is
+            if (Distance(s.Position, at) > 0.05f)
+            {
+                // A stale position sync from the cast spot pulled the server back too: the dash end stands.
+                s.PreviousPosition = s.Position.Clone();
+                s.Position = at.Clone();
+                await world.MoveAsync(s, new WalkReq { Pos = at.Clone(), Dir = s.Face, Face = s.Face, BStop = true }, forceTeleport: true);
+            }
+            await s.SendGameAsync(GameAoiSink.MovementChange, new MovementChangeNtf
+            {
+                Uid = role.Id, TransType = MovementTransitionType.MoveTransResetPos,
+                MovementInfo = new MovementInfo { Pos = at.Clone(), Face = s.Face, ServerTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() },
+            });
+        });
     }
 
     /// <summary>
@@ -642,6 +674,7 @@ public sealed partial class CombatService
         s.PreviousPosition = start;
         s.Position = end;
         await world.MoveAsync(s, new WalkReq { Pos = end, Dir = s.Face, Face = s.Face, BStop = true }, forceTeleport: true);
+        ConfirmSkillMoveEnd(s, end, ms > 0 ? ms : 200);
     }
 
     private async Task DisplaceTargetAsync(GameSession s, ActiveSkillCast action, MonsterUnit target, float knockback = 0, float pull = 0, Vec3? toward = null, Vec3? pushFrom = null)

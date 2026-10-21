@@ -72,6 +72,22 @@ public sealed partial class SkillCombatTests
         Assert.Equal(0, await Loop.InvokeAsync(() => Task.FromResult(Session("alice").CastWalkLock)));
     }
     [ClientDataFact]
+    public async Task ADashPinsTheControlledUnitWhereItEnds()
+    {
+        await using var alice = await InWorld("Alice");
+        await Gm("alice", "!job 5100"); await Teach("alice", 15104);
+        var s = Session("alice");
+        var origin = s.Position.Clone();
+        // Back Slide: "perform Movement «10» meters away" backwards; the client's own movement must end up there too.
+        await alice.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1510401, Face = 0, TargetPos = origin });
+        Assert.Equal(0, (await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser)).Result);
+        var move = await Next(alice, CombatService.SkillMove, SkillStartMoveNotify.Parser);
+        var reset = await Next(alice, GameAoiSink.MovementChange, MovementChangeNtf.Parser,
+            m => m.Uid == s.Role!.Id && m.TransType == MovementTransitionType.MoveTransResetPos);
+        Assert.InRange(MathF.Abs(reset.MovementInfo.Pos.X - move.EndPos.X) + MathF.Abs(reset.MovementInfo.Pos.Z - move.EndPos.Z), 0, 0.1f);
+        Assert.True(MathF.Abs(move.EndPos.Z - origin.Z) + MathF.Abs(move.EndPos.X - origin.X) > 1);
+    }
+    [ClientDataFact]
     public async Task DoubleAttackReleasesItsExtraHitWithADagger()
     {
         Combat.Rolls = new AlwaysProcRolls();
