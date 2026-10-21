@@ -9,7 +9,7 @@ if (args.Length < 2)
           patch   <client dir> <server url> [gate_rsa_public.pem] [Ro3Emu.ClientHooks.dll] [--verbose]
           restore <client dir>                  put the original DLLs back
           launch  <client dir> [ro3.exe args...]
-          release <client dir> <server url> <gate_rsa_public.pem> <repo dir> <version> [channel] [zstd level]
+          release <client dir> <server url> <gate_rsa_public.pem> <repo dir> <version> [channel] [zstd level] [--no-cache]
                                                 publish the client patched for that server for Ro3Emu.Launcher
           release-launcher <repo dir> <channel> <Ro3EmuLauncher.exe> <version>
           init-repo <repo dir> [channel] [version]
@@ -26,7 +26,8 @@ if (args.Length < 2)
 try
 {
     ClientPatcher.VerboseLogs = args.Contains("--verbose");
-    args = args.Where(a => a != "--verbose").ToArray();
+    bool noCache = args.Contains("--no-cache");
+    args = args.Where(a => a != "--verbose" && a != "--no-cache").ToArray();
     switch (args[0])
     {
         case "play":
@@ -41,7 +42,7 @@ try
         case "release":
             if (args.Length < 6) throw new ArgumentException("release needs <client dir> <server url> <pem> <repo dir> <version>");
             return await ReleaseBuilder.PublishAsync(args[1], args[2].TrimEnd('/'), File.ReadAllText(args[3]), args[4], args[5],
-                args.Length > 6 ? args[6] : "test", args.Length > 7 ? int.Parse(args[7]) : 9);
+                args.Length > 6 ? args[6] : "test", args.Length > 7 ? int.Parse(args[7]) : 9, useCache: !noCache);
         case "release-launcher":
             if (args.Length < 5) throw new ArgumentException("release-launcher needs <repo dir> <channel> <Ro3EmuLauncher.exe> <version>");
             var withLauncher = await Ro3Emu.Patcher.Publisher.PublishLauncherAsync(args[1], args[2], args[3], args[4]);

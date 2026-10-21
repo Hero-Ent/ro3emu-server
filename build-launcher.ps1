@@ -34,7 +34,12 @@ if (Test-Path $exeSource) {
     if (Test-Path $distDir) {
         Copy-Item $exeSource (Join-Path $distDir 'HeroLauncher.exe') -Force
     }
-    Write-Host "-> HeroLauncher.exe atualizado com sucesso!" -ForegroundColor Green
+    # Mesmo exe no launcher local: so o launcher.json ao lado muda (localhost:8790, canal test).
+    $localDir = Join-Path $root 'Launcher-Local'
+    if (Test-Path $localDir) {
+        Copy-Item $exeSource (Join-Path $localDir 'HeroLauncher.exe') -Force
+    }
+    Write-Host "-> HeroLauncher.exe atualizado (raiz, Launcher-Dist e Launcher-Local)!" -ForegroundColor Green
 }
 
 if (Test-Path $tempPublish) {

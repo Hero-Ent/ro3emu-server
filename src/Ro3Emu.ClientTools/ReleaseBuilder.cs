@@ -15,7 +15,7 @@ public static class ReleaseBuilder
     private const string BaselineHeader = "RO3RECOVERYVERIFIEDBASELINE1";
     private const string ManagedPrefix = "ro3_Data/Managed/";
 
-    public static async Task<int> PublishAsync(string clientDir, string serverUrl, string pem, string repoDir, string version, string channel, int compression)
+    public static async Task<int> PublishAsync(string clientDir, string serverUrl, string pem, string repoDir, string version, string channel, int compression, bool useCache = true)
     {
         clientDir = Path.GetFullPath(clientDir);
         var baseline = ReadBaseline(clientDir);
@@ -76,6 +76,8 @@ public static class ReleaseBuilder
             Channel = channel,
             LaunchExe = "ro3.exe",
             CompressionLevel = compression,
+            // Beside the repository (never uploaded): lets the next publish skip re-reading unchanged client files.
+            CacheFile = useCache ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(repoDir).TrimEnd(Path.DirectorySeparatorChar))!, ".publish-cache.json.zst") : null,
         }, progress);
         Console.WriteLine($"done: {result.NewChunks} new chunks ({result.NewStoredBytes / 1048576} MiB stored), {result.ReusedChunks} reused");
         Directory.Delete(staging, recursive: true);

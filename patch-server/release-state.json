@@ -1,0 +1,9 @@
+{
+  "_comentario": "Atualizado automaticamente pelo PUBLICAR_ATUALIZACAO.cmd. Guarda a ultima versao publicada e uma impressao digital (hash) do codigo que gera o cliente e o launcher, para saber se algo mudou. Faca commit deste arquivo junto com channels/ e manifests/.",
+  "clientVersion": "0.0.4",
+  "clientInputsHash": "",
+  "launcherVersion": "1.0.8",
+  "launcherInputsHash": "",
+  "updated": "",
+  "by": ""
+}

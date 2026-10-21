@@ -31,13 +31,20 @@ Para rodar o servidor de patches na sua máquina local:
 
 ## 3. Como Gerar ou Publicar Atualizações
 
-### Criar uma nova versão do launcher:
+**Use o `PUBLICAR_ATUALIZACAO.cmd` (raiz do projeto).** Ele detecta o que mudou, escolhe as versões, compila e publica
+o cliente e/ou o launcher para **produção (`live`) e local (`test`) de uma vez**, usando `release-config.json`.
+Depois, `ENVIAR_ATUALIZACAO.cmd` sobe para a produção. Passo a passo completo e regras de versão:
+[docs/GUIA-DESENVOLVEDOR.md](../docs/GUIA-DESENVOLVEDOR.md).
+
+Os comandos manuais abaixo continuam funcionando (o script usa os mesmos), mas não atualizam os dois alvos juntos:
+
+### Criar uma nova versão do launcher (manual):
 ```powershell
 .\build-launcher.ps1 -Version "1.0.1"
 dotnet run --project src/Ro3Emu.ClientTools -- release-launcher patch-server/repo test HeroLauncher.exe 1.0.1
 ```
 
-### Criar uma nova versão do cliente com modificações:
+### Criar uma nova versão do cliente com modificações (manual):
 ```powershell
 dotnet run --project src/Ro3Emu.ClientTools -- release "Client/Ragnarok3" "http://SEU_IP:5380" "Client/RO3Emu/data/gate_rsa_public.pem" "patch-server/repo" "1.0.1" "test"
 ```

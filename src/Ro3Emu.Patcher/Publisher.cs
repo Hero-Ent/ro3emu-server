@@ -20,6 +20,11 @@ public sealed class PublishOptions
     /// <summary>Write the manifest but leave the channel pointing at its previous release.</summary>
     public bool SkipChannel { get; init; }
     public LauncherRelease? Launcher { get; init; }
+    /// <summary>
+    /// Optional file that remembers each source file's chunks by (path, size, mtime): a later publish of the same
+    /// unchanged files (the other server's variant, the next release) skips reading them. Never inside the repository.
+    /// </summary>
+    public string? CacheFile { get; init; }
 }
 
 public sealed record PublishResult(Manifest Manifest, ChannelInfo Channel, int NewChunks, long NewStoredBytes, int ReusedChunks);
@@ -116,6 +121,9 @@ public static class Publisher
         }, ct)).ToArray();
 
         // Stored sizes of chunks that already exist are read from disk; chunks queued in this run are filled in by the workers.
+        var cache = PublishCache.Load(options.CacheFile, options.Chunking);
+        var nextCache = new Dictionary<string, PublishCache.Entry>(StringComparer.OrdinalIgnoreCase);
+        int cachedFiles = 0;
         var pendingRefs = new Dictionary<string, List<ChunkRef>>();
         try
         {
@@ -124,6 +132,18 @@ public static class Publisher
                 ct.ThrowIfCancellationRequested();
                 PathRules.ValidateRelative(destination);
                 log?.Report($"  {destination}");
+                var sourceInfo = new FileInfo(source);
+                string sourceKey = sourceInfo.FullName;
+                if (cache.TryGetValue(sourceKey, out var hit) && hit.Size == sourceInfo.Length && hit.MtimeTicks == sourceInfo.LastWriteTimeUtc.Ticks
+                    && PublishCache.TryRestore(hit, destination, repo) is { } restored)
+                {
+                    // Unchanged since an earlier publish and every chunk is still in the repository: no read needed.
+                    reused += restored.Chunks.Count;
+                    cachedFiles++;
+                    manifest.Files.Add(restored);
+                    nextCache[sourceKey] = hit;
+                    continue;
+                }
                 var file = new ManifestFile { Path = destination };
                 using var stream = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20, FileOptions.SequentialScan);
                 using var whole = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
@@ -157,6 +177,7 @@ public static class Publisher
                 }
                 file.Sha256 = Convert.ToHexStringLower(whole.GetHashAndReset());
                 manifest.Files.Add(file);
+                nextCache[sourceKey] = PublishCache.Entry.From(file, sourceInfo);
             }
         }
         finally
@@ -177,6 +198,8 @@ public static class Publisher
         byte[] manifestBytes = manifest.ToCompressedBytes();
         Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
         await File.WriteAllBytesAsync(manifestPath, manifestBytes, ct);
+        PublishCache.Save(options.CacheFile, options.Chunking, nextCache);
+        if (cachedFiles > 0) log?.Report($"{cachedFiles} unchanged files taken from the publish cache (not re-read)");
 
         var channel = new ChannelInfo
         {

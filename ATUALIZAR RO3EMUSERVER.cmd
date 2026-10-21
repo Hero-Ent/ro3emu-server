@@ -104,6 +104,10 @@ if not errorlevel 1 (
     dotnet publish src/Ro3Emu.Launcher -c Release -o Launcher-Dist -v q -nologo -clp:ErrorsOnly
     copy /y "Launcher-Dist\HeroLauncher.exe" "%~dp0HeroLauncher.exe" >nul 2>&1
     copy /y "Launcher-Dist\HeroLauncher.exe" "%~dp0Launcher.exe" >nul 2>&1
+    rem O launcher local e o mesmo exe: so o launcher.json ao lado muda - localhost:8790, canal test.
+    if not exist "Launcher-Local" mkdir "Launcher-Local"
+    copy /y "Launcher-Dist\HeroLauncher.exe" "Launcher-Local\HeroLauncher.exe" >nul 2>&1
+    echo Launcher atualizado em Launcher-Dist e Launcher-Local.
     echo.
     echo [SUCESSO] Emulador recompilado com sucesso com as novas correcoes!
 ) else (
@@ -111,6 +115,13 @@ if not errorlevel 1 (
 )
 
 :SYNC_GITHUB
+echo.
+set PUBLICAR=S
+set /p PUBLICAR="Gerar atualizacao do cliente/launcher para PRODUCAO e LOCAL agora (so publica se algo mudou)? [S/N, padrao S]: "
+if /i "%PUBLICAR%"=="S" (
+    call "%~dp0PUBLICAR_ATUALIZACAO.cmd" -SemPausa
+)
+
 echo.
 set ENVIAR_GITHUB=N
 set /p ENVIAR_GITHUB="Deseja sincronizar seus commits com seu GitHub origin agora? [S/N, padrao N]: "

@@ -1,5 +1,8 @@
 # RO3Emu: Ragnarok Online 3 server emulator
 
+> **Hero Saga — equipe:** comece pelo **[Guia do Desenvolvedor](docs/GUIA-DESENVOLVEDOR.md)** (instalar, rodar,
+> compilar, gerar e subir atualizações, regras de versão).
+
 An open-source server for the **Ragnarok Online 3 PC client**, written in C# (.NET 10, SQLite). Play on your own PC,
 host a server for friends, or help rebuild the original game server one system at a time. The goal is a faithful 1:1
 server first; changes to the original rules come after.

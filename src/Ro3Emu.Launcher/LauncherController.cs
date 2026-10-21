@@ -29,6 +29,7 @@ public sealed class LauncherController : IDisposable
     string _phase = "checking";
     CancellationTokenSource? _work;
     bool _started;
+    bool _autoUpdated;
 
     public LauncherController(LauncherConfig config, string exePath, Action<object> post, Func<string, string?> pickFolder, Action minimize)
     {
@@ -75,11 +76,20 @@ public sealed class LauncherController : IDisposable
                     _ = LoadNewsAsync();
                 }
                 await CheckAsync();
+                // Already installed and only out of date (new release, or a few files changed by another launcher or
+                // a local patch): fix it right away, once per session. Only files whose size/mtime changed are re-read.
+                if (!_autoUpdated && _work == null && _phase is "update" or "repair")
+                {
+                    _autoUpdated = true;
+                    await UpdateAsync(verifyAll: false);
+                }
                 break;
             case "primary":
                 if (_work != null) return;
                 if (_phase is "ready" or "running") await PlayAsync();
-                else if (_phase is "install" or "update" or "repair") await UpdateAsync(verifyAll: _phase == "repair");
+                // The main button never re-hashes the whole client (~20 GB): files whose size and mtime still match
+                // what was installed are trusted. The wrench button (cmd "repair") is the full verification.
+                else if (_phase is "install" or "update" or "repair") await UpdateAsync(verifyAll: false);
                 else await CheckAsync();
                 break;
             case "repair":

@@ -70,3 +70,10 @@ deploy_to_vps.py
 # Fake player account password (FakePlayerService), never in git
 fakeplayers.key
 Client/RO3Emu/server/fakeplayers/
+
+# Release tooling (tools/release/publicar.ps1, upload_to_r2.py)
+patch-server/.publish-cache.json.zst*
+patch-server/repo/.publish.lock
+r2-credentials.txt
+/bin-temp-launcher/
+patch-server/repo/manifests/*-dev.*

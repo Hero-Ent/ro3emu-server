@@ -1,0 +1,26 @@
+{
+  "_comentario": "Configuracao do PUBLICAR_ATUALIZACAO.cmd (tools/release/publicar.ps1). Caminhos relativos a raiz do repositorio. Cada alvo gera uma versao do cliente patchada para o seu servidor, no mesmo repositorio de patches (os chunks grandes sao compartilhados).",
+  "clientDir": "Client/Ragnarok3",
+  "repoDir": "patch-server/repo",
+  "gateKey": "Client/RO3Emu/data/gate_rsa_public.pem",
+  "targets": [
+    {
+      "name": "producao",
+      "channel": "live",
+      "versionSuffix": "",
+      "server": "http://45.130.137.89:5380",
+      "launcherDir": "Launcher-Dist",
+      "repository": "https://patch.herosaga.com.br/",
+      "serverName": "Hero Saga Produção"
+    },
+    {
+      "name": "local",
+      "channel": "test",
+      "versionSuffix": "-local",
+      "server": "http://127.0.0.1:5380",
+      "launcherDir": "Launcher-Local",
+      "repository": "http://localhost:8790/",
+      "serverName": "Hero Saga Local"
+    }
+  ]
+}

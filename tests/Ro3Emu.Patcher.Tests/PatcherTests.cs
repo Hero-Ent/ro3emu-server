@@ -437,6 +437,92 @@ public sealed class PatcherTests : IDisposable
         var channel = await client.GetChannelAsync("stable", CancellationToken.None);
         Assert.Equal("1.0.0", channel.Version);
     }
+
+    Task<PublishResult> PublishCached(string version, string channel, string cacheFile, IReadOnlyList<KeyValuePair<string, string>>? files = null) =>
+        Publisher.PublishAsync(new PublishOptions
+        {
+            Files = files ?? Publisher.CollectDirectory(Build, "", _ => false),
+            RepoDirectory = Repo,
+            Version = version,
+            Channel = channel,
+            LaunchExe = "Game.exe",
+            Chunking = Small,
+            CompressionLevel = 3,
+            Workers = 4,
+            CacheFile = cacheFile,
+        });
+
+    [Fact]
+    public async Task PublishCache_SecondPublishReusesUnchangedFiles_AndMatchesAFullRead()
+    {
+        WriteBuild("Game.exe", Random(30_000, 1));
+        WriteBuild("data/big.bin", Random(200_000, 2));
+        string cache = Path.Combine(_root, "publish-cache.json.zst");
+
+        var first = await PublishCached("1.0.0", "live", cache);
+        Assert.True(File.Exists(cache));
+
+        // Variant for another server: only Game.exe differs.
+        WriteBuild("Game.exe", Random(30_000, 3));
+        var cached = await PublishCached("1.0.0-local", "test", cache);
+        var full = await PublishCached("1.0.0-nocache", "other", cacheFile: null!);
+
+        Assert.Equal(0, full.NewChunks); // everything was already in the repository
+        var byPath = full.Manifest.Files.ToDictionary(f => f.Path);
+        foreach (var file in cached.Manifest.Files)
+        {
+            var reference = byPath[file.Path];
+            Assert.Equal(reference.Sha256, file.Sha256);
+            Assert.Equal(reference.Size, file.Size);
+            Assert.Equal(reference.Chunks.Select(c => (c.Hash, c.Size, c.StoredSize)), file.Chunks.Select(c => (c.Hash, c.Size, c.StoredSize)));
+        }
+        Assert.Equal(first.Manifest.Files.Single(f => f.Path == "data/big.bin").Sha256, cached.Manifest.Files.Single(f => f.Path == "data/big.bin").Sha256);
+        Assert.NotEqual(first.Manifest.Files.Single(f => f.Path == "Game.exe").Sha256, cached.Manifest.Files.Single(f => f.Path == "Game.exe").Sha256);
+    }
+
+    [Fact]
+    public async Task PublishCache_IgnoresEntriesWhoseChunksAreGone()
+    {
+        WriteBuild("Game.exe", Random(30_000, 1));
+        string cache = Path.Combine(_root, "publish-cache.json.zst");
+        var first = await PublishCached("1.0.0", "live", cache);
+        foreach (var chunk in first.Manifest.Files.SelectMany(f => f.Chunks))
+            File.Delete(Path.Combine(Repo, PathRules.ChunkRelative(chunk.Hash)));
+
+        var second = await PublishCached("1.0.1", "live", cache);
+
+        Assert.True(second.NewChunks > 0);
+        Assert.All(second.Manifest.Files.SelectMany(f => f.Chunks), c => Assert.True(File.Exists(Path.Combine(Repo, PathRules.ChunkRelative(c.Hash)))));
+    }
+
+    [Fact]
+    public async Task Update_WithoutVerifyAll_OnlyRereadsFilesChangedOnDisk()
+    {
+        // Another launcher or a local patch changed one file: a normal update fixes it without hashing the rest.
+        WriteBuild("Game.exe", Random(30_000, 1));
+        WriteBuild("data/big.bin", Random(300_000, 2));
+        await Publish("1.0.0");
+        await Update(new FileRepoHandler(Repo));
+        File.WriteAllBytes(Layout.Resolve("Game.exe"), Random(30_000, 9));
+
+        using var client = new RepositoryClient(new Uri("http://repo.test/"), new FileRepoHandler(Repo));
+        var updater = new Updater(Layout, client);
+        var state = updater.LoadState()!;
+        Assert.Equal(new[] { "Game.exe" }, updater.QuickVerify(state));
+        var check = await updater.CheckAsync("stable", CancellationToken.None);
+        long scanned = 0;
+        var progress = new SyncProgress(p => { if (p.Stage == UpdateStage.Scanning) scanned = Math.Max(scanned, p.BytesTotal); });
+        await updater.UpdateAsync(check.Channel, verifyAll: false, progress, CancellationToken.None);
+
+        AssertGameMatchesBuild();
+        Assert.True(scanned <= 30_000, $"scanned {scanned} bytes; only Game.exe should be re-read");
+        Assert.Empty(updater.QuickVerify(updater.LoadState()!));
+    }
+
+    sealed class SyncProgress(Action<UpdateProgress> report) : IProgress<UpdateProgress>
+    {
+        public void Report(UpdateProgress value) => report(value);
+    }
 }
 
 /// <summary>Needs Windows file locking (an open FileShare.None handle blocks replacing the file).</summary>
