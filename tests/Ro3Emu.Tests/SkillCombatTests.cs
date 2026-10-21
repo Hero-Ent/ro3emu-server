@@ -255,6 +255,26 @@ public sealed partial class SkillCombatTests : IAsyncLifetime
     }
 
     [ClientDataFact]
+    public async Task BoltLevelSetsProjectileAndDamageSegments()
+    {
+        // _kShowDmg = skill level for the bolts: level 10 drops 10 bolts and splits the total damage into 10 numbers.
+        await using var alice = await InWorld("Alice");
+        await Gm("alice", "!job 2100");
+        await Loop.InvokeAsync(() => { Session("alice").Progress!.Skills[12004] = 10; return Task.CompletedTask; });
+        var target = await Target("alice");
+        long before = target.Hp;
+        await alice.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1200410, TargetId = target.Uid });
+        var accepted = await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser);
+        Assert.Equal(0, accepted.Result);
+        var bullet = await Next(alice, CombatService.SkillBullet, SkillFixTimeBulletNotify.Parser, b => b.TargetId == target.Uid);
+        Assert.Equal(10, bullet.Split);
+        var hit = await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.SessionId == accepted.SessionId);
+        Assert.Equal(10, hit.Split);
+        Assert.True(Assert.Single(hit.Dsts).Damage > 0);
+        Assert.True(target.Hp < before);
+    }
+
+    [ClientDataFact]
     public async Task GroundNpcUsesRequestedPositionAndDespawnsOnTeardown()
     {
         await using var alice = await InWorld("Alice"); await using var bob = await InWorld("Bob");

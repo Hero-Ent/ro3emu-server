@@ -348,6 +348,22 @@ public sealed partial class CombatService : IGameTicker
         return Math.Clamp((int)Math.Round(distance * 30), 150, 400);
     }
 
+    /// <summary>
+    /// (verified) SkillConfig._kShowDmg[branch] is how many segments the client splits one hit into: Fire/Cold/Lightning
+    /// Bolt show 1..10 with their level, Double Strafe 2, Sonic Blow 10, Jupitel Thunder 10 (168 skill groups above 1).
+    /// SkillHitInfo.split makes the client divide the damage number into that many jump words and replay a multistage
+    /// hit effect every m_fDisplayInterval (LC_DamageHelper.ProcessJumpWorldTask / ProcessDamageWord: dmg // split,
+    /// remainder on the first words); SkillFixTimeBulletNotify.split emits that many projectiles, one every
+    /// m_fBulletHatchInterval (LC_BulletEmit_Mgr.Update, m_iSplitIdx up to m_iSplit). The damage itself stays the row's
+    /// total: the bolt descriptions say "共计" (a total of) MATK * ${2}% + ${3}. Unset or 0 = one segment.
+    /// </summary>
+    internal static int HitSplit(JsonElement row, int branch = 0)
+    {
+        var shows = Numbers(row, "_kShowDmg");
+        double split = shows.Length > branch ? shows[branch] : shows.Length > 0 ? shows[0] : 1;
+        return (int)Math.Clamp(Math.Round(split), 1, 30);
+    }
+
     // ---- monsters hitting players ----
 
     /// <summary>
@@ -401,7 +417,7 @@ public sealed partial class CombatService : IGameTicker
             var hit = new SkillHitInfo
             {
                 SrcID = pet.Uid, SkillId = skillId, ShowPoint = HitEffect(GameData.Int(row, "_iScriptShow")),
-                SessionId = castId, SrcElement = pet.Element,
+                SessionId = castId, SrcElement = pet.Element, Split = HitSplit(row),
             };
             var processed = new List<MonsterUnit>();
             var killed = new List<MonsterUnit>();
@@ -512,7 +528,7 @@ public sealed partial class CombatService : IGameTicker
         var hit = new SkillHitInfo
         {
             SrcID = monster.Uid, SkillId = skillId, ShowPoint = showPoint,
-            SessionId = castId, SrcElement = monster.Template.Element,
+            SessionId = castId, SrcElement = monster.Template.Element, Split = row is { } shown ? HitSplit(shown) : 1,
             Dsts = { new DamageInfo { DstID = pet.Uid, Damage = damage, SheildDamage = beforeShield - damage, HitResult = result,
                 DstElement = pet.Element, IsDead = pet.Hp == 0 } },
         };

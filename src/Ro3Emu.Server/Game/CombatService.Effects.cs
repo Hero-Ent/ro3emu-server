@@ -117,6 +117,8 @@ public sealed partial class CombatService
             && ReferenceEquals(s.Attachment, action.Attachment)
             && sessions.All().Contains(s);
         string script = Script(row);
+        // Heal's enemy branch is [1] for damage, and so is its segment count.
+        int split = HitSplit(row, script == "Heal" ? 1 : 0);
         var targets = SelectEnemies(s, action, center, field?.Trap == true ? field.Radius : null);
         var playerTargets = GameData.Int(row, "_iRangeType") == 2 ? EventAreaTargets(s, row)
             : EventTarget(s, action.Request.TargetId) is { } eventTarget
@@ -148,7 +150,7 @@ public sealed partial class CombatService
                     TargetId = target.Uid,
                     EffectId = bulletEffect,
                     FixedTime = flyTime,
-                    Split = 1,
+                    Split = split,
                     TargetPosition = target.Pos,
                     SkillConfigId = (int)GameData.Int(row, "_iID"),
                     MasterId = action.SourceId,
@@ -165,7 +167,7 @@ public sealed partial class CombatService
                     TargetId = pTarget.Role!.Id,
                     EffectId = bulletEffect,
                     FixedTime = flyTime,
-                    Split = 1,
+                    Split = split,
                     TargetPosition = pTarget.Position,
                     SkillConfigId = (int)GameData.Int(row, "_iID"),
                     MasterId = action.SourceId,
@@ -205,6 +207,8 @@ public sealed partial class CombatService
             SrcID = field?.Uid ?? action.SourceId, SkillId = action.Request.SkillId, SessionId = action.Id,
             RootCtxGuid = action.Id, ComboIndex = action.Request.ComboIndex, ShowPoint = HitEffect(GameData.Int(row, "_iScriptShow")),
             SrcElement = (int)Math.Max(1, GameData.Int(row, "_iEleType")),
+            // Heals on allies are one number; damage segments only when an enemy is hit.
+            Split = targets.Count > 0 ? split : 1,
         };
         var killed = new List<MonsterUnit>();
         var processed = new List<MonsterUnit>();

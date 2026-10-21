@@ -51,7 +51,7 @@ public sealed partial class CombatService
                 foreach (var handler in Taken) handler(caster, p, damage, hp == 0);
                 var hit = new SkillHitInfo
                 {
-                    SrcID = sourceId, SkillId = skillId, ShowPoint = show, SessionId = session, SrcElement = element,
+                    SrcID = sourceId, SkillId = skillId, ShowPoint = show, SessionId = session, SrcElement = element, Split = HitSplit(row),
                     Dsts = { new DamageInfo { DstID = targetRole.Id, Damage = damage, SheildDamage = shieldDamage, HitResult = result,
                         DstElement = 1, IsDead = hp == 0 } },
                 };
