@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "about": "Crusader line (Crusader 1210, Paladin 1310, Royal Guard 1410): skill mechanics SkillConfig does not carry, read from each skill's own description and timeline (SkillMechanics.cs documents every field). Entries are keyed by _iSkillID, so they apply to every _iMode row of the group; groups whose modes disagree (Shield Cast 11610, Blood Cross 11604) are left out and listed in the findings. Everything is (inferred); 'why' quotes the evidence.",
+  "skills": {
+    "11411": {
+      "name": "Holy Cross",
+      "why": "'Deals Holy melee Physical damage ... to a designated ST enemy within «3» meters': single target, but the row is an area selector (_iRangeType 2, Lock, _kRange [0], _iTargetMax 5), so the 0 m splash around the locked target can also catch monsters standing on it. Both modes (0, 1) say ST.",
+      "maxTargets": 1
+    },
+    "11601": {
+      "name": "Banishing Thrust",
+      "why": "'... to up to «5» enemies in a «3» * «5»-meter area in front of you' (width * length, as Heavy Cannon Shot's «5» * «15» for _kRange 1600x500): a 5 m long, 3 m wide strip from the caster; _kRange [650, 300] would make it 6.5 m long.",
+      "anchor": "caster",
+      "shape": { "rect": [5, 3] }
+    },
+    "11602": {
+      "name": "Heavy Cannon Shot",
+      "why": "'... to up to «5» enemies in a «5» * «15»-meter area in front of you': a 15 m long, 5 m wide strip from the caster (_kRange [1600, 500] is 16 m long). One damage moment (P1 160% = the description's single hit).",
+      "anchor": "caster",
+      "shape": { "rect": [15, 5] }
+    },
+    "11603": {
+      "name": "Pinpoint Attack",
+      "why": "'Deals damage equal to @{3}% of Physical ATK to enemies in a @{1}m-long, @{2}m-wide area ahead and moves @{4}m in that direction', _kDescData ['9', '4', '60', '8'] (P1 6000 = 60%): the PinpointAttack displacement moves the caster 8 m before the first attack point, so the 9 x 4 m strip must start where the dash started (anchor caster would measure it from the landing spot, beyond the enemies passed through).",
+      "anchor": "origin",
+      "shape": { "rect": [9, 4] }
+    },
+    "11608": {
+      "name": "Shield Press",
+      "why": "'PATK * «200»% ... Against Monsters, the percentage DMG multiplier increases by «100»%': _kDamageParam1 [20000, 40000], branch [1] = 200% x (1 + 100%) is the monster value (Enhanced Shield Press, mode 1: [35000, 70000] for «350»% + «100»%). Server targets are monsters, so hit with branch 1 (_kShowDmg [2, 2] keeps 2 segments). Event players are hit by HitEventPlayersAsync, unaffected.",
+      "hits": { "points": [0], "branch": 1 }
+    },
+    "11611": {
+      "name": "Earth Drive",
+      "why": "'PATK * «350»% ... to up to «5» enemies within a «5»-meter radius ... Against Monster targets, the percentage DMG multiplier increases by «100»%': P1 [35000, 70000] -> branch 1 (700%) against monsters, _kShowDmg [3, 3]; the circle is 5 m around the caster (_kRange 650 = 6.5 m).",
+      "hits": { "points": [0], "branch": 1 },
+      "anchor": "caster",
+      "shape": { "circle": 5 }
+    },
+    "11613": {
+      "name": "Shield Defense",
+      "why": "'Raise your Shield for «5» seconds ... Every «0.5» seconds, inflict a «3»-meter Knockback in the direction you are Facing on up to «5» members of the Enemy Team within «3» meters in front of you and deal ... PATK * «100»%': 10 pulses of the row damage (P1 10000) at attack points 1-10 (template 0.05-0.5 s over the 5000 ms action = every 0.5 s), each around where the caster is (it may walk, _bMovement 1); the area is 3 m deep in front (width 4 m from _kRange[1], the description gives none), and each pulse pushes 3 m away from the caster. The CombatService comment notes this periodic aura was not simulated.",
+      "hits": { "points": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] },
+      "anchor": "caster",
+      "shape": { "rect": [3, 4] },
+      "knockback": 3
+    },
+    "11621": {
+      "name": "Spear Auto Counter",
+      "why": "'... to up to «5» enemies within a «7»-meter semicircle in front of you': fan of 7 m, 180 degrees (_kRange [800, 180] is 8 m). Proc of Shield Defense (buff 1161610 _kLogicData [11621, ...]); the trigger itself needs engine work.",
+      "anchor": "caster",
+      "shape": { "fan": [7, 180] }
+    },
+    "11624": {
+      "name": "Fearless Charge",
+      "why": "'Deals ... PATK * «50»% and inflicts Knockback on up to «5» enemies ... Move ${12} meters in that direction, then inflict Knock-Up and deal ... PATK * «200»% to the targets': _kDamageParam1 [5000, 20000] = first strike (branch 0) at attack point 0 (0.05 s) and the landing strike (branch 1) at the last attack point 2 (0.87 s); generic only dealt the 50%. Modes 2/3 of this group are Earthshaker (P1 [1000, 25000], 11 points) and also get these two moments (10% + 250% instead of the described 350%; still closer than the generic 10%). Shape (8 x 12 m) and the 12 m move are left to the findings because the Earthshaker modes are a circle.",
+      "hits": { "points": [0], "final": { "point": 2, "branch": 1 } }
+    },
+    "11628": {
+      "name": "Spear Formation - Crescent Moon",
+      "why": "'Deals @{1} hits of ... PATK * «50»% to up to «5» enemies within a «5»-meter radius ... You can Move while casting': P1 5000 is per hit; the template has three attack points (0.13, 0.58, 1.12 s) and the sibling EatChicken_2006 row says '@{3} times' with _kDescData 318 = 3 x its P1 10600, so three hits around the caster's current position, 5 m (_kRange 650 = 6.5 m; mode 1 also says «5»).",
+      "hits": { "points": [0, 1, 2] },
+      "anchor": "caster",
+      "shape": { "circle": 5 }
+    },
+    "11636": {
+      "name": "Powerful Shield Bash",
+      "why": "'PATK * «180»% to the selected ST enemy ... Against Monster targets, the percentage DMG multiplier increases by «50»%': P1 [18000, 27000] (180% x 1.5); mode 1 Ultra Shield Bash «250»% + «50»% = [25000, 37500]. Branch 1 against monsters.",
+      "hits": { "points": [0], "branch": 1 }
+    },
+    "11638": {
+      "name": "Shield Block / Shield Auto Counter / Powerful Auto Counter",
+      "why": "Mode 4/6 'Shield Auto Counter: PATK * «200»% ... Against Monster targets, the percentage DMG multiplier increases by «100»%' P1 [20000, 40000]; mode 7/9 'Powerful Auto Counter: PATK * «400»%' P1 [40000, 80000]: branch 1 against monsters. Modes 0/3 (the block itself) have no damage params, so the single moment at point 0 only grants _kBuff1 as before.",
+      "hits": { "points": [0], "branch": 1 }
+    }
+  }
+}

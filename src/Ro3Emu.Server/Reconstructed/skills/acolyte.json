@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "about": "Acolyte line (Acolyte 4100, Priest 4200, High Priest 4300, Archbishop 4400; no Monk rows exist under job prefix 4): skill mechanics SkillConfig does not carry, read from each skill's own description (or, for the talent procs 142xx that have none, from the SpecialEffectConfig talent text whose buff _kLogicData names the proc row). The original server scripts are not in the client, so every entry is inferred; 'why' quotes the evidence. Periodic areas (Magnus Exorcismus ticks, Sanctuary ticks) are not expressible yet and are listed in the findings report.",
+  "skills": {
+    "14109": {
+      "name": "Magnus Exorcismus",
+      "why": "'Summon a «7»m*«7»m cross within «10»m of yourself ... to up to «4» enemies in the area': the area centred on the dragged point is 7 x 7 m, not _kRange [800, 800] (8 x 8 m). The cross is approximated by its 7 x 7 m bounding square. The 4 s / 0.5 s ticking (8 ticks of P1 1000 + 60 each) is NOT simulated (findings).",
+      "anchor": "point",
+      "shape": { "rect": [7, 7] }
+    },
+    "14314": {
+      "name": "Holy Stigma",
+      "why": "'up to «5» enemies within the targeted «5»-meter-radius area within «10» meters of you': the circle on the dragged point is 5 m, _kRange [700] would make it 7 m. P1 40000 = 400% with _kShowDmg [3] is one total split in 3, already correct.",
+      "anchor": "point",
+      "shape": { "circle": 5 }
+    },
+    "14117": {
+      "name": "Kyrie Eleison",
+      "why": "'Grants yourself and a designated ST ally within a «15»-meter radius a Physical damage absorption shield ... for «10» seconds': _iTargetMax 2 (caster + ally) but a Lock ally skill only buffs the locked recipient, so the caster also gets _kBuff1 1411705 (10000, 10000 ms). Granted at cast start.",
+      "selfBuffs": [[1411705, 10000, 10000]]
+    },
+    "14113": {
+      "name": "Aspersio",
+      "why": "'Changes your Basic Attack element and that of a selected ST ally within a «15»-meter radius to Holy for «60» seconds': _iTargetMax 2 (caster + ally) but a Lock ally skill only buffs the locked recipient, so the caster also gets _kBuff1 1411301 (10000, 60000 ms). Granted at cast start.",
+      "selfBuffs": [[1411301, 10000, 60000]]
+    },
+    "14208": {
+      "name": "Radiant Resurrection (Turn Undead talent proc)",
+      "why": "Talent 16420003 (buff 1421201 _kLogicData [10000, 1420801]): '[Turn Undead] infuses the ground with holy light upon hitting an enemy, dealing MATK*«5»%+«15» Holy Ranged Magic damage to the enemy and up to «3» enemies within a «4»-meter radius' (row P1 500, P2 15): 4 m around the hit enemy (kRange is empty -> 3 m default), 1 + 3 = 4 targets.",
+      "anchor": "target",
+      "shape": { "circle": 4 },
+      "maxTargets": 4
+    },
+    "14213": {
+      "name": "Holy Light Bludgeon (Mace Basic Attack talent proc)",
+      "why": "Talent 16420022 (buff 1422701 _kLogicData [10000, 1421301]): 'When using [Basic Attack] with a Mace, unleashes the power of holy light, dealing MATK*«5»%+«80» ... to the enemy and up to «3» enemies within a «4»-meter radius' (row P1 500, P2 80): 4 m around the hit enemy (kRange empty -> 3 m default), 1 + 3 = 4 targets.",
+      "anchor": "target",
+      "shape": { "circle": 4 },
+      "maxTargets": 4
+    },
+    "14209": {
+      "name": "Holy Cross Judgment (Magnus Exorcismus talent proc)",
+      "why": "Talent 16420010 (buff 1422401 _kLogicData [10000, 1420901]): 'When [Magnus Exorcismus] is cast, it also unleashes a powerful burst of holy light, dealing MATK*«5»%+«470» ... to up to «4» enemies within the area' (row P1 500, P2 470): the Magnus area, «7»m*«7»m on the dragged point, not 3 m around a locked target (row is Lock with empty kRange).",
+      "anchor": "point",
+      "shape": { "rect": [7, 7] },
+      "maxTargets": 4
+    }
+  }
+}

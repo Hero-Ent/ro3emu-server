@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "about": "Merchant line (Merchant 6100, Blacksmith 6200, Whitesmith 6300, Mechanic 6400): skill mechanics SkillConfig does not carry, read from each skill's own description and timeline (SkillMechanics.cs documents every field). The original server scripts are not in the client, so every entry is inferred; 'why' quotes the evidence. Axe Tornado (16304) and High-Energy Impact (16307) are scheduled in CombatService.CastImpacts.",
+  "skills": {
+    "16006": {
+      "name": "Cart Revolution",
+      "why": "'up to @{2} selected enemies within @{1} meters and up to «3» other enemies within «2» meters of them': a 2 m splash around the locked target, 1 + 3 targets (_iTargetMax is 1).",
+      "anchor": "target",
+      "shape": { "circle": 2 },
+      "maxTargets": 4
+    },
+    "16010": {
+      "name": "Gunpowder Throw",
+      "why": "'... up to «5» other enemies within «2» meters of them': 2 m splash around the target, 1 + 5 targets.",
+      "anchor": "target",
+      "shape": { "circle": 2 },
+      "maxTargets": 6
+    },
+    "16305": {
+      "name": "Heavy Axe Smash",
+      "why": "'Move rapidly in front of the target, dealing ... to up to «5» enemies within a «3»-meter radius': the 3 m area is around the locked target, not the caster (kRange is empty, the old default 3 m sat on the requested point).",
+      "anchor": "target",
+      "shape": { "circle": 3 },
+      "dash": { "stop": 1.5 }
+    },
+    "16306": {
+      "name": "Spinning Axe",
+      "why": "'«2» hits ... totaling PATK * «200»% ... in a «5» * «11»-meter rectangular area in front of you': _kDamageParam1 is 100% per hit and the template has two attack points (0.18, 0.43 s), one axe pass each; the 11 x 5 m rectangle starts at the caster (DragRect would centre it on the dragged point).",
+      "hits": { "points": [0, 1] },
+      "anchor": "origin",
+      "shape": { "rect": [11, 5] }
+    },
+    "16312": {
+      "name": "Arm Cannon",
+      "why": "'Launch «4» Cannon shells at «1» selected enemies ... and up to «5» Other enemies within «6» meters of them, dealing ... totaling PATK * «80»%': 40% per volley (_kDamageParam1 4000) at each of the two attack points (0.1, 0.2 s), each shown as 2 shells (_kShowDmg [2]) = 4 shells, 80% in total; 6 m splash around the target, 1 + 5 targets.",
+      "hits": { "points": [0, 1] },
+      "anchor": "target",
+      "shape": { "circle": 6 },
+      "maxTargets": 6
+    },
+    "16314": {
+      "name": "Pile Bunker",
+      "why": "'at «1» selected enemies within «15» meters of you and up to «5» enemies within «4» meters of them ... inflicting «8»-meter Knockback, and inflicting Stun for «0.5» seconds': 4 m splash around the target (kRange [100, 1] is not it), the Stun is not in _kBuff2. The 8 m knockback is the PileBunker displacement rule.",
+      "anchor": "target",
+      "shape": { "circle": 4 },
+      "maxTargets": 6,
+      "targetBuffs": [[901601, 10000, 500]]
+    },
+    "16315": {
+      "name": "Flame Launcher",
+      "why": "'on «1» selected enemies within «15» meters of you, dealing «3» hits ... totaling PATK * «600»% to up to «5» targets in a «7» * «15»-meter rectangular area in front of you': a 15 m long, 7 m wide strip from the caster toward the target (the cast faces the locked target).",
+      "anchor": "caster",
+      "shape": { "rect": [15, 7] }
+    },
+    "16317": {
+      "name": "Energy Release",
+      "why": "'Consumes HP equal to «50»% of your Max HP and converts it into a [Shield] ... then begins a «3»-second countdown before using Energy Release': no damage at the cast; the countdown buff 1634401 carries the shield and its _kLogicData [16352] names the explosion, released 3 s later as skill 1635201.",
+      "hits": { "none": true },
+      "selfHpCost": { "percentMaxHp": 50, "shieldBuff": 1634401, "shieldMs": 3000 },
+      "followUp": { "skill": 1635201, "delayMs": 3000 }
+    },
+    "16352": {
+      "name": "Energy Release (explosion)",
+      "why": "'When the countdown ends, deal ... PATK * «2200»% to up to «10» targets within a «10»-meter radius ... You then lose «50»% of your current Max HP. This HP loss cannot be fatal. Reduces MSPD by @{1}% for «5» seconds' (the slow is its _kBuff1 1634801).",
+      "anchor": "caster",
+      "selfHpLoss": { "percentMaxHp": 50 }
+    },
+    "16318": {
+      "name": "Aerial Bombardment",
+      "why": "'Bombard a «15» * «10»-meter area in the specified direction ... deal ... totaling PATK * «2100»% to up to «5» enemies along the path': 300% per bomb (_kDamageParam1 30000, shown in 3, _kShowDmg [3]) at each of the seven attack points after take-off (1.65-2.67 s) = 2100%; the 15 x 10 m strip lies from where the run started, in the chosen direction.",
+      "hits": { "points": [1, 2, 3, 4, 5, 6, 7] },
+      "anchor": "origin",
+      "shape": { "rect": [15, 10] }
+    }
+  }
+}

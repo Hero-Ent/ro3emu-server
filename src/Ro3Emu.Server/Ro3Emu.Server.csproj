@@ -35,6 +35,8 @@
     <Content Remove="Reconstructed\**" />
     <EmbeddedResource Include="Reconstructed\dungeon-monsters.json" LogicalName="Ro3Emu.Server.Reconstructed.dungeon-monsters.json" />
     <EmbeddedResource Include="Reconstructed\scripted-scenes.json" LogicalName="Ro3Emu.Server.Reconstructed.scripted-scenes.json" />
+    <!-- Per-skill mechanics (Game/SkillMechanics.cs), one file per class line. -->
+    <EmbeddedResource Include="Reconstructed\skills\*.json" LogicalName="Ro3Emu.Server.Reconstructed.skills.%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

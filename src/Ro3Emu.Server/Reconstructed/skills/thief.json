@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "about": "Thief line (Thief 5100, Assassin 5200, Assassin Cross 5300, Guillotine Cross 5400): skill mechanics SkillConfig does not carry, read from each skill's own description and timeline (SkillMechanics.cs documents every field). Keys are _iSkillID (all modes) or 'group:mode' for a talent mode row that differs. EatChicken_* event rows (151xxx, 158xxx, 159xxx) are not covered. Everything is (inferred); 'why' quotes the evidence. Problems the schema cannot express (blade stacks, bounces, dashes, delayed Venom Splasher detonation, poison DoT, MATK scaling, conditional multipliers) are in the thief findings report.",
+  "skills": {
+    "15301": {
+      "name": "Dark Illusion",
+      "why": "'Charges to a point «1.5» meters in front of the target ST enemy within «12» meters ... dealing Physical ATK * «380»%' (mode 1 'Dash to a position «1.5»m in front of a targeted ST enemy'): single-target damage is already right (P1 38000); 'dash.stop' 1.5 m records the charge end point for when the loader's DashStop is wired (it is parsed but unused today, so this entry changes nothing yet).",
+      "dash": { "stop": 1.5 }
+    },
+    "15303": {
+      "name": "Rolling Cutter",
+      "why": "'Quickly spins in place, dealing ... PATK * «32»%*(«1»+ASPD*«0.5»%) to up to «3» enemies within a «5»-meter radius of You': the row is FixCircle with _kRange [500] and _iTargetMax 3 but _iRangeType 1, so the generic path only hit the locked target. 5 m circle around the caster, 3 targets (_kShowDmg [3] is the 32% total split in three).",
+      "anchor": "caster",
+      "shape": { "circle": 5 },
+      "maxTargets": 3
+    },
+    "15303:1": {
+      "name": "Rolling Cutter (talent mode 1)",
+      "why": "Mode 1 row 11530320: 'Quickly spin in place, dealing PATK*«42»%*(«1»+ASPD*«0.5»%) ... to up to «3» enemies within a «6»-meter radius' (_kRange [600], _iRangeType 1): 6 m circle around the caster, 3 targets.",
+      "anchor": "caster",
+      "shape": { "circle": 6 },
+      "maxTargets": 3
+    },
+    "15306": {
+      "name": "Evil Spirit Threat",
+      "why": "'Unleashes an evil spirit, dealing ... Physical ATK * «220»% to up to «5» enemies within a «5»-meter radius': FixCircle _kRange [500], _iTargetMax 5, but _iRangeType 1 limited it to the locked target. 5 m circle around the caster, 5 targets.",
+      "anchor": "caster",
+      "shape": { "circle": 5 },
+      "maxTargets": 5
+    },
+    "15320": {
+      "name": "Shadow Loop",
+      "why": "'... to up to «5» enemies within a «6»-meter radius. The user gains [Endure] while casting this skill' (mode 1: «7» m, _kRange [700], already read from the row). Damage/area are generic-correct (P1 150% total, _kShowDmg [4]); Endure (903101, 'Immune to knockback, knock-up, and hitstun effects') is granted for the row's _iActionTime 700 ms, as no duration is given beyond 'while casting'.",
+      "selfBuffs": [[903101, 10000, 700]]
+    },
+    "15321": {
+      "name": "Flowing Shadow",
+      "why": "'Choose a direction to dash «7» meters as a phantom, dealing ... PATK * «20»% to up to @{1} enemies in a «3»-meter-wide, «9»-meter-long rectangular area in that direction. You gain [Endure] while casting this skill': the row is FixCircle _kRange [100] (a 1 m circle), so the 9 m x 3 m strip from where the dash starts is set here (the 7 m dash itself is not simulated, see findings). Endure 903101 for _iActionTime 500 ms. Mode 1 leaves the size unfilled (${2}/${3}) and keeps the same row shape, so the group entry covers it.",
+      "anchor": "origin",
+      "shape": { "rect": [9, 3] },
+      "selfBuffs": [[903101, 10000, 500]]
+    },
+    "15322": {
+      "name": "Thousand Shadows",
+      "why": "'dealing a total of PATK*«120»%*(«1»+ASPD*«0.5»%) ... to up to «5» enemies within a «6»-meter radius. Gain [Endure] while casting this skill': damage/area generic-correct (P1 12000 total, _kShowDmg [3]; mode 1 «7» m from _kRange [700]); Endure 903101 for _iActionTime 500 ms.",
+      "selfBuffs": [[903101, 10000, 500]]
+    },
+    "15323": {
+      "name": "Shadow Guard",
+      "why": "'dealing total ... PATK*«100»%*(«1»+ASPD*«0.5»%) to up to «5» enemies within a «6»-meter radius. Gain [Endure] while casting this skill': damage/area generic-correct (P1 10000 total; mode 1 «7» m from _kRange [700]); Endure 903101 for _iActionTime 500 ms.",
+      "selfBuffs": [[903101, 10000, 500]]
+    },
+    "15326": {
+      "name": "Piercing Shadow",
+      "why": "'Initiate several shadow slashes around you, dealing a total of PATK*«300»%*(«1»+ASPD*«0.5»%) ... to up to «5» enemies within a «9»-meter radius': _kDamageParam1 [15000, 15000] with _kShowDmg [8, 1] and two attack points (0.083, 1.25 s) = 150% as 8 slashes, then a 150% finishing blow (branch 1, 1 segment) = 300%. Generic only dealt the first 150%. Mode 1 (P1 [15000 x4], same show/points) gets the same two moments.",
+      "hits": { "points": [0], "final": { "point": 1, "branch": 1 } }
+    },
+    "15327": {
+      "name": "Enhance Cloaking (disc ring)",
+      "why": "'When the [Enhance Camouflage] status is removed ..., unleash a ring of discs around yourself, dealing ... Physical ATK * «450»% to up to «3» enemies within a «10»-meter radius and reducing their Movement Speed by «20»% for «2» seconds': FixCircle _kRange [1000], _iTargetMax 3, but _iRangeType 1 hit only the locked target. 10 m circle around the caster, 3 targets (the slow is _kBuff2 11532601). P1 3750 (37.5%) disagrees with «450»% and is left as is (see findings).",
+      "anchor": "caster",
+      "shape": { "circle": 10 },
+      "maxTargets": 3
+    }
+  }
+}

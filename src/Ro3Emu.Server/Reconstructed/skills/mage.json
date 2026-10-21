@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "about": "Mage line (Mage 2100, Wizard 2200, High Wizard 2300, Warlock 2400): skill mechanics SkillConfig does not carry, read from each skill's own description and timeline (SkillMechanics.cs documents every field). The original server scripts are not in the client, so every entry is inferred; 'why' quotes the evidence. Fire/Cold/Lightning Bolt, Earth Spike, Heaven's Drive, Thunderstorm, Jack Frost, Thunderclap, Crimson Rock and Comet already deliver their description total through _kShowDmg; the ground fields (Fire Wall, Quagmire, Fire Pillar, Meteor Storm, Lord of Vermilion, Storm Gust, Safety Wall) are CreateSkillObjectAsync objects and ignore these entries.",
+  "skills": {
+    "12101": {
+      "name": "Sightrasher",
+      "why": "'dealing Magic ATK*«100»%+«180» Fire ranged magic damage to up to «5» enemies within a «5»-meter radius, and knocking them back «2» meters': the script Sightrasher has no displacement rule and no movement EffectData, so the 2 m push is missing.",
+      "knockback": 2
+    },
+    "12102": {
+      "name": "Jupitel Thunder",
+      "why": "'dealing MATK * «150»% + «100» Wind ranged Magic DMG to a designated ST enemy within «12» m and knocking them back «3» m': _kBuff2 only carries 1210101 ('Jupitel Thunder' stun effect, 1 s); the script Jupitel_Thunder has no displacement rule, so the 3 m push is missing.",
+      "knockback": 3
+    },
+    "12302": {
+      "name": "Soul Expansion",
+      "why": "'Launching «2» bursts of soul energy at the designated ST enemy ... dealing @{1} instances of Ghost-property ranged magic damage equal to Magic ATK *«85»%': 85% is per burst (_kDamageParam1 [8500, 8500], _kShowDmg empty), two bursts at the first two attack points (0.53, 0.83 s) = 170%. The generic path dealt only one 85% hit.",
+      "hits": { "points": [0, 1] }
+    },
+    "12328": {
+      "name": "Soul Expansion (Copy)",
+      "why": "Same row data and description as 12302: '«2» bursts ... equal to Magic ATK *«85»%' each (_kDamageParam1 [8500, 8500]), at attack points 0.53 and 0.83 s.",
+      "hits": { "points": [0, 1] }
+    },
+    "12313": {
+      "name": "Chain Lightning",
+      "why": "'to the designated ST enemy within «12» meters and up to «4» Other enemies within «5» meters of the target': _kRange is [0], so the locked-target splash had radius 0 (only the target was hit); 5 m around the target, 1 + 4 = 5 targets (_iTargetMax 5).",
+      "anchor": "target",
+      "shape": { "circle": 5 }
+    },
+    "12315": {
+      "name": "Comet",
+      "why": "'dealing Neutral Ranged Magic damage equal to MATK * «420»% to up to «5» enemies within a «7»-meter radius of the target': _iTargetMax is 10, the description caps it at 5 (radius 7 m = _kRange 700 is already right).",
+      "maxTargets": 5
+    },
+    "12325": {
+      "name": "Comet (Copy)",
+      "why": "Same description as 12315: 'to up to «5» enemies within a «7»-meter radius'; _iTargetMax is 10.",
+      "maxTargets": 5
+    },
+    "12334": {
+      "name": "Meteor",
+      "why": "'Deals Neutral Magic damage equal to MATK * «45»% to up to «10» Enemy Team targets within a «7»-meter radius of the target': _kRange is 800 (8 m), the description says 7 m.",
+      "shape": { "circle": 7 }
+    },
+    "12342": {
+      "name": "Gravitational Impact",
+      "why": "'dealing @{1} hits of Ghost Ranged Magic DMG equal to MATK * «170»% ... Then Terminate the distortion with a Burst, dealing @{2} hits of Ghost Ranged Magic DMG equal to MATK * «340»%': _kDamageParam1 [17000, 34000], _kShowDmg [3, 1]. The generic path only dealt branch 0 (170% shown as 3) at the first attack point and never the 340% burst; the burst is branch 1 at the last attack point (1.48 s of 7). The pull is not simulated.",
+      "hits": { "points": [0], "final": { "point": 6, "branch": 1 } }
+    },
+    "12347": {
+      "name": "Gravitational Impact (Copy)",
+      "why": "Same row data and description as 12342: '@{1} hits ... MATK * «170»%' then 'a Burst, dealing @{2} hits ... MATK * «340»%' (_kDamageParam1 [17000, 34000], _kShowDmg [3, 1]); burst at the last attack point (1.48 s).",
+      "hits": { "points": [0], "final": { "point": 6, "branch": 1 } }
+    },
+    "12423": {
+      "name": "Fireball Burst",
+      "why": "'Deals Fire-element ranged magic damage equal to Magic ATK *«50»%+«100» to up to «5» enemies within a «3»-meter radius': _kRange is [400, 1] (4 m), the description says 3 m.",
+      "shape": { "circle": 3 }
+    },
+    "12482": {
+      "name": "Spatial Distortion",
+      "why": "'Deals Ghost ranged magic damage equal to Magic ATK*«100»%+«500» to up to «5» enemies within a «6»-meter radius': _kRange is [500, 1] (5 m), the description says 6 m.",
+      "shape": { "circle": 6 }
+    }
+  }
+}

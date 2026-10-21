@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "about": "Swordsman line (Novice 1000, Swordsman 1100, Knight 1200, Lord Knight 1300, Rune Knight 1400): skill mechanics SkillConfig does not carry, read from each skill's own description, its talent (SpecialEffectConfig) text and timeline (SkillMechanics.cs documents every field). 'group:mode' keys override a talent mode row. Dragon Breath (11304/11305) and Sonic Wave (11309) use the generic Rect360 rule and are not listed. Everything is (inferred); 'why' quotes the evidence.",
+  "skills": {
+    "11002": {
+      "name": "Magnum Break",
+      "why": "'... to up to «5» enemies within a «5»-meter radius': circle of 5 m around the caster (_kRange 550 = 5.5 m).",
+      "anchor": "caster",
+      "shape": { "circle": 5 }
+    },
+    "11105": {
+      "name": "Auto Counter",
+      "why": "'After casting, enter a Parry state for «1» sec. ... When Parry ends, perform an Auto Counter against up to «5» enemies within a «3»m * «5»m area ahead, dealing Physical ATK * «100»% + «150»': the row has no damage params, so the generic cast deals nothing; the parry buff 1110510 names the counter row in its _kLogicData [1110610] (11106 lv10: P1 10000, P2 150 = the lv10 description). Released 1000 ms later (= the parry duration, and the template's second attack point at 1.0 s). Lower skill levels still release the lv10 row (see findings).",
+      "followUp": { "group": 11106, "delayMs": 1000 }
+    },
+    "11106": {
+      "name": "Auto Counter (counter strike)",
+      "why": "'... dealing Physical ATK*«100»%+«150» Neutral melee Physical damage to «5» enemies in a «3»m*«5»m area in front of you': _iRangeType 1 would hit only a locked target (a released counter has none); a 5 m long, 3 m wide strip from the caster (_kRange [500, 300] agrees).",
+      "anchor": "caster",
+      "shape": { "rect": [5, 3] }
+    },
+    "11211": {
+      "name": "Auto Counter (Parry counter)",
+      "why": "'... dealing Physical ATK*«30»%+«20» Neutral melee Physical damage to «5» enemies in a «3»m*«5»m area in front of you': _iRangeType 1 would hit only a locked target; a 5 m long, 3 m wide strip from the caster (_kRange [500, 300] agrees).",
+      "anchor": "caster",
+      "shape": { "rect": [5, 3] }
+    },
+    "11108:1": {
+      "name": "Brandish Spear (talent: splash)",
+      "why": "Mode 1 'dealing ... PATK * «65»%+«25» to the designated ST enemy within «5» meters and «2» Other enemies within «4» meters of the target': _iRangeType 2 Lock with _kRange [0] and _iTargetMax 1 would only hit the target; 4 m around the target, 1 + 2 targets.",
+      "anchor": "target",
+      "shape": { "circle": 4 },
+      "maxTargets": 3
+    },
+    "11109": {
+      "name": "Spear Stab",
+      "why": "'... to the designated ST enemy within «5» meters and applying [Knockback] for «1» meters': no Spear_Stab displacement rule exists, push the target 1 m away from the caster.",
+      "knockback": 1
+    },
+    "11110:1": {
+      "name": "Spear Throw (talent: extra spear)",
+      "why": "Talent 16120008 'When casting [Spear Throw], you throw one Extra Spear that Deals DMG equal to PATK * «50»% + «220» as Extra Neutral Ranged Physical damage': mode 1 P1 [8000, 5000], P2 [80, 220], _kShowDmg [3, 1], attack points [0.07, 0.23]: the normal throw (branch 0, 3 segments) at point 0 and the extra spear (branch 1) at point 1; generic dealt only branch 0.",
+      "hits": { "points": [0], "final": { "point": 1, "branch": 1 } }
+    },
+    "11110:2": {
+      "name": "Spear Throw (talent: explosive spear)",
+      "why": "Mode 2 'Throws an Explosive Spear at the target, dealing ... PATK * «80»%+«80» to the designated ST enemy within «12» meters and «2» Other enemies within «4» meters of the target': _iRangeType 2 Lock with _kRange [0], _iTargetMax 1; 4 m around the target, 1 + 2 targets.",
+      "anchor": "target",
+      "shape": { "circle": 4 },
+      "maxTargets": 3
+    },
+    "11213:1": {
+      "name": "Spiral Pierce (talent: splash)",
+      "why": "Mode 1 '... totaling PATK * «80»%+«65» over «5» hits to the designated ST enemy within «5» meters and «2» Other enemies within «4» meters of the target': _iRangeType 2 Lock with _kRange [0], _iTargetMax 1; 4 m around the target, 1 + 2 targets.",
+      "anchor": "target",
+      "shape": { "circle": 4 },
+      "maxTargets": 3
+    },
+    "11221:1": {
+      "name": "Joint Beat (talent: splash)",
+      "why": "Talent 16130011 '[Joint Beat] can also Deals DMG to «2» Other enemies within «4» meters of the target and break their body parts' (mode 1 row also carries _kDescData [..., '4', '2'] and is _iRangeType 2 Lock with _kRange [0], _iTargetMax 1): 4 m around the target, 1 + 2 targets; _kBuff2 1122101 then lands on each.",
+      "anchor": "target",
+      "shape": { "circle": 4 },
+      "maxTargets": 3
+    },
+    "11122": {
+      "name": "Piercing Blast (Pierce talent proc)",
+      "why": "Talent 16120003 'When casting [Pierce], there is a «30»% Chance to trigger an Extra Shatter, which Deals DMG equal to PATK * «10»% + «30» ... to the target and «2» Other enemies within «4» meters' (row P1 1000, P2 30 match): _iRangeType 2 Lock with _kRange [0], _iTargetMax 1; 4 m around the target, 1 + 2 targets. The proc trigger itself is in the findings.",
+      "anchor": "target",
+      "shape": { "circle": 4 },
+      "maxTargets": 3
+    },
+    "11124": {
+      "name": "Heavy Blow (Basic Attack talent proc)",
+      "why": "Talent 16120020 'Using [Basic Attack] triggers Splash damage, dealing Physical ATK*«50»% ... to «2» other enemies within «4» meters of the target' (row P1 5000 matches): _kRange [0] makes the splash radius 0; 4 m around the target. maxTargets 3 = target + 2 others because the selector cannot exclude the locked target (the target takes an extra 50%; see findings).",
+      "anchor": "target",
+      "shape": { "circle": 4 },
+      "maxTargets": 3
+    },
+    "11301": {
+      "name": "Rift Impact",
+      "why": "'Dives toward a designated location within «15» meters. Upon landing, deals ... PATK * «250»% ... to up to «5» enemies within a «5»-meter radius' (mode 1: «300»%, same «5» m): the template takes off at attack point 0 (0 s) and lands at point 1 (0.53 s); generic hit at take-off. Hit once at landing, around the requested ground point, 5 m (_kRange 600 = 6 m).",
+      "hits": { "points": [1] },
+      "anchor": "point",
+      "shape": { "circle": 5 }
+    },
+    "11302": {
+      "name": "Cleaving Slash",
+      "why": "'dealing «3» hits ... totaling PATK * «50»% to up to «5» enemies within a «5»-meter radius ... Increases your MSPD by «20»% for «5» seconds' (mode 1: «55»%, same radius and MSPD): circle of 5 m around the caster (_kRange 600 = 6 m); P1 is the total with _kShowDmg [3]. _kBuff1 is empty: buff 1130201 'Dragon Wing' (_kChangeAttri [[1131, 2000]] = MSPD +20%, the attribute Rift Impact's slow lowers) for 5000 ms.",
+      "anchor": "caster",
+      "shape": { "circle": 5 },
+      "selfBuffs": [[1130201, 10000, 5000]]
+    },
+    "11310": {
+      "name": "Rain of Spears",
+      "why": "Modes 0/2 '... summon a barrage of spears toward the locked target, dealing «5» hits ... totaling Physical ATK*«150»% to up to «5» enemies within a «5»m*«10»m area in front of you': _iRangeType 2 Lock with _kRange [0] splashes 0 m around the target; a 10 m long, 5 m wide strip from the caster toward the target (_kLogicData [..., 600, 1100, ...] is the same box with margin).",
+      "anchor": "caster",
+      "shape": { "rect": [10, 5] }
+    },
+    "11310:1": {
+      "name": "Hundred Spear - Enhance",
+      "why": "Mode 1 '... dealing «5» hits ... Physical Attack*«260»% in total to up to «5» enemies within a «10»m*«20»m area in front of you': 20 m long, 10 m wide strip from the caster (_kLogicData [..., 1100, 2100, ...]).",
+      "anchor": "caster",
+      "shape": { "rect": [20, 10] }
+    },
+    "11310:3": {
+      "name": "Hundred Spear - Enhance",
+      "why": "Mode 3 '... Physical Attack*«260»% in total to up to «5» enemies within a «10»m*«20»m area in front of you': 20 m long, 10 m wide strip from the caster.",
+      "anchor": "caster",
+      "shape": { "rect": [20, 10] }
+    },
+    "11310:4": {
+      "name": "Ultimate Hundred Spear",
+      "why": "Mode 4 '... Physical Attack*«1110»% in total to up to «10» enemies within a «10»m*«20»m area in front of you': 20 m long, 10 m wide strip from the caster (_iTargetMax 10).",
+      "anchor": "caster",
+      "shape": { "rect": [20, 10] }
+    },
+    "11310:5": {
+      "name": "Ultimate Hundred Spear",
+      "why": "Mode 5 '... Physical Attack*«1110»% in total to up to «10» enemies within a «10»m*«20»m area in front of you': 20 m long, 10 m wide strip from the caster (_iTargetMax 10).",
+      "anchor": "caster",
+      "shape": { "rect": [20, 10] }
+    },
+    "11315:1": {
+      "name": "Precision Thrust (talent mode)",
+      "why": "Mode 1 'Deals «5» hits totaling Physical ATK*«140»%' but _kShowDmg is [2] (base mode: «2» hits, [2]); P1 14000 is already the total, so keep one moment and show 5 segments.",
+      "hits": { "points": [0], "split": 5 }
+    },
+    "11316": {
+      "name": "Sonic Burst",
+      "why": "'... unleashing a massive shockwave toward the locked-on target that deals ... totaling PATK * «500»% over «3» hits to up to «5» enemies in a «6»-meter by «15»-meter area in front of You' (mode 1: «600»%, same «6»m x «15»m): _iRangeType 2 Lock with _kRange [0] splashes 0 m around the target; a 15 m long, 6 m wide strip from the caster (_kLogicData [1131603, 700, 1600] is the same box with margin).",
+      "anchor": "caster",
+      "shape": { "rect": [15, 6] }
+    }
+  }
+}

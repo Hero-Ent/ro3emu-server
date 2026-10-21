@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "about": "Archer line (Archer 3100, Hunter 3200, Sniper 3300, Ranger 3400): skill mechanics SkillConfig does not carry, read from each skill's own description and timeline (SkillMechanics.cs documents every field). The original server scripts are not in the client, so every entry is inferred; 'why' quotes the evidence. Entries are keyed by _iSkillID and therefore apply to every _iMode of the group; mode differences are noted per entry. Blitz Beat and Sharp Shooting are _iRangeType 1, whose target selection currently returns only the locked enemy before consulting these entries (see the archer findings).",
+  "skills": {
+    "13003": {
+      "name": "Double Strafe",
+      "why": "'Fires 2 Arrows simultaneously, dealing «2» hits of PATK * «100»% + «75» Neutral Ranged Physical DMG': the value is per hit (no 'totaling'), _kDamageParam1 10000 / _kDamageParam2 75 is one hit (lv1 '«2» hits of PATK * «55»% + «66»' = P1 5500, P2 66), so the cast deals two rolls of 100% + 75. The template has a single attack point (0.17 s) and the arrows fly together, so both hits land at point 0, each shown as one number.",
+      "hits": { "points": [0, 0], "split": 1 }
+    },
+    "13102": {
+      "name": "Blitz Beat",
+      "why": "'dealing PATK * «100»% + «100» ... to the designated ST enemy within «18» meters and up to «2» Other enemies within «3» meters of the target': a 3 m splash around the locked target, 1 + 2 = _iTargetMax 3; _kLogicData [300, 3, 0] carries the same 3 m / 3 targets. Mode 1 (talent) is '«3» Other enemies within «4» meters' (_kLogicData [400, 4, ...], _iTargetMax 4): the radius stays 3 m until mechanics can be keyed per mode.",
+      "anchor": "target",
+      "shape": { "circle": 3 }
+    },
+    "13110": {
+      "name": "Blitz Beat (auto-cast)",
+      "why": "'dealing PATK * «5»% + «5» ... to the designated ST enemy within «18» meters and up to «2» Other enemies within «3» meters of the target': same 3 m splash around the locked target as 13102, _iTargetMax 3, _kLogicData [300, 3, 0]. Mode 1 is 4 m / 1 + 3 (see 13102).",
+      "anchor": "target",
+      "shape": { "circle": 3 }
+    },
+    "13204": {
+      "name": "Sharp Shooting",
+      "why": "'dealing PATK * «55»% + «55» ... to the target and up to «3» enemies in a line within Attack Range' (range «18» m): a piercing line from the caster toward the locked target (the cast faces it), 18 m long; _kLogicData [3, 150] = 3 extra targets and (inferred) a 1.5 m line width; 1 + 3 targets (_iTargetMax is 1).",
+      "anchor": "caster",
+      "shape": { "rect": [18, 1.5] },
+      "maxTargets": 4
+    },
+    "13320": {
+      "name": "Myriad Stars Chase the Moon",
+      "why": "'Fires a hurricane Arrow in the designated direction across a «18»-meter by «4»-meter area, continuously dealing PATK * «1400»% ... to up to «10» enemies in its path': _kDamageParam1 20000 (200%, shown in 2, _kShowDmg [2]) at each of the seven attack points after the launch (0.5-1.7 s) = 1400% (lv1 7 x 160 = «1120», lv3 7 x 180 = «1260»). The strip is 18 x 4 m per the description (kRange says 1800 x 600) and lies from where the shot was fired: the caster may walk during the cast ('MSPD increases by «30»%'). Mode 1 (talent, 12 attack points, '«2000»%' = 10 x 200%) still gets 7 hits here until mechanics can be keyed per mode.",
+      "hits": { "points": [1, 2, 3, 4, 5, 6, 7] },
+      "anchor": "origin",
+      "shape": { "rect": [18, 4] }
+    },
+    "13327": {
+      "name": "Warg Companion (Warg Strike)",
+      "why": "King of the Wargs (13322): 'casting [Warg Charge] causes «4» wolf followers to charge alongside you, dealing «4» Extra hits ... totaling Physical ATK*«320»%': this row's _kDamageParam1 8000 is one follower (80%), and its template has four attack points (0.75, 0.92, 1.08, 1.25 s), 4 x 80% = 320% (lv1 4 x 72% = «288», lv3 4 x 76% = «304»). Mode 1 (Rhythmic, 5 attack points, 120%) has no description and keeps four hits here.",
+      "hits": { "points": [0, 1, 2, 3] }
+    }
+  }
+}

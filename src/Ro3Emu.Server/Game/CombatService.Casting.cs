@@ -25,6 +25,9 @@ public sealed class ActiveSkillCast
     public bool Cancelled { get; set; }
     public bool Resolved { get; set; }
     public SkillObject? Operator { get; init; }
+    /// <summary>A cast the server releases on its own (a follow-up): not the session's cast slot, so it is not
+    /// interrupted by the player's next cast or by walking.</summary>
+    public bool Independent { get; init; }
     public long SourceId => Operator?.Uid ?? OwnerId;
 }
 
@@ -382,7 +385,7 @@ public sealed partial class CombatService
         return Current();
     }
 
-    private async Task StartCastAsync(GameSession s, JsonElement row, CastSkillReq req, long id, SkillObject? actor = null)
+    private async Task StartCastAsync(GameSession s, JsonElement row, CastSkillReq req, long id, SkillObject? actor = null, bool independent = false)
     {
         var origin = actor?.Pos ?? s.Position.Clone();
         var target = FindMonster(s.WorldScene, req.TargetId);
@@ -392,8 +395,9 @@ public sealed partial class CombatService
             Id = id, OwnerId = s.Role!.Id, WorldScene = s.WorldScene, SceneGeneration = s.SceneGeneration,
             Attachment = s.Attachment, Request = req, Row = row, Origin = origin, StartedWalking = actor == null && s.Walking,
             StartMs = Now, ChantMs = (int)Math.Max(0, GameData.Int(row, "_iChantFix") + GameData.Int(row, "_iChantVar")), ActionMs = SkillMs(s, row), Operator = actor,
+            Independent = independent,
         };
-        s.SkillCast = action;
+        if (!independent) s.SkillCast = action;
         s.WorldState.ResurrectionCastId = Script(row) == "Resurrection" ? id : 0;
         s.Face = face;
         req.Face = face;
@@ -402,16 +406,18 @@ public sealed partial class CombatService
             SrcID = action.SourceId, SkillID = req.SkillId, TargetId = req.TargetId, TargetPos = req.TargetPos ?? origin,
             Face = face, SessionId = id, ChantMs = action.ChantMs, SkillMs = action.ActionMs, StartTime = action.StartMs, PlayAct = true,
         }, highLevel: GameData.Int(row, "_iSkillEffectLevel") > 0, extra: actor != null || req.IsExtraSkill);
+        if (SkillMechanics.For(row) is { } mechanic) await StartMechanicAsync(s, action, mechanic);
         var template = data.SkillTemplate(GameData.Int(row, "_iScriptShow"));
         var points = template is { } t ? Numbers(t, "m_kAtkPoints") : [];
         int Ms(double p) => ImpactOffset(template, p, action.ChantMs, action.ActionMs);
         int last = 0;
         foreach (var (at, impact) in CastImpacts(row, points, Ms, action))
         {
-            last = Math.Max(last, at);
+            if (impact is not { Detached: true }) last = Math.Max(last, at); // a lingering zone does not hold the cast slot
             ScheduleRuntime(action.WorldScene, TimeSpan.FromMilliseconds(at), async () =>
             {
-                if (!Live(s, action)) return;
+                // A detached moment (a lingering zone's tick) survives the cast's end and the next cast; an interrupt still stops it.
+                if (!Live(s, action) && !(impact is { Detached: true } && !action.Cancelled && CurrentCastMap(s, action))) return;
                 if (impact is not { First: false }) action.Resolved = true;
                 await ResolveCastAsync(s, action, impact);
             });
@@ -430,6 +436,49 @@ public sealed partial class CombatService
             return Task.CompletedTask;
         });
     }
+
+    /// <summary>
+    /// What a <see cref="SkillMechanics"/> entry does when the cast starts: the HP it spends (turned into a shield, never
+    /// fatal), the buffs it grants its caster, and the skill it releases later (Energy Release's countdown explosion).
+    /// </summary>
+    private async Task StartMechanicAsync(GameSession s, ActiveSkillCast action, SkillMechanics.Mechanic mechanic)
+    {
+        var role = s.Role!;
+        if (mechanic.SelfHpCostPercent > 0)
+        {
+            var stats = character.Stats(s);
+            long amount = stats[101] * mechanic.SelfHpCostPercent / 100;
+            // A row whose _kCost already charges HP (type 7 on attribute 2000: Energy Release [7, 2000, 101, 5000]) has
+            // paid it in the cost step; otherwise the HP is spent here, never fatally.
+            bool paid = Tuples(action.Row, "_kCost").Any(t => t.GetArrayLength() > 1 && GameData.Number(t[1]) == 2000);
+            if (!paid)
+            {
+                amount = Math.Min(amount, Math.Max(0, stats[2000] - 1));
+                await character.SetHpSpAsync(s, stats[2000] - amount, null);
+            }
+            if (mechanic.ShieldBuff is int shield)
+                await buffs.AddSupportAsync(s, shield, mechanic.ShieldMs > 0 ? mechanic.ShieldMs : Math.Max(1000, mechanic.FollowUpDelayMs), role.Id, amount);
+        }
+        foreach (var (buff, chance, ms) in mechanic.SelfBuffs)
+            if (Rolls.Proc(10000) < chance) await buffs.AddAsync(s, buff, ms, role.Id);
+        // A fixed row, or the named group at the cast's own level (Auto Counter lv3 releases the lv3 counter).
+        int? followId = mechanic.FollowUpSkill
+            ?? (mechanic.FollowUpGroup is int fg ? FollowUpRow(fg, (int)GameData.Int(action.Row, "_iLevel")) : null);
+        if (followId is int follow && data.Row("SkillConfig", follow) is { } followRow)
+            ScheduleRuntime(action.WorldScene, TimeSpan.FromMilliseconds(mechanic.FollowUpDelayMs), async () =>
+            {
+                if (!CurrentCastMap(s, action) || !ReferenceEquals(s.Role, role)) return;
+                // Its own cast (timeline, hits) that does not take the session's cast slot: the player may already be
+                // casting something else when the countdown ends.
+                await StartCastAsync(s, followRow, new CastSkillReq { SkillId = follow, Face = s.Face, TargetPos = s.Position.Clone() },
+                    ++_sessionIds, independent: true);
+            });
+    }
+
+    /// <summary>The group's mode-0 row at <paramref name="level"/>, or its highest level below it.</summary>
+    private int? FollowUpRow(int group, int level) => data.Table("SkillConfig").Values
+        .Where(r => GameData.Int(r, "_iSkillID") == group && GameData.Int(r, "_iMode") == 0 && GameData.Int(r, "_iLevel") <= Math.Max(1, level))
+        .OrderByDescending(r => GameData.Int(r, "_iLevel")).Select(r => (int?)(int)GameData.Int(r, "_iID")).FirstOrDefault();
 
     /// <summary>Axe Tornado: spins while the caster walks, hitting around it, then a final blow.</summary>
     internal const string SpinScript = "AxeTornado";
@@ -463,6 +512,13 @@ public sealed partial class CombatService
         }
         if (script == LeapSlamScript && points.Length > 1)
             return [(ms(points[^1]), new Impact(0, null, First: true, SelfEffects: false, AtCaster: true))];
+        if (SkillMechanics.For(row) is { } mechanic)
+        {
+            if (mechanic.NoDamage) return [(ms(points.FirstOrDefault(0.2)), new Impact(0, null, First: true, SelfEffects: mechanic.ShieldBuff == null, AtCaster: false, NoDamage: true))];
+            if (mechanic.Hits.Count > 0)
+                return mechanic.Hits.Select((hit, i) => (hit.Ms ?? ms(hit.Point is int p && p < points.Length ? points[p] : hit.Time ?? points.FirstOrDefault(0.2)),
+                    (Impact?)new Impact(hit.Branch, hit.Split, First: i == 0, SelfEffects: i == 0, AtCaster: false, Detached: hit.Ms != null))).ToList();
+        }
         return [(ms(points.FirstOrDefault(0.2)), null)];
     }
 
@@ -489,7 +545,7 @@ public sealed partial class CombatService
         return (int)Math.Max(0, Math.Round(ms));
     }
 
-    private static bool Live(GameSession s, ActiveSkillCast action) => !action.Cancelled && ReferenceEquals(s.SkillCast, action)
+    private static bool Live(GameSession s, ActiveSkillCast action) => !action.Cancelled && (action.Independent || ReferenceEquals(s.SkillCast, action))
         && !s.Dead && !s.SceneLoading && s.Role?.Id == action.OwnerId && s.WorldScene == action.WorldScene
         && (action.Operator == null || !action.Operator.Removing && action.Operator.ExpiresMs > Now);
 
