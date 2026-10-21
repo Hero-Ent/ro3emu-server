@@ -1,6 +1,20 @@
 {
   "items": [
     {
+      "tag": "PATCH 0.0.5",
+      "color": "green",
+      "title": "Patch Notes v0.0.5 - Combate e Habilidades",
+      "text": "• Habilidades de vários golpes (Lança de Fogo, Lança de Gelo, Lança de Raio e outras) agora mostram todos os hits e projéteis conforme o nível.\n• Habilidades em área corrigidas: áreas que acompanham o personagem, retângulos e círculos do tamanho certo e áreas centradas no alvo.\n• Zonas de dano contínuo agora causam todos os ticks: Magnus Exorcismus, Santuário, Campo Gravitacional e Zona de Brasas.\n• Andar não cancela mais as habilidades. Habilidades com conjuração deixam o personagem parado até terminar e depois ele continua o caminho.\n• Clicar rápido ou segurar a tecla agora encadeia as habilidades, sem cancelar o golpe anterior antes do dano.\n• Dashes e investidas: o personagem fica na posição final do movimento e não volta mais para onde conjurou.\n• Bônus de dano por Velocidade de Ataque, Nível Base e atributos aplicados conforme a descrição de cada habilidade.\n• Efeitos que disparam habilidades (contra-ataques, reflexos, explosões ao fim do efeito, chances ao acertar) agora funcionam.\n• Invisibilidade: Disfarce e Camuflagem Aprimorada escondem o personagem dos monstros comuns e acabam ao causar ou receber dano.\n• Atualizador 1.0.9: troca mais rápida entre servidores e downloads mais estáveis.",
+      "date": "2026-10-21"
+    },
+    {
+      "tag": "PATCH 0.0.5",
+      "color": "green",
+      "title": "Patch Notes v0.0.5 - Correções por Classe",
+      "text": "• Espadachim / Cavaleiro: Parry contra-ataca golpes corpo a corpo; Dragon Breath com chance de Queimar; Charge Attack e Rift Impact levam o personagem até o alvo.\n• Templário: Shield Reflect, Recoil, Reflect Damage, Shield Defense e Charge Up agora disparam seus golpes; Fearless Charge avança 12 m; Earthshaker gira com 10 golpes e golpe final; Crescent Moon puxa os inimigos.\n• Mago: Soul Strike causa dano extra em Mortos-Vivos; Magic Crasher usa o Ataque Mágico.\n• Arqueiro: Fear Breeze dispara as flechas extras; Focused Arrow Strike atinge em linha; Myriad Stars com todos os golpes; Wargs: o lobo corre até o alvo, Warg Charge avança montado, Warg Hunt com os 3 lobos e o lobo não aparece mais duplicado ao montar.\n• Noviço / Sacerdote: Santuário cura os aliados e fere Mortos-Vivos e Demônios a cada tick; Magnus causa dano extra em Mortos-Vivos e Demônios.\n• Gatuno / Mercenário: o ataque básico dá dois golpes por ataque; Ataque Duplo funcionando com adaga; Venom Splasher explode após 2 segundos; Envenomed Blade ricocheteia; Sonic Blow mais forte em alvos com pouca vida; Soul Destroyer soma o Ataque Mágico; Antídoto remove Envenenamento.\n• Mercador / Mecânico: Axe Tornado acompanha o personagem e todas as versões aprimoradas funcionam; High-Energy Impact causa dano onde aterrissa; Energy Release, Aerial Bombardment e Arm Cannon corrigidos; Vulcan Arm carrega o Firepower a cada 15 usos; Cart Boost remove Lentidão.",
+      "date": "2026-10-21"
+    },
+    {
       "tag": "PATCH 0.0.4",
       "color": "green",
       "title": "Patch Notes v0.0.4 - Correções e Melhorias",
