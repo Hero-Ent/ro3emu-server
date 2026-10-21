@@ -337,6 +337,7 @@ public sealed partial class CombatService
             Split = targets.Count > 0 ? split : 1,
         };
         var killed = new List<MonsterUnit>();
+        var doubles = new List<(MonsterUnit Target, long Amount, DamageHitResult Result)>();
         var processed = new List<MonsterUnit>();
         bool damage = impact?.NoDamage != true && (Numbers(row, "_kDamageParam1").Any(v => v > 0) || Numbers(row, "_kDamageParam2").Any(v => v > 0));
         var mechanic = field == null ? SkillMechanics.For(row) : null;
@@ -364,12 +365,11 @@ public sealed partial class CombatService
                 {
                     foreach (var modifier in DamageAdjusters) amount = Math.Max(0, modifier(s, target, row, result, amount));
                     foreach (var extra in ExtraHitDamage) amount += Math.Max(0, extra(s, target, row, amount));
-                    // Double Attack: the swing lands twice, shown like a two-hit skill (two numbers and their total).
-                    if (field == null && DoubleAttackRolls(s, row) is { } second)
+                    // Double Attack: once per swing, an extra hit lands with the first one, shown as its own normal number.
+                    if (field == null && impact is not { First: false } && DoubleAttackRolls(s, row) is { } second)
                     {
-                        var (extraAmount, _) = Damage(attacker, defender, second);
-                        amount += Math.Max(0, extraAmount);
-                        hit.Split = Math.Max(hit.Split, 2);
+                        var (extraAmount, extraResult) = Damage(attacker, defender, second);
+                        if (extraAmount > 0) { amount += extraAmount; doubles.Add((target, extraAmount, extraResult)); }
                     }
                 }
                 long beforeHp = target.Hp;
@@ -394,7 +394,8 @@ public sealed partial class CombatService
                         try { await handler(s, target, effective); }
                         catch (Exception ex) { log.LogError(ex, "Monster damage callback failed for {Uid}", target.Uid); }
                     }
-                hit.Dsts.Add(new DamageInfo { DstID = target.Uid, Damage = amount, HitResult = result, DstElement = target.Template.Element, IsDead = target.Hp == 0 });
+                long extraShown = doubles.Where(d => d.Target == target).Sum(d => d.Amount);
+                hit.Dsts.Add(new DamageInfo { DstID = target.Uid, Damage = amount - extraShown, HitResult = result, DstElement = target.Template.Element, IsDead = target.Hp == 0 && extraShown == 0 });
             }
             if (CanApplyMoreEffects())
                 foreach (var tuple in Tuples(row, "_kBuff2"))
@@ -465,6 +466,16 @@ public sealed partial class CombatService
             if (CurrentCaster() && hit.Dsts.Any(d => d.HitResult != DamageHitResult.Miss)) await buffs.RecoverEnergyOnHitAsync(s, row);
             var sourceViewers = CurrentCaster() ? world.Viewers(s).Append(s) : Enumerable.Empty<GameSession>();
             foreach (var viewer in processed.SelectMany(t => t.Viewers).Concat(sourceViewers).Distinct()) await viewer.SendGameAsync(SkillHit, hit);
+            if (doubles.Count > 0)
+            {
+                // The Double Attack hit: the same swing's message again, its own number in the basic attack's font.
+                var twice = hit.Clone();
+                twice.Dsts.Clear();
+                twice.Split = 1;
+                foreach (var (target, extraAmount, extraResult) in doubles)
+                    twice.Dsts.Add(new DamageInfo { DstID = target.Uid, Damage = extraAmount, HitResult = extraResult, DstElement = target.Template.Element, IsDead = target.Hp == 0 });
+                foreach (var viewer in processed.SelectMany(t => t.Viewers).Concat(sourceViewers).Distinct()) await viewer.SendGameAsync(SkillHit, twice);
+            }
             if (CurrentCaster() && field?.Trap == true)
                 await ToPlayerAndViewersAsync(s, TrapDamage, new TrapDamageNtf { SkillConfigId = action.Request.SkillId, DamageValue = hit.Dsts.Sum(d => d.Damage), Pos = center.Clone() });
         }

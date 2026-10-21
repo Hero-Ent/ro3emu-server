@@ -565,6 +565,11 @@ public sealed partial class CombatService
                         : ms(hit.Point is int p && p < points.Length ? points[p] : hit.Time ?? points.FirstOrDefault(0.2)),
                     (Impact?)new Impact(hit.Branch, hit.Split, First: i == 0, SelfEffects: i == 0, AtCaster: false, Detached: hit.Ms != null))).ToList();
         }
+        // A basic attack whose template strikes at distinct attack points hits at each (the Thief's dual-dagger swing
+        // 1500001 [0.217, 0.667]: two numbers per swing in the official footage). Duplicated points ([0.15, 0.15]) are
+        // one strike.
+        if (GameData.Int(row, "_iIsNormalAtk") == 1 && points.Distinct().Count() > 1 && SkillMechanics.For(row) is null)
+            return points.Distinct().Order().Select((p, i) => (ms(p), (Impact?)new Impact(0, null, First: i == 0, SelfEffects: i == 0, AtCaster: false))).ToList();
         return [(ms(points.FirstOrDefault(0.2)), null)];
     }
 

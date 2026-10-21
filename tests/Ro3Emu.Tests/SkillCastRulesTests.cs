@@ -72,10 +72,14 @@ public sealed partial class SkillCombatTests
         await alice.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1500001, TargetId = target.Uid });
         var accepted = await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser);
         Assert.Equal(0, accepted.Result);
-        // The swing itself lands twice: one hit message with 2 segments (the client shows both and their total).
-        var swing = await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.SessionId == accepted.SessionId && h.Dsts.Count > 0);
-        Assert.Equal(2, swing.Split);
-        Assert.Contains(swing.Dsts, d => d.DstID == target.Uid && d.Damage > 0);
+        // The dual-dagger swing strikes twice (its two attack points) and Double Attack adds a third number with the
+        // first strike: each its own normal number (split 1), all in the swing's session, no separate skill.
+        await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.SessionId == accepted.SessionId && h.Dsts.Count > 0);
+        await Task.Delay(1500);
+        var hits = alice.Inbox.Snapshot().Where(e => e.IsGame(CombatService.SkillHit)).Select(e => SkillHitInfo.Parser.ParseFrom(e.Body))
+            .Where(h => h.SessionId == accepted.SessionId && h.Dsts.Any(d => d.DstID == target.Uid && d.Damage > 0)).ToList();
+        Assert.Equal(3, hits.Count);
+        Assert.All(hits, h => Assert.Equal(1, h.Split));
         Assert.DoesNotContain(alice.Inbox.Snapshot(), e => e.IsGame(CombatService.SkillHit) && SkillHitInfo.Parser.ParseFrom(e.Body).SkillId == 1511501);
     }
 
