@@ -71,6 +71,13 @@ Still open after phase 2: Death Bound (it reflects a % of the damage taken, and 
 - Mechanic: every Axe Tornado / High-Energy Impact mode row (AxeTornadoPro, ...S1BD1/2, AxeLeapAttack2...) now uses
   the spin / leap schedule (they fell back to one hit); Vulcan Arm grants Firepower Loaded only at 15 stacks, with
   3 uses that Arm Cannon - Enhance spends (`stackGrant`, `consumePiles`).
+- Ranger wargs: the following wolf is the mount lease's pendant 54001, now hidden while that wolf is ridden; the
+  mount's `_kBindBuff` (1331001: +10% MSPD and Warg Strike / Arrow Smash mode 1) is granted while riding; unmounted
+  Warg Strike makes the pendant wolf run to the target (SkillEffectDisplayNotify type 5, PendantShow); mounted Warg
+  Charge dashes; Warg Hunt releases its melee / ranged row (`dispatch`), which carry the three wolves; Warg Charge and
+  Warg Hunt reset Swift Warg. Still open: King of the Wargs' extra companions, Wolf's Fang, Wolf Taming's howl.
+- Thief: Double Attack procs on dagger basic attacks; Cloaking / Enhance Cloaking hide from monsters and end after
+  their hits. Hiding (15003) is only a speed buff in RO3's data.
 
 Still open: blade stacks (Cross Ripper Slasher), poison DoT rows, Reading Spellbook extra casts, per-hit elements and
 pulls (Tetra Vortex), dispatch by distance (Warg Hunt melee/ranged), proc tables for talents that cannot be learned,

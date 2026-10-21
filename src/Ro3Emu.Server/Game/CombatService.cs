@@ -334,6 +334,21 @@ public sealed partial class CombatService : IGameTicker
         return 0;
     });
 
+    /// <summary>LC_Pendant_Wolf._effectData: a Wolf-track (m_eBulletType 8) effect's run time to the target, from
+    /// m_kBulletWolf.m_iToTargetSpeed (control type 1) or m_iToTargetTime (ms). Null when it is not a Wolf pendant charge.
+    /// The speed's unit is (inferred) metres per second.</summary>
+    private int? WolfRunMs(int effectId, float distance)
+    {
+        var effects = data.SkillTemplateTable("Lua_Config_EffectData");
+        if (!effects.TryGetValue(effectId.ToString(), out var e) || !e.TryGetProperty("m_kDamage", out var dmg)
+            || !dmg.TryGetProperty("m_kBulletData", out var b) || !b.TryGetProperty("m_eBulletType", out var type)
+            || !type.TryGetInt32(out int kind) || kind != 8 || !b.TryGetProperty("m_kBulletWolf", out var wolf)) return null;
+        if (b.TryGetProperty("m_iBulletControlType", out var c) && c.TryGetInt32(out int control) && control == 1
+            && wolf.TryGetProperty("m_iToTargetSpeed", out var speed) && speed.GetDouble() > 0)
+            return (int)Math.Round(distance / speed.GetDouble() * 1000);
+        return wolf.TryGetProperty("m_iToTargetTime", out var t) && t.TryGetInt32(out int ms) ? ms : 0;
+    }
+
     private int BulletLifeTime(int bulletEffectId, float distance = 10f)
     {
         var effects = data.SkillTemplateTable("Lua_Config_EffectData");
@@ -568,6 +583,7 @@ public sealed partial class CombatService : IGameTicker
                 || p.SceneGeneration != targetGeneration || !ReferenceEquals(p.Attachment, targetLease)
                 || targetLease?.Cancelled == true) return;
             if (MonsterService.Distance(m, p) > m.Template.AttackRange + 2f) return; // stepped away
+            if (MonsterService.Unseen(m, p)) return; // cloaked before the blow landed (inferred)
             var stats = character.Stats(p);
             var attacker = new Fighter(m.Template.Atk, m.Template.Matk, m.Template.Hit, m.Template.Cri, m.Template.Level, m.Template.Element);
             var defender = new Fighter(0, 0, 0, 0, p.Progress!.Level, 1) { Def = stats[105], Mdef = stats[106], Flee = stats[110], ResCri = stats[112] };

@@ -333,13 +333,19 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         loop.TrackRuntimeDetached("monster speed", () => world.ToUnitViewersAsync(m, CombatService.AoiAttrChange, SpeedChange(m, now)));
     private void SendHealth(MonsterUnit m) => loop.TrackRuntimeDetached("monster health", () => world.ToUnitViewersAsync(m, CombatService.AoiAttrChange, Hp(m)));
 
+    /// <summary>
+    /// A stealthed player ("cannot be seen or targeted": Cloaking, Enhance Cloaking) is invisible to ordinary monsters,
+    /// which drop it as a target; bosses (a BossSkillBook) still see it (inferred, the RO rule).
+    /// </summary>
+    internal static bool Unseen(MonsterUnit m, GameSession p) => m.Template.Skills == null && BuffService.Hidden(p);
+
     private static GameSession? NearestTarget(MonsterUnit m)
     {
         GameSession? near = null;
         float best = float.MaxValue;
         foreach (var p in m.Viewers)
         {
-            if (p.Role == null || p.Dead) continue;
+            if (p.Role == null || p.Dead || Unseen(m, p)) continue;
             float d = Distance(m, p);
             if (d <= m.Template.ViewRange && d < best) { best = d; near = p; }
         }
@@ -439,7 +445,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     /// <summary>A player hit it (or came into view of an aggressive one): chase and attack.</summary>
     public void Engage(MonsterUnit m, GameSession target)
     {
-        if (m.Dead || m.WorldScene != target.WorldScene || m.Template.SpeedCm == 0 && m.Template.AttackRange <= 0) return;
+        if (m.Dead || m.WorldScene != target.WorldScene || m.Template.SpeedCm == 0 && m.Template.AttackRange <= 0 || Unseen(m, target)) return;
         if (m.Target == null) m.NextSwingMs = NowMs + 300;
         SetTarget(m, target);
         m.Returning = false;
@@ -515,7 +521,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     private void Fight(MonsterUnit m, MapInstance map, long now)
     {
         var target = m.Target!;
-        bool lost = target.Role == null || target.Dead || target.SceneLoading || target.WorldScene != m.WorldScene
+        bool lost = target.Role == null || target.Dead || target.SceneLoading || target.WorldScene != m.WorldScene || Unseen(m, target)
                     || Distance(m.Home.X, m.Home.Z, target.Position.X, target.Position.Z) > m.Template.LeashDistance;
         if (lost)
         {

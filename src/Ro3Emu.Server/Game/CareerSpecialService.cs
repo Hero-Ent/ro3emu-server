@@ -42,6 +42,7 @@ public sealed class CareerSpecialService
         this.mounts = mounts; this.roles = roles; this.world = world; this.loop = loop;
         // A job change can leave a lease the new career may not hold (GM !job, or a line without the item; inferred).
         character.JobChanged.Add(ReconcileAsync);
+        mounts.Changed.Add(RiderChangedAsync);
     }
 
     /// <summary>The mount slot's lease entitles MountService's battle slot 2.</summary>
@@ -55,7 +56,30 @@ public sealed class CareerSpecialService
     /// <summary>EntityBase.pendantInfo of the leased items (self and AOI). Piles 1 is inferred: these rows have _iMaxLayer 0.</summary>
     public static void PopulateEntity(GameSession s, EntityBase entity)
     {
-        foreach (int pendant in s.CareerPendants) entity.PendantInfo[pendant] = new PendantData { PendantId = pendant, Piles = 1 };
+        bool hide = MountPendantHidden(s);
+        s.CareerMountPendantHidden = hide;
+        foreach (int pendant in s.CareerPendants)
+            entity.PendantInfo[pendant] = new PendantData { PendantId = pendant, Piles = 1, IsHide = hide && pendant == s.CareerMountPendant };
+    }
+
+    /// <summary>
+    /// The mount lease's pendant is the ridden animal itself (CartRemouldTable 1500400 _iPendantId 54001, the Ranger's
+    /// Demonic Wolf): while that lease is ridden it is sent hidden (PendantData.isHide -> LC_Pendant_Object
+    /// SetServerHideState), otherwise the following wolf and the mount were both drawn.
+    /// </summary>
+    private static bool MountPendantHidden(GameSession s) => s.CareerMountPendant != 0
+        && s.CareerSpecial?.MountsSlot is { CartRemouldCfg: > 0 } slot && MountService.Rider(s) == slot.CartRemouldCfg;
+
+    private int MountPendant(DBCareerSpecial info) => Row(info.MountsSlot?.CartRemouldCfg ?? 0) is { } row ? (int)GameData.Int(row, "_iPendantId") : 0;
+
+    /// <summary>MountService.Changed (ride / dismount): re-send 31015 when the mount pendant's hide state flips.</summary>
+    private async Task RiderChangedAsync(GameSession s)
+    {
+        if (s.Role == null || s.CareerMountPendant == 0 || !s.CareerPendants.Contains(s.CareerMountPendant)) return;
+        bool hide = MountPendantHidden(s);
+        if (hide == s.CareerMountPendantHidden) return;
+        s.CareerMountPendantHidden = hide;
+        await PendantsAsync(s, s.CareerPendants);
     }
 
     // ------------------------------------------------------------------ load / 5002
@@ -69,6 +93,7 @@ public sealed class CareerSpecialService
         if (Repair(s, info)) roles.SaveCareerSpecial(s.Role.Id, info.ToByteArray());
         s.CareerSpecial = info;
         s.CareerPendants = Pendants(info);
+        s.CareerMountPendant = MountPendant(info);
     }
 
     /// <summary>5002: the equipment window reads SpecialPropData.pendantSlot/mountsSlot unguarded, so it always goes out.</summary>
@@ -205,6 +230,7 @@ public sealed class CareerSpecialService
         {
             s.CareerSpecial = next;
             s.CareerPendants = Pendants(next);
+            s.CareerMountPendant = MountPendant(next);
             if (nextMounts != null) s.Mounts = nextMounts;
         });
     }
@@ -225,7 +251,10 @@ public sealed class CareerSpecialService
     private async Task PendantsAsync(GameSession s, int[] shown)
     {
         var packet = new PendantUpdate { EntityID = s.Role!.Id };
-        foreach (int pendant in s.CareerPendants) packet.PendantInfo[pendant] = new PendantData { PendantId = pendant, Piles = 1 };
+        bool hide = MountPendantHidden(s);
+        s.CareerMountPendantHidden = hide;
+        foreach (int pendant in s.CareerPendants)
+            packet.PendantInfo[pendant] = new PendantData { PendantId = pendant, Piles = 1, IsHide = hide && pendant == s.CareerMountPendant };
         foreach (int gone in shown.Except(s.CareerPendants)) packet.PendantInfo[gone] = new PendantData { PendantId = gone, Piles = 1, IsHide = true };
         await s.SendGameAsync(WorldEffectsService.Pendant, packet);
         if (!s.Owners!.AllowsPresentation(s)) return;

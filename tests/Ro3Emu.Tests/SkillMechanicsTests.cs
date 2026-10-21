@@ -60,6 +60,10 @@ public sealed partial class SkillCombatTests
             if (m.AtStacks is { } st)
                 foreach (int b in st.Grants.Append(st.Counter))
                     if (data.Row("BuffConfig", b) == null) problems.Add($"{m.Group} {m.Name}: stackGrant buff {b} missing");
+            if (m.DispatchDistance != null)
+                foreach (var r in skills.Values.Where(r => GameData.Int(r, "_iSkillID") == m.Group && (m.Mode == 0 || GameData.Int(r, "_iMode") == m.Mode)))
+                    foreach (var id in r.GetProperty("_kLogicData").EnumerateArray())
+                        if (data.Row("SkillConfig", id.GetInt64()) == null) problems.Add($"{m.Group} {m.Name}: dispatch row {id} missing");
         }
         Assert.True(problems.Count == 0, string.Join("\n", problems));
     }

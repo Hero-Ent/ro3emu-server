@@ -20,6 +20,7 @@ public sealed partial class CombatService
         buffs.Expired.Add(BuffExpiredAsync);
         TakenAsync.Add(HitTakenTriggersAsync);
         DealtAsync.Add(DamageDealtTriggersAsync);
+        WireStealth();
     }
 
     private bool TriggerReady(long holder, SkillMechanics.BuffTrigger trigger)
@@ -96,16 +97,39 @@ public sealed partial class CombatService
         // A skill's own chance to release another on each enemy it hits (Dragon Breath "«50»% Chance to Burn").
         if (SkillMechanics.For(row) is { OnHitSkill: int onHit } mechanic && (mechanic.OnHitChance >= 10000 || Rolls.Proc(10000) < mechanic.OnHitChance))
             await CastTriggeredAsync(holder, onHit, target, target.Pos);
+        // Double Attack (15002): "When a Dagger is equipped, each Basic Attack has a «1..10»% Chance to deal «1» Extra hits
+        // of ... PATK * «50»% (this damage is not considered a Normal Attack)". The chance is BuffConfig group 15002 at the
+        // learned level (_kLogicData 100..1000 bp; SpecialEffect 16530012 raises "the trigger Chance of [Double Attack]"
+        // through that buff); the hit is row 1511501 (ThiefAttack2, P1 50%), released as an extra skill so the client
+        // plays its double slash beside the basic attack. Nothing in the client switches the basic attack to it.
+        if (GameData.Int(row, "_iIsNormalAtk") == 1 && target.Hp > 0 && holder.Progress is { } progress
+            && skills.Level(progress, DoubleAttackGroup) is var doubleLevel and > 0 && WieldsWeapon(holder, DaggerSubType)
+            && Rolls.Proc(10000) < DoubleAttackChanceBp(doubleLevel))
+            await CastTriggeredAsync(holder, DoubleAttackRow, target, target.Pos, extra: true);
     }
+
+    private const int DoubleAttackGroup = 15002, DoubleAttackRow = 1511501, DaggerSubType = 1;
+    private Dictionary<int, int>? _doubleAttackBp;
+
+    private int DoubleAttackChanceBp(int level) => (_doubleAttackBp ??= data.Table("BuffConfig").Values
+            .Where(r => GameData.Int(r, "_iBuffID") == DoubleAttackGroup)
+            .GroupBy(r => (int)GameData.Int(r, "_iLevel"))
+            .ToDictionary(g => g.Key, g => (int)Numbers(g.First(), "_kLogicData").FirstOrDefault()))
+        .GetValueOrDefault(level);
+
+    /// <summary>An equipped weapon (ItemConfig _iType 5) of that _iSubType (1 Dagger, 12 Katar).</summary>
+    private bool WieldsWeapon(GameSession s, int subType) => s.Items.Any(i => i.Grid > 0 && data.Row("ItemConfig", i.Entry) is { } item
+        && GameData.Int(item, "_iType") == 5 && GameData.Int(item, "_iSubType") == subType);
 
     /// <summary>The hit being reported to DealtAsync comes from a released (independent) cast: it must not release more.</summary>
     private bool _dealingIndependent;
 
-    /// <summary>An independent cast of <paramref name="rowId"/> by <paramref name="caster"/> at an enemy/point (no cost, no cooldown).</summary>
-    private async Task CastTriggeredAsync(GameSession caster, int rowId, MonsterUnit? target, Vec3 point)
+    /// <summary>An independent cast of <paramref name="rowId"/> by <paramref name="caster"/> at an enemy/point (no cost, no cooldown);
+    /// <paramref name="extra"/> plays it as an extra timeline (31121) beside whatever the caster is doing.</summary>
+    private async Task CastTriggeredAsync(GameSession caster, int rowId, MonsterUnit? target, Vec3 point, bool extra = false)
     {
         if (caster.Role == null || data.Row("SkillConfig", rowId) is not { } row) return;
-        await StartCastAsync(caster, row, new CastSkillReq { SkillId = rowId, TargetId = target?.Uid ?? 0, TargetPos = point.Clone(), Face = caster.Face },
-            ++_sessionIds, independent: true);
+        await StartCastAsync(caster, row, new CastSkillReq { SkillId = rowId, TargetId = target?.Uid ?? 0, TargetPos = point.Clone(), Face = caster.Face,
+            IsExtraSkill = extra }, ++_sessionIds, independent: true);
     }
 }

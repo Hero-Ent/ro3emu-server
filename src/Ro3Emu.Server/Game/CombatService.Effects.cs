@@ -237,7 +237,31 @@ public sealed partial class CombatService
         }
         if (!CanApplyMoreEffects()) return; // player publication can yield before any monster hit is committed
         int bulletEffect = BulletEffect(GameData.Int(row, "_iScriptShow"));
-        if (bulletEffect > 0 && field == null)
+        if (bulletEffect > 0 && field == null && WolfRunMs(bulletEffect, 0) != null)
+        {
+            // A Wolf-track "bullet" (m_eBulletType 8) is the owner's Wolf pendant charging (verified in the client:
+            // LC_PerformEffect_Mgr.PlayPendantShow -> LC_Pendant_Manager.PendantPerform -> LC_Pendant_Wolf Perform). It is a
+            // SkillEffectDisplayNotify of type 5 (enum_DisplayEffectType.PendantShow); as a SkillFixTimeBulletNotify it
+            // drew nothing (Wolf has no bullet track), so unmounted Warg Strike showed no wolf running to the target.
+            bool highLevel = GameData.Int(row, "_iSkillEffectLevel") > 0;
+            int run = 0;
+            foreach (var target in targets)
+            {
+                await SendSkillEffectAsync(s, new SkillEffectDisplayNotify
+                {
+                    SourceId = s.Role.Id, MasterId = s.Role.Id, TargetId = target.Uid, TargetPos = target.Pos.Clone(),
+                    EffectId = bulletEffect, EffectType = 5, SkillId = (int)GameData.Int(row, "_iID"),
+                }, highLevel);
+                run = Math.Max(run, WolfRunMs(bulletEffect, Distance(s.Position, target.Pos)) ?? 0);
+            }
+            // The damage lands when the wolf reaches the target (inferred from m_kBulletWolf's speed/time).
+            if (run > 50 && targets.Count > 0)
+            {
+                await Task.Delay(Math.Min(run, 1000));
+                if (!CanApplyMoreEffects()) return;
+            }
+        }
+        else if (bulletEffect > 0 && field == null)
         {
             float maxDist = targets.Select(t => Distance(action.Origin, t.Pos))
                 .Concat(playerTargets.Select(p => Distance(action.Origin, p.Position)))

@@ -31,7 +31,9 @@ public static class SkillMechanics
     /// _iBuffID groups removed from the recipients ("Removes the [Poisoned] status") and <see cref="ResetCooldown"/> the
     /// skill groups whose cooldown the cast ends ("resetting the Cooldown of [Warg Hunt]"); <see cref="ConsumePiles"/>
     /// spends one pile of the first of those buff groups the caster has when the cast starts (an Arm Cannon - Enhance
-    /// shot uses one of Firepower Loaded's «3» attacks).
+    /// shot uses one of Firepower Loaded's «3» attacks); <see cref="DispatchDistance"/> releases the row's _kLogicData[0]
+    /// (near) or [1] (farther than that many metres) at the locked target as an extra cast (Warg Hunt's melee / ranged
+    /// rows, which carry the wolves, the hits and the dash).
     /// </summary>
     public sealed record Mechanic(
         int Group,
@@ -75,7 +77,8 @@ public static class SkillMechanics
         IReadOnlyList<int>? ResetCooldown = null,
         float DashMinDistance = 0,
         StackGrant? AtStacks = null,
-        IReadOnlyList<int>? ConsumePiles = null);
+        IReadOnlyList<int>? ConsumePiles = null,
+        float? DispatchDistance = null);
 
     /// <summary>
     /// The row's _kBuff1 holds a counter buff and the buff it leads to (Vulcan Arm: Firepower Ready 1631301, max 15, and
@@ -304,7 +307,8 @@ public static class SkillMechanics
                     sgr.GetProperty("grants").EnumerateArray().Select(v => v.GetInt32()).ToList(),
                     sgr.TryGetProperty("piles", out var sgp) ? sgp.GetInt32() : 1)
                 : null,
-            e.TryGetProperty("consumePiles", out var cp) ? cp.EnumerateArray().Select(v => v.GetInt32()).ToList() : null);
+            e.TryGetProperty("consumePiles", out var cp) ? cp.EnumerateArray().Select(v => v.GetInt32()).ToList() : null,
+            e.TryGetProperty("dispatch", out var dsp) ? dsp.GetProperty("distance").GetSingle() : null);
     }
 
     private static List<int> Ints(JsonElement e, string block, string key) =>

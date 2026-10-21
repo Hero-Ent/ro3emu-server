@@ -17,8 +17,6 @@ public sealed class ActiveSkillCast
     public required CastSkillReq Request { get; init; }
     public required JsonElement Row { get; init; }
     public required Vec3 Origin { get; set; }
-    /// <summary>Accepted while the caster still walked (WalkSlack): its stop right after is where it cast from.</summary>
-    public bool StartedWalking { get; set; }
     public required long StartMs { get; init; }
     public required int ChantMs { get; init; }
     public required int ActionMs { get; init; }
@@ -85,9 +83,17 @@ public sealed partial class CombatService
         {
             int group = (int)GameData.Int(row!.Value, "_iSkillID"), mode = (int)GameData.Int(row.Value, "_iMode");
             if (Math.Max(s.SkillCds.GetValueOrDefault(group), s.SkillModeCds.GetValueOrDefault((group, mode))) > Now) error = ErrorCodes.SkillCooldown;
-            // Preserve the established cooldown refusal for a repeated cast, including during its action tail.
-            else if (s.SkillCast is { Cancelled: false } active && Now < active.StartMs + active.ChantMs + active.ActionMs
-                && GameData.Int(row.Value, "_bCancelCast") == 0) error = ErrorCodes.SkillBusy;
+            // The running skill's _iInterruptedType decides whether a new request may cut it (LC_Skill_RunTimeContext
+            // GetSkillCanInterrupted); otherwise 3005, a quiet tip the client throttles. _bCancelCast is only the
+            // indicator's cancel button: reading it let held/spammed basic attacks cancel each swing before its hit.
+            else if (s.SkillCast is { Cancelled: false } active && InterruptibleAt(active, req.SkillId) is var free && free > Now)
+            {
+                // A press during the running skill is held and released when the skill allows it (the client keeps the
+                // request pending up to MaxCacheSkillTime 2 s): a held key or fast clicks chain the casts back to back
+                // instead of being refused or cutting each other before the hit.
+                if (free - Now <= MaxQueuedCastMs) { QueueCast(s, request, free - Now); return; }
+                error = ErrorCodes.SkillBusy;
+            }
             else error = ValidateTarget(s, row.Value, req, origin, owned == null ? WalkSlack(s) : 0);
         }
         var costs = row is { } value ? ResolveCosts(s, value) : new CastCosts();
@@ -112,6 +118,9 @@ public sealed partial class CombatService
         }
         if (lease?.Cancelled == true || !ReferenceEquals(s.Attachment, lease) ||
             s.SceneGeneration != scene || s.WorldScene != worldScene || s.SceneLoading) return;
+        // A cast whose action already ended only frees the slot: its lingering ticks (Magnus Exorcismus) keep going and
+        // no interrupt (which clears its effects on the client) is sent. One still running is cut by this new cast.
+        if (s.SkillCast is { } running && Now >= running.StartMs + running.ChantMs + running.ActionMs) s.SkillCast = null;
         await CancelCastAsync(s, SkillInterruptedInfo.Types.SkillInterruptType.Skill);
         eventAttacks.Remove(s);
         await PayCostsAsync(s, costs);
@@ -411,7 +420,7 @@ public sealed partial class CombatService
         var action = new ActiveSkillCast
         {
             Id = id, OwnerId = s.Role!.Id, WorldScene = s.WorldScene, SceneGeneration = s.SceneGeneration,
-            Attachment = s.Attachment, Request = req, Row = row, Origin = origin, StartedWalking = actor == null && s.Walking,
+            Attachment = s.Attachment, Request = req, Row = row, Origin = origin,
             StartMs = Now, ChantMs = (int)Math.Max(0, GameData.Int(row, "_iChantFix") + GameData.Int(row, "_iChantVar")), ActionMs = SkillMs(s, row), Operator = actor,
             Independent = independent,
         };
@@ -481,6 +490,16 @@ public sealed partial class CombatService
             if (Rolls.Proc(10000) < chance) await buffs.AddAsync(s, buff, ms, role.Id);
         foreach (int group in mechanic.ConsumePiles ?? [])
             if (await buffs.ConsumeBuffPilesAsync(s, group, 1)) break;
+        // Warg Hunt: "If you are more than «5»m from the target, you also dash in front of it" - its _kLogicData names
+        // the near (13329) and far (13330) rows, whose shows hold the three wolves, the hits and the dash movement.
+        if (mechanic.DispatchDistance is float near && FindMonster(s.WorldScene, action.Request.TargetId) is { } prey)
+        {
+            var pair = Numbers(action.Row, "_kLogicData");
+            int pick = pair.Length >= 2 ? (int)pair[Distance(s.Position, prey.Pos) > near ? 1 : 0] : pair.Length == 1 ? (int)pair[0] : 0;
+            if (pick > 0 && data.Row("SkillConfig", pick) is { } sub)
+                await StartCastAsync(s, sub, new CastSkillReq { SkillId = pick, TargetId = prey.Uid, TargetPos = prey.Pos.Clone(), Face = s.Face, IsExtraSkill = true },
+                    ++_sessionIds, independent: true);
+        }
         // A fixed row, or the named group at the cast's own level (Auto Counter lv3 releases the lv3 counter).
         int? followId = mechanic.FollowUpSkill
             ?? (mechanic.FollowUpGroup is int fg ? FollowUpRow(fg, (int)GameData.Int(action.Row, "_iLevel")) : null);
@@ -585,6 +604,14 @@ public sealed partial class CombatService
 
     public async Task InterruptAsync(GameSession s, SkillInterruptReq? req = null)
     {
+        // Releasing a key whose request is still pending sends 31124 for that skill (UI_Sys_Main_PlaySkillWidgetCtrl):
+        // it withdraws the held request, not the skill already running.
+        if (req is { NxtSkill: null } && req.InterruptSkillId != 0 && _queuedCasts.TryGetValue(s, out var queued)
+            && queued.Request.SkillId == req.InterruptSkillId && _queuedCasts.TryRemove(new(s, queued)))
+        {
+            await s.SendGameAsync(SkillInterrupt, new SkillInterruptResp { IsInterruptSucc = true });
+            return;
+        }
         // High-Energy Impact: "tap the skill again or wait until the Flying duration ends to attack below" (inferred:
         // the early tap arrives as the player's own interrupt). The slam lands now, where the caster is, instead of
         // cancelling the flight; the scheduled landing then finds the cast finished.
@@ -611,6 +638,45 @@ public sealed partial class CombatService
         if (interrupted && req?.NxtSkill is { } next) await CastAsync(s, next);
     }
 
+    /// <summary>The longest wait a press is held for (PublicParamConfig MaxCacheSkillTime is 2 s on the client).</summary>
+    private const int MaxQueuedCastMs = 2000;
+
+    private sealed record QueuedCast(CastSkillReq Request, long Serial);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<GameSession, QueuedCast> _queuedCasts = new();
+    private long _queueSerial;
+
+    /// <summary>Holds the latest press and retries it when the running skill allows it (latest press wins).</summary>
+    private void QueueCast(GameSession s, CastSkillReq request, long delayMs)
+    {
+        var entry = new QueuedCast(request.Clone(), Interlocked.Increment(ref _queueSerial));
+        _queuedCasts[s] = entry;
+        ScheduleRuntime(s.WorldScene, TimeSpan.FromMilliseconds(Math.Max(1, delayMs)), async () =>
+        {
+            if (!_queuedCasts.TryRemove(new(s, entry))) return; // replaced, withdrawn or already cast
+            await CastAsync(s, entry.Request);
+        });
+    }
+
+    /// <summary>
+    /// When the running skill lets <paramref name="nextSkillId"/> cut it (LC_Skill_RunTimeContext.GetSkillCanInterrupted,
+    /// verified): _iInterruptedType 1 lets another skill in at once but not itself, 2 from the template's
+    /// m_fInterruptTime (mapped like an attack point; after the hit in 585 of 603 templates), and 0 / others only when
+    /// its action ends (inferred for the values the client does not handle).
+    /// </summary>
+    private long InterruptibleAt(ActiveSkillCast active, int nextSkillId)
+    {
+        long end = active.StartMs + active.ChantMs + active.ActionMs;
+        switch ((int)GameData.Int(active.Row, "_iInterruptedType"))
+        {
+            case 1: return nextSkillId != active.Request.SkillId ? active.StartMs : end;
+            case 2:
+                var template = data.SkillTemplate(GameData.Int(active.Row, "_iScriptShow"));
+                return template is { } t && t.TryGetProperty("m_fInterruptTime", out var v) && v.ValueKind == JsonValueKind.Number && v.GetDouble() > 0
+                    ? Math.Min(end, active.StartMs + ImpactOffset(template, v.GetDouble(), active.ChantMs, active.ActionMs)) : end;
+            default: return end;
+        }
+    }
+
     private async Task CancelCastAsync(GameSession s, SkillInterruptedInfo.Types.SkillInterruptType cause)
     {
         s.WorldState.ResurrectionCastId = 0;
@@ -629,16 +695,9 @@ public sealed partial class CombatService
         if (eventAttacks.TryGetValue(s, out var eventAttack)
             && MonsterService.Distance(eventAttack.StartX, eventAttack.StartZ, s.Position.X, s.Position.Z) > 1.5f) eventAttacks.Remove(s);
         if (s.Attack is { } a && MonsterService.Distance(a.StartX, a.StartZ, s.Position.X, s.Position.Z) > 0.1f) s.Attack = null;
-        if (s.SkillCast is not { } cast || Distance(cast.Origin, s.Position) <= 0.1f || GameData.Int(cast.Row, "_bMovement") != 0) return;
-        // The client casts on reaching range and stops 1 ms later (in-game 11.10): that first stop is the cast's real
-        // origin, within the distance the walk can have covered, not a move that interrupts it.
-        if (cast.StartedWalking && !s.Walking && Now - cast.StartMs <= 300
-            && Distance(cast.Origin, s.Position) <= s.Speed / 100f * 0.75f + 0.5f)
-        {
-            cast.Origin = s.Position.Clone();
-            cast.StartedWalking = false;
-            return;
-        }
-        loop.TrackRuntimeDetached("cast movement cancellation", () => CancelCastAsync(s, SkillInterruptedInfo.Types.SkillInterruptType.Move));
+        // A walk never interrupts a cast here (verified in the client): moving when a skill starts plays it on the move
+        // (LC_Skill_RunTimeContext skillBlockMove / PlayMoveCacheAnimName), and the client interrupts by movement itself
+        // only once the template's m_fInterruptTime_move has passed (canInterruptedByMove -> SkillInterruptServer),
+        // which arrives as 31124 (InterruptAsync). Cancelling on every walk packet dropped skills cast while walking.
     }
 }

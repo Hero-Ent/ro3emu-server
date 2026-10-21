@@ -11,6 +11,15 @@
     }
   },
   "skills": {
+    "15115": {
+      "name": "Double Attack (extra hit)",
+      "why": "Double Attack 15002: 'When a Dagger is equipped, each Basic Attack has a «1..10»% Chance to deal «1» Extra hits of Neutral melee Physical damage equal to PATK * «50»%'. Row 1511501 (ThiefAttack2, P1 5000 = 50%) is released by the server on a dagger basic-attack hit (CombatService.Triggers); its template 15115 has m_kAtkPoints [0.5, 0] with the slash effects at 0 / 0.083 s, so the hit uses point 1 (0 s) right with the slash instead of ~0.96 s later (inferred).",
+      "hits": {
+        "points": [
+          1
+        ]
+      }
+    },
     "15102": {
       "name": "Sonic Blow",
       "why": "'If the target's HP is at or below «50»%, increases the percentage damage multiplier of [Sonic Blow] by «20»%': _kLogicData [2000, 101, 5000] (HP / Max HP at 5000 bp) and P1 [8500, 10200, ...] where 10200 = 85% x 1.2, so branch 1 below half HP.",

@@ -12,6 +12,48 @@
     }
   },
   "skills": {
+    "13330": {
+      "name": "Warg Hunt (Ranged)",
+      "why": "The far branch of Warg Hunt ('more than «5»m from the target, you also dash in front of it'): show 13330 carries the displacement 1333014, so the rider dashes to 1 m in front of the target (inferred stop) before its hits (_kShowDmg [3], mode 1 [5]).",
+      "dash": {
+        "stop": 1
+      }
+    },
+    "13312:1": {
+      "name": "Warg Strike (mounted Warg Charge)",
+      "why": "Mode 1 (needs riding the wolf 1500400; selected by its Mount Buff 1331001 type 15): 'Commands the Demonic Wolf to Charge the designated ST target within «15» meters'; show 13312 carries the displacement 1331203 (94 ms), so the ridden wolf rushes to 1 m in front of the target (inferred stop) before the hit. Swift Warg 13326: 'Casting [Warg Charge] or [Warg Hunt] resets this skill's Cooldown'.",
+      "dash": {
+        "stop": 1
+      },
+      "resetCooldown": [
+        13326
+      ]
+    },
+    "13320:1": {
+      "name": "Myriad Stars Chase the Moon (talent mode 1)",
+      "why": "Mode-1 rows 1332011-1332015: 'continuously dealing PATK * «1600..2000»%' = 10 x _kDamageParam1[0] (160..200%); template 133201 has 12 attack points (launch at 0, then 0.5-2.5 s): ten hits at points 1-10 on the 18 x 4 m strip from where the arrow was fired. The group entry's 7 hits under-hit this mode.",
+      "hits": {
+        "points": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      },
+      "anchor": "origin",
+      "shape": {
+        "rect": [
+          18,
+          4
+        ]
+      }
+    },
     "13305": {
       "name": "Focused Arrow Strike",
       "why": "'... dealing PATK * «56»% ... to the target and up to «5» enemies in a line within Attack Range' (range «18» m): the same piercing line as Sharp Shooting (13204, _kLogicData [3, 150]: 1.5 m wide, inferred for this family), 18 m from the caster toward the locked target, 1 + 5 targets (_iTargetMax is 1).",
@@ -33,14 +75,16 @@
     },
     "13323": {
       "name": "Warg Hunt",
-      "why": "'Commands «3» wolf followers to attack ... dealing «3» hits of Neutral melee Physical damage totaling Physical ATK*«110»%': P1 11000 is the total, but _kShowDmg is empty, so it showed as one number; split 3 like its melee/ranged rows 13329/13330 (_kShowDmg [3]). The dash when farther than «5» m goes to 1 m in front of the target (inferred stop); the melee/ranged row choice is not modelled.",
-      "dash": { "stop": 1, "minDistance": 5 },
+      "why": "'Commands «3» wolf followers to attack the designated ST target ... dealing «3» hits ... totaling Physical ATK*«110»%. If you are more than «5»m from the target, you also dash in front of it': the cast's own show 13323 is only the rider's animation. Its _kLogicData names the near row (13329 Warg Hunt (Melee)) and the far row (13330 Warg Hunt (Ranged)); their shows hold the three wolves (fx_skill_wughunt_01 x3), the hits and, for the far one, the dash (1333014). So the cast deals nothing itself and releases the near or far row by the distance (mode 1 rows carry the enhanced «5»-hit pair). Swift Warg 13326: 'Casting [Warg Charge] or [Warg Hunt] resets this skill's Cooldown'.",
       "hits": {
-        "points": [
-          0
-        ],
-        "split": 3
-      }
+        "none": true
+      },
+      "dispatch": {
+        "distance": 5
+      },
+      "resetCooldown": [
+        13326
+      ]
     },
     "13003": {
       "name": "Double Strafe",

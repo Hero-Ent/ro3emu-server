@@ -27,6 +27,7 @@ public sealed partial class BuffService
         p.EnergyCareer = 0;
         p.EnergyMounts = 0;
         await ReconcileEnergyAsync(p);
+        await MountBindBuffsAsync(p); // riding persists across logins (5012)
     }
 
     /// <summary>

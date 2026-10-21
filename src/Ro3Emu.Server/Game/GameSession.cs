@@ -306,6 +306,10 @@ public sealed class GameSession(PhonestChannel channel, TrafficLog traffic)
 
     /// <summary>The leased items' PendantConfig ids (EntityBase.pendantInfo), derived from <see cref="CareerSpecial"/>.</summary>
     public int[] CareerPendants { get; set; } = [];
+    /// <summary>The mount lease's pendant (the Ranger's Demonic Wolf 54001), hidden while that mount is ridden, and the
+    /// hide state last sent (CareerSpecialService).</summary>
+    public int CareerMountPendant { get; set; }
+    public bool CareerMountPendantHidden { get; set; }
     public Romsg.DBWardRobeInfo? Wardrobe { get; set; }
     public Romsg.DBTotemInfo? Totems { get; set; }
     public string TotemRefineEpoch { get; set; } = "";

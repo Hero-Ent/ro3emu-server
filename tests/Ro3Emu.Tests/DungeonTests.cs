@@ -154,6 +154,9 @@ public sealed partial class DungeonTests : IAsyncLifetime
             // while the network Walk/Cast frames are still in transit.
             await Service<SceneService>().TeleportInMapAsync(Session(bot),
                 new MapPoint(actor.X + 1, actor.Y, actor.Z, actor.Face));
+            // An auto-attack swing still in flight would otherwise land the controlled HP=1 kill itself (a walk or
+            // teleport no longer interrupts a cast) and leave the cast below refused for a dead target.
+            await Service<CombatService>().InterruptAsync(Session(bot));
             // A revive can leave this actor returning home. Engage through the owner before the
             // controlled HP setup, so the next return-completion tick cannot restore full health.
             Service<MonsterService>().Engage(actor, Session(bot));
