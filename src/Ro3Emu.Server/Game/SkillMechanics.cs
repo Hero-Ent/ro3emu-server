@@ -23,6 +23,14 @@ public static class SkillMechanics
     /// </summary>
     public sealed record Hit(int? Point, double? Time, int Branch, int? Split, int? Ms = null, int? AfterPoint = null);
 
+    /// <summary>
+    /// One skill's entry. Besides the hit moments, anchor and shape: <see cref="Offset"/> moves the area centre that many
+    /// metres along the facing ("centered «1» meters in front of You"), <see cref="MatkPercent"/> adds MATK x n% to a
+    /// physical hit ("Physical ATK*«50»%+Magic ATK*«50»%"), <see cref="AtkFromMatk"/> ("stat": "matk") makes a physical
+    /// row scale with MATK ("Physical damage equal to MATK * «60»%"), and <see cref="Cleanse"/> lists the BuffConfig
+    /// _iBuffID groups removed from the recipients ("Removes the [Poisoned] status") and <see cref="ResetCooldown"/> the
+    /// skill groups whose cooldown the cast ends ("resetting the Cooldown of [Warg Hunt]").
+    /// </summary>
     public sealed record Mechanic(
         int Group,
         int Mode,
@@ -55,7 +63,28 @@ public static class SkillMechanics
         bool DashToPoint,
         int? OnHitSkill,
         int OnHitChance,
-        bool ExcludeTarget);
+        bool ExcludeTarget,
+        Bounce? Chain = null,
+        BranchCondition? BranchIf = null,
+        float Offset = 0,
+        int MatkPercent = 0,
+        IReadOnlyList<int>? Cleanse = null,
+        bool AtkFromMatk = false,
+        IReadOnlyList<int>? ResetCooldown = null);
+
+    /// <summary>
+    /// After the main hit, the attack jumps <see cref="Count"/> times to a random other enemy within
+    /// <see cref="Radius"/> m of the last one hit (Envenomed Blade "Then Launches a poisoned blade at a random enemy
+    /// within «3» meters of the target ... up to «3» times"), each jump the same damage, <see cref="DelayMs"/> apart.
+    /// </summary>
+    public sealed record Bounce(float Radius, int Count, int DelayMs);
+
+    /// <summary>
+    /// Use <see cref="Branch"/> instead of the hit's own when the target's HP is at or below
+    /// <see cref="TargetHpBelowBp"/> of its max (Sonic Blow "at or below «50»%"), or while the caster has a buff of
+    /// group <see cref="CasterBuffGroup"/> (Steal "If cast while [Hiding]"); <see cref="Consume"/> removes that buff.
+    /// </summary>
+    public sealed record BranchCondition(int Branch, int TargetHpBelowBp, int? CasterBuffGroup, bool Consume);
 
     /// <summary>
     /// A buff that releases a skill (buffTriggers): on = "expire" (it ran out: Venom Splasher's detonation on the holder),
@@ -240,7 +269,22 @@ public static class SkillMechanics
             e.TryGetProperty("dash", out var dash2) && dash2.TryGetProperty("to", out var dt) && dt.GetString() == "point",
             e.TryGetProperty("onHitCast", out var ohc) ? ohc.GetProperty("skill").GetInt32() : null,
             e.TryGetProperty("onHitCast", out var ohc2) && ohc2.TryGetProperty("chance", out var ohcc) ? ohcc.GetInt32() : 10000,
-            e.TryGetProperty("excludeTarget", out var ex) && ex.ValueKind == JsonValueKind.True);
+            e.TryGetProperty("excludeTarget", out var ex) && ex.ValueKind == JsonValueKind.True,
+            e.TryGetProperty("bounce", out var bounce)
+                ? new Bounce(bounce.GetProperty("radius").GetSingle(), bounce.GetProperty("count").GetInt32(),
+                    bounce.TryGetProperty("delayMs", out var bd) ? bd.GetInt32() : 0)
+                : null,
+            e.TryGetProperty("branchIf", out var bif)
+                ? new BranchCondition(bif.GetProperty("branch").GetInt32(),
+                    bif.TryGetProperty("targetHpBelowBp", out var hb) ? hb.GetInt32() : 0,
+                    bif.TryGetProperty("casterBuffGroup", out var cbg) ? cbg.GetInt32() : null,
+                    bif.TryGetProperty("consume", out var bc) && bc.ValueKind == JsonValueKind.True)
+                : null,
+            e.TryGetProperty("offset", out var off) ? off.GetSingle() : 0,
+            e.TryGetProperty("matkPercent", out var mp) ? mp.GetInt32() : 0,
+            e.TryGetProperty("cleanse", out var cl) ? cl.EnumerateArray().Select(v => v.GetInt32()).ToList() : null,
+            e.TryGetProperty("stat", out var st) && (st.GetString() is "matk" ? true : throw new InvalidDataException($"{file}: skill {group} stat '{st.GetString()}'")),
+            e.TryGetProperty("resetCooldown", out var rc) ? rc.EnumerateArray().Select(v => v.GetInt32()).ToList() : null);
     }
 
     private static List<int> Ints(JsonElement e, string block, string key) =>

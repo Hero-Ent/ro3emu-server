@@ -43,10 +43,29 @@ These "Needs engine work" items now run. The reports above still describe them a
 - **Chance to cast on hit** (`onHitCast`): Dragon Breath (Fire) has a 50% chance to Burn (1138201) each enemy it hits.
 - **Periodic zones** (`hits.everyMs` + `afterPoint`, ticks counted from the attack point where the zone appears):
   Magnus Exorcismus (8 x 0.5 s), Sanctuary (7 x 0.6 s; heals allies, damages only Undead/Demon), Gravitation Field
-  (8 waves, 6 m), Ember Zone (8 x 0.5 s).
+  (8 waves on the 5 m circle the client draws; the text says 6 m), Ember Zone (8 x 0.5 s).
 - **Bonus branch vs race/element** (`branchVs`): Soul Strike (+50% vs Undead), Magnus (+30% vs Undead/Demon/Shadow).
   Monster race ids, read from NPCConfig (inferred): 3 = Demon (Baphomet, Deviruchi), 5 = Undead (Ghoul, Mummy, Drake).
   Element ids: 8 = Shadow, 10 = Undead.
 
-Still open: Death Bound (it reflects a % of the damage taken, and only from players), and the other engine items
-listed in each report (chains/bounces, conditional branches, ASPD scaling, stat overrides, stacks).
+Still open after phase 2: Death Bound (it reflects a % of the damage taken, and only from players).
+
+## Resolved in phase 3
+
+- **Attribute scaling** (`_kDamageParamExtra`, `CombatService.StatScale`, applied to every player skill and heal):
+  `[bp, 115, 10000, cap]` = "(1 + ASPD x n%)" up to the 500% ASPD cap (227 rows: Rolling Cutter, Blood Cross, Heavy
+  Cannon Shot...), and `[1, bp, attr, ...]` = n% per base level (attr 0, Heal) or per point of STR/AGI/VIT/INT/DEX/LUK
+  (the "Resonance" texts; Blitz Beat "Every «20» AGI ... «1»%" = 5 bp per AGI). Other layouts are ignored.
+- **Bounce** (`bounce`): Envenomed Blade jumps 3 times to random enemies within 3 m of the last one hit.
+- **Conditional branch** (`branchIf`): Sonic Blow +20% at or below 50% HP; Steal uses its 140% branch from Hiding.
+- **Area offset** (`offset`): Shadow Break's circle is 1 m in front of the caster.
+- **Mixed or swapped stats** (`matkPercent`, `stat: "matk"`): Soul Destroyer / Advanced Soul Destroyer add MATK x 50% /
+  85%; Magic Crasher's physical hit scales with MATK.
+- **Cleanse** (`cleanse`): Antidote removes Poisoned (group 9030).
+- **Cooldown reset** (`resetCooldown`): Warg Bite resets Warg Hunt.
+- Archer: Fear Breeze (30% piercing arrows on hit, `buffTriggers`), Focused Arrow Strike (18 m line, 1 + 5 targets),
+  Warg Hunt shows its 3 hits.
+
+Still open: blade stacks (Cross Ripper Slasher), poison DoT rows, Reading Spellbook extra casts, per-hit elements and
+pulls (Tetra Vortex), dispatch by distance (Warg Hunt melee/ranged), proc tables for talents that cannot be learned,
+and the other items marked open in each report.

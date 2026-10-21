@@ -69,7 +69,7 @@ public sealed partial class CombatService
             var targetRole = target.Role!;
             long sceneId = source.WorldScene;
             var attack = character.Stats(source); var defend = character.Stats(target);
-            var a = new Fighter(attack[103], attack[104], attack[109], attack[111], source.Progress!.Level, 1);
+            var a = new Fighter(attack[103], attack[104], attack[109], attack[111], source.Progress!.Level, 1) { Stats = attack };
             var b = new Fighter(0, 0, 0, 0, target.Progress!.Level, 1)
             { Def = defend[105], Mdef = defend[106], Flee = defend[110], ResCri = defend[112] };
             var (damage, result) = Damage(a, b, row);

@@ -51,9 +51,10 @@ public sealed partial class CombatService
     /// One damage moment of a cast. Ordinary casts have one (null = defaults); a spin (Axe Tornado) has several and a
     /// leap (High-Energy Impact) lands later. Branch selects _kDamageParam1/_kShowDmg, Split overrides the segments,
     /// First owns the one-time cast work (handlers, fields, caster displacement), SelfEffects the _kBuff1 grant and
-    /// AtCaster centres a ground shape on where the caster is now.
+    /// AtCaster centres a ground shape on where the caster is now. Forced hits exactly that enemy (a bounce).
     /// </summary>
-    private sealed record Impact(int Branch, int? Split, bool First, bool SelfEffects, bool AtCaster, bool NoDamage = false, bool Detached = false);
+    private sealed record Impact(int Branch, int? Split, bool First, bool SelfEffects, bool AtCaster, bool NoDamage = false, bool Detached = false,
+        MonsterUnit? Forced = null);
 
     private async Task ResolveCastAsync(GameSession s, ActiveSkillCast action, Impact? impact = null)
     {
@@ -91,6 +92,35 @@ public sealed partial class CombatService
         }
         var center = impact?.AtCaster == true ? s.Position.Clone() : action.Request.TargetPos ?? action.Origin;
         await ApplyEffectsAsync(s, action, center, impact: impact);
+        if (impact is not { First: false } && SkillMechanics.For(row) is { ResetCooldown: { Count: > 0 } resets } && CurrentCastMap(s, action))
+            await ResetCooldownsAsync(s, resets);
+        if (impact is not { First: false } && SkillMechanics.For(row) is { Chain: { } chain })
+            await BounceAsync(s, action, chain, impact?.Branch ?? 0);
+    }
+
+    /// <summary>The main hit jumps on to random enemies near the last one hit (SkillMechanics bounce).</summary>
+    private async Task BounceAsync(GameSession s, ActiveSkillCast action, SkillMechanics.Bounce chain, int branch)
+    {
+        var row = action.Row;
+        var last = FindMonster(s.WorldScene, action.Request.TargetId);
+        if (last == null) return;
+        var struck = new HashSet<long> { last.Uid };
+        var at = last.Pos.Clone();
+        for (int jump = 0; jump < chain.Count; jump++)
+        {
+            if (chain.DelayMs > 0) await Task.Delay(chain.DelayMs);
+            if (!CurrentCastMap(s, action) || s.Dead) return;
+            var from = at;
+            var candidates = world.Map(s.WorldScene).Units.OfType<MonsterUnit>()
+                .Where(m => m.Hp > 0 && !struck.Contains(m.Uid) && CanHitMonster(s, m) && Relation(row, false, race: m.Template.Race)
+                    && Distance(from, m.Pos) <= chain.Radius + 0.1f)
+                .OrderBy(m => m.Uid).ToList();
+            if (candidates.Count == 0) return;
+            var next = candidates[Rolls.Proc(candidates.Count)];
+            struck.Add(next.Uid);
+            at = next.Pos.Clone();
+            await ApplyEffectsAsync(s, action, at, impact: new Impact(branch, null, First: false, SelfEffects: false, AtCaster: false, Detached: true, Forced: next));
+        }
     }
 
     private List<MonsterUnit> SelectEnemies(GameSession s, ActiveSkillCast action, Vec3 center, float? radiusOverride = null, bool field = false, int? maxOverride = null)
@@ -126,6 +156,12 @@ public sealed partial class CombatService
                 _ => center,
             };
         if (mechanic?.MaxTargets is int cap) max = cap;
+        // "within a «5»-meter radius centered «1» meters in front of You" (Shadow Break): the anchor moved along the facing.
+        if (mechanic is { Offset: not 0 } shifted)
+        {
+            double facing = action.Request.Face * Math.PI / 180;
+            center = new Vec3 { X = center.X + (float)(Math.Sin(facing) * shifted.Offset), Y = center.Y, Z = center.Z + (float)(Math.Cos(facing) * shifted.Offset) };
+        }
         var range = Numbers(row, "_kRange");
         float radius = radiusOverride ?? mechanic?.Circle ?? mechanic?.Fan?.Radius ?? (float)(range.FirstOrDefault(300) / 100);
         float height = GameData.Int(row, "_iAreaHeightRange") / 100f;
@@ -182,8 +218,11 @@ public sealed partial class CombatService
         // Heal's enemy branch is [1] for damage, and so is its segment count; a spin's final hit is branch [1] too.
         int branch = impact?.Branch ?? (script == "Heal" ? 1 : 0);
         int split = impact?.Split ?? HitSplit(row, branch);
-        var targets = SelectEnemies(s, action, center, field?.Trap == true ? field.Radius : null, field: field != null, maxOverride: field?.MaxTargets);
-        var playerTargets = GameData.Int(row, "_iRangeType") == 2 ? EventAreaTargets(s, row)
+        var targets = impact?.Forced is { } forced
+            ? (forced.Hp > 0 && !forced.Dead && CanHitMonster(s, forced) ? [forced] : new List<MonsterUnit>())
+            : SelectEnemies(s, action, center, field?.Trap == true ? field.Radius : null, field: field != null, maxOverride: field?.MaxTargets);
+        var playerTargets = impact?.Forced != null ? []
+            : GameData.Int(row, "_iRangeType") == 2 ? EventAreaTargets(s, row)
             : EventTarget(s, action.Request.TargetId) is { } eventTarget
                 && PlayerDistance(s, eventTarget) <= Range(row) + 1.5f ? new[] { eventTarget } : [];
         if (playerTargets.Length > 0)
@@ -264,7 +303,7 @@ public sealed partial class CombatService
             }
         }
         var stats = character.Stats(s);
-        var attacker = new Fighter(stats[103], stats[104], stats[109], stats[111], s.Progress!.Level, 1);
+        var attacker = new Fighter(stats[103], stats[104], stats[109], stats[111], s.Progress!.Level, 1) { Stats = stats };
         var hit = new SkillHitInfo
         {
             SrcID = field?.Uid ?? action.SourceId, SkillId = action.Request.SkillId, SessionId = action.Id,
@@ -277,6 +316,7 @@ public sealed partial class CombatService
         var processed = new List<MonsterUnit>();
         bool damage = impact?.NoDamage != true && (Numbers(row, "_kDamageParam1").Any(v => v > 0) || Numbers(row, "_kDamageParam2").Any(v => v > 0));
         var mechanic = field == null ? SkillMechanics.For(row) : null;
+        bool casterCondition = mechanic?.BranchIf is { CasterBuffGroup: int needGroup } && HasBuffGroup(s, needGroup);
         try
         {
         foreach (var target in targets)
@@ -291,6 +331,10 @@ public sealed partial class CombatService
                 // A bonus branch against named races/elements (Soul Strike +50% vs Undead, Magnus vs Undead/Demon).
                 int targetBranch = mechanic is { } bm && (bm.BonusRaces.Contains(target.Template.Race) || bm.BonusElements.Contains(target.Template.Element))
                     ? bm.BonusBranch : branch;
+                // A conditional branch: the target's HP low enough (Sonic Blow) or a caster buff (Steal from Hiding).
+                if (mechanic?.BranchIf is { } cond && (casterCondition
+                        || cond.TargetHpBelowBp > 0 && target.Hp * 10000 <= target.Template.MaxHp * cond.TargetHpBelowBp))
+                    targetBranch = cond.Branch;
                 var (amount, result) = Damage(attacker, defender, row, targetBranch);
                 if (amount > 0)
                 {
@@ -341,7 +385,7 @@ public sealed partial class CombatService
                     if (CanApplyMoreEffects() && RollBuff(tuple, out int id, out int duration)) await buffs.AddAsync(recipient, id, duration, castingRole.Id);
             if (friendly && damage)
             {
-                double multiplier = Numbers(row, "_kDamageParam1").FirstOrDefault(), flat = Numbers(row, "_kDamageParam2").FirstOrDefault();
+                double multiplier = Numbers(row, "_kDamageParam1").FirstOrDefault() * StatScale(row, id => stats[id], s.Progress!.Level), flat = Numbers(row, "_kDamageParam2").FirstOrDefault();
                 // Heal's friendly branch is P1[0]/P2[0]; its enemy branch is [1] (description + select race mask).
                 long amount = (long)Math.Max(0, Math.Round(stats[104] * multiplier / 10000 + flat));
                 foreach (var modifier in ExtraHeal) amount = modifier(s, amount);
@@ -353,10 +397,11 @@ public sealed partial class CombatService
                 foreach (var handler in HealedAsync) await handler(s, actual);
             }
             // Healing Skills (14014) and Cleanse (11406) both use the script "Cleanse": "Removes [Silence] and [Blind]".
-            if (script is "Detoxify" or "HealingSkills" or "Cleanse")
+            // A mechanic "cleanse" names the BuffConfig _iBuffID groups itself (Antidote: Poisoned 9030).
+            if (mechanic?.Cleanse is { Count: > 0 } || script is "Detoxify" or "HealingSkills" or "Cleanse")
             {
                 // (inferred) cleanse exact described groups rather than removing every beneficial/hostile status.
-                int[] groups = script == "Detoxify" ? [9030] : [9023, 9025];
+                IReadOnlyList<int> groups = mechanic?.Cleanse is { Count: > 0 } named ? named : script == "Detoxify" ? [9030] : [9023, 9025];
                 foreach (var buff in recipient.Buffs.Where(b => data.Row("BuffConfig", b.ConfigId) is { } br && groups.Contains((int)GameData.Int(br, "_iBuffID"))).ToArray())
                     await buffs.RemoveAsync(recipient, buff);
             }
@@ -387,6 +432,9 @@ public sealed partial class CombatService
             if (target.Hp > 0 && CurrentCaster()) monsters.Engage(target, s);
         }
         if (processed.Count > 0 && CurrentCaster()) await FightingAsync(s);
+        if (casterCondition && mechanic?.BranchIf is { Consume: true, CasterBuffGroup: int spent } && processed.Count > 0 && CurrentCaster())
+            foreach (var buff in s.Buffs.Where(b => data.Row("BuffConfig", b.ConfigId) is { } br && GameData.Int(br, "_iBuffID") == spent).ToArray())
+                await buffs.RemoveAsync(s, buff);
         if (field != null) field.LastHits = damage ? processed.Count : 0;
         // "You then lose N% of your Max HP. This HP loss cannot be fatal." (Energy Release), once per cast.
         if (mechanic is { SelfHpLossPercent: > 0 } && impact is not { First: false } && CurrentCaster())

@@ -1,7 +1,46 @@
 {
   "version": 1,
   "about": "Archer line (Archer 3100, Hunter 3200, Sniper 3300, Ranger 3400): skill mechanics SkillConfig does not carry, read from each skill's own description and timeline (SkillMechanics.cs documents every field). The original server scripts are not in the client, so every entry is inferred; 'why' quotes the evidence. Entries are keyed by _iSkillID and therefore apply to every _iMode of the group; mode differences are noted per entry. Blitz Beat and Sharp Shooting are _iRangeType 1, whose target selection currently returns only the locked enemy before consulting these entries (see the archer findings).",
+  "buffTriggers": {
+    "group:13301": {
+      "name": "Fear Breeze -> piercing arrows",
+      "why": "Fear Breeze 13303: 'While the effect lasts, when a targeted bow skill hits, the target has a «30»% Chance to be struck by piercing arrows, taking «3» hits of Neutral ranged Physical damage totaling Physical ATK*«50»%'; buff 1330101-1330105 _kLogicData [3000] = 30% and row group 13304 (P1 5000, _kShowDmg [3]) is that strike, at the learned Fear Breeze level. Any damaging hit of the holder counts (inferred: the server cannot tell a bow skill from others here).",
+      "on": "damageDealt",
+      "group": 13304,
+      "levelFrom": 13303,
+      "chance": 3000
+    }
+  },
   "skills": {
+    "13305": {
+      "name": "Focused Arrow Strike",
+      "why": "'... dealing PATK * «56»% ... to the target and up to «5» enemies in a line within Attack Range' (range «18» m): the same piercing line as Sharp Shooting (13204, _kLogicData [3, 150]: 1.5 m wide, inferred for this family), 18 m from the caster toward the locked target, 1 + 5 targets (_iTargetMax is 1).",
+      "anchor": "caster",
+      "shape": {
+        "rect": [
+          18,
+          1.5
+        ]
+      },
+      "maxTargets": 6
+    },
+    "13325": {
+      "name": "Warg Bite",
+      "why": "'Commands the Demonic Wolf to bite the designated ST target ... dealing Physical ATK*«150»% ... and resetting the Cooldown of [Warg Hunt]': ends group 13323's cooldown.",
+      "resetCooldown": [
+        13323
+      ]
+    },
+    "13323": {
+      "name": "Warg Hunt",
+      "why": "'Commands «3» wolf followers to attack ... dealing «3» hits of Neutral melee Physical damage totaling Physical ATK*«110»%': P1 11000 is the total, but _kShowDmg is empty, so it showed as one number; split 3 like its melee/ranged rows 13329/13330 (_kShowDmg [3]). The dash when farther than «5» m is not modelled.",
+      "hits": {
+        "points": [
+          0
+        ],
+        "split": 3
+      }
+    },
     "13003": {
       "name": "Double Strafe",
       "why": "'Fires 2 Arrows simultaneously, dealing «2» hits of PATK * «100»% + «75» Neutral Ranged Physical DMG': the value is per hit (no 'totaling'), _kDamageParam1 10000 / _kDamageParam2 75 is one hit (lv1 '«2» hits of PATK * «55»% + «66»' = P1 5500, P2 66), so the cast deals two rolls of 100% + 75. The template has a single attack point (0.17 s) and the arrows fly together, so both hits land at point 0, each shown as one number.",

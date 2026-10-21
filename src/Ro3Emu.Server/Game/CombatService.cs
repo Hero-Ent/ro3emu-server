@@ -650,6 +650,35 @@ public sealed partial class CombatService : IGameTicker
         public long Mdef { get; init; }
         public long Flee { get; init; }
         public long ResCri { get; init; }
+        /// <summary>A player attacker's attributes (AttributeConfig ids), for the skill's _kDamageParamExtra scaling.</summary>
+        public StatSheet? Stats { get; init; }
+    }
+
+    /// <summary>
+    /// The skill ratio multiplier a player's attributes add through _kDamageParamExtra (inferred from the descriptions):
+    /// <list type="bullet">
+    /// <item>[bp, 115, 10000(, cap)]: "(«1»+ASPD*«0.5»%)" (Rolling Cutter [50, 115, 10000, 500]) / "For every «1»% ASPD,
+    /// this DMG increases by «0.3»%, up to @{1}% ASPD" (Blood Cross, cap 500 = the "Character ASPD (Max: 500%)"
+    /// limit). 115 is the character ASPD in percent (100 = base).</item>
+    /// <item>[1, bp, attr, ...] with attr 0-6: "Each Base Level increases ... by «0.1»%" (attr 0, Heal [1, 10, 0, 1]) and
+    /// "Luck/Vitality/DEX Resonance «0.1»%" (attr 6 LUK, 3 VIT, 5 DEX: [1, 10, 6, 1, 100]); read as bp per point of the
+    /// base level or attribute (the meaning of the trailing values is unknown and ignored).</item>
+    /// </list>
+    /// </summary>
+    internal static double StatScale(JsonElement skill, Func<int, long> stat, int level)
+    {
+        if (!skill.TryGetProperty("_kDamageParamExtra", out var extra) || extra.ValueKind != JsonValueKind.Array) return 1;
+        double scale = 1;
+        foreach (var tuple in extra.EnumerateArray())
+        {
+            if (tuple.ValueKind != JsonValueKind.Array) continue;
+            var t = tuple.EnumerateArray().Select(v => GameData.Number(v) ?? 0).ToArray();
+            if (t.Length is 3 or 4 && t[1] == 115 && t[2] == 10000)
+                scale *= 1 + Math.Min(stat(115), t.Length == 4 && t[3] > 0 ? t[3] : double.MaxValue) * t[0] / 10000;
+            else if (t.Length is 4 or 5 && t[0] == 1 && t[2] is >= 0 and <= 6 && t[1] is > 0 and <= 100)
+                scale *= 1 + (t[2] == 0 ? level : stat((int)t[2])) * t[1] / 10000;
+        }
+        return scale;
     }
 
     private (long Damage, DamageHitResult Result) Damage(Fighter a, Fighter b, JsonElement skill, int branch = 0)
@@ -681,7 +710,10 @@ public sealed partial class CombatService : IGameTicker
         var ratios = Numbers(skill, "_kDamageParam1");
         var flats = Numbers(skill, "_kDamageParam2");
         double p1 = ratios.Length > branch ? ratios[branch] : 10000, p2 = flats.Length > branch ? flats[branch] : 0;
-        double dmg = (magic ? a.Matk : a.Atk) * p1 / 10000 + p2;
+        if (a.Stats is { } sheet) p1 *= StatScale(skill, id => sheet[id], a.Level);
+        double dmg = (magic || a.Stats != null && SkillMechanics.For(skill) is { AtkFromMatk: true } ? a.Matk : a.Atk) * p1 / 10000 + p2;
+        // "Physical ATK*«50»%+Magic ATK*«50»%+«60»" (Soul Destroyer): the mechanic adds the MATK share to the same hit.
+        if (a.Stats != null && SkillMechanics.For(skill) is { MatkPercent: > 0 } mixed) dmg += a.Matk * mixed.MatkPercent / 100.0;
         // Defense: def / (def + ParDef 20 × the defender's level), the shape of the client's damage-reduction tooltip.
         double def = magic ? b.Mdef : b.Def;
         dmg *= 1 - def / (def + 20.0 * Math.Max(1, b.Level));

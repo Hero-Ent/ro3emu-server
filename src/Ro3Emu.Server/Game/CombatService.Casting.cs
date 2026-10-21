@@ -356,6 +356,24 @@ public sealed partial class CombatService
         if (notice.Infos.Count > 0) await s.SendGameAsync(SkillCdUpdate, notice);
     }
 
+    /// <summary>Ends the cooldowns of skill groups (Warg Bite "resetting the Cooldown of [Warg Hunt]").</summary>
+    private async Task ResetCooldownsAsync(GameSession s, IReadOnlyList<int> groups)
+    {
+        long now = Now;
+        var notice = new SkillCdNotify { Uuid = s.Role!.Id };
+        foreach (int g in groups)
+        {
+            s.SkillCds.Remove(g);
+            foreach (var key in s.SkillModeCds.Keys.Where(k => k.Item1 == g).ToList())
+            {
+                if (s.SkillModeCds[key] > now)
+                    notice.Infos.Add(new SkillCdInfo { SkillId = g, SkillMode = key.Item2, CdStartTimestampMs = now, CdEndTimestampMs = now });
+                s.SkillModeCds.Remove(key);
+            }
+        }
+        if (notice.Infos.Count > 0) await s.SendGameAsync(SkillCdUpdate, notice);
+    }
+
     /// <summary>Legacy auto-attack entry point, using the same cancellation-safe cast owner as manual skills.</summary>
     private async Task SwingAsync(GameSession s, MonsterUnit? target, int skillId, long id)
     {

@@ -47,7 +47,15 @@ public sealed partial class SkillCombatTests
             if (t.Group is int g && !skills.Values.Any(r => GameData.Int(r, "_iSkillID") == g)) problems.Add($"trigger {t.Buff} {t.Name}: group {g} missing");
         }
         foreach (var m in SkillMechanics.Every)
+        {
             if (m.OnHitSkill is int onHit && data.Row("SkillConfig", onHit) == null) problems.Add($"{m.Group} {m.Name}: onHitCast {onHit} missing");
+            foreach (int g in m.ResetCooldown ?? [])
+                if (!skills.Values.Any(r => GameData.Int(r, "_iSkillID") == g)) problems.Add($"{m.Group} {m.Name}: resetCooldown group {g} missing");
+            foreach (int g in m.Cleanse ?? [])
+                if (!data.Table("BuffConfig").Values.Any(r => GameData.Int(r, "_iBuffID") == g)) problems.Add($"{m.Group} {m.Name}: cleanse group {g} missing");
+            if (m.BranchIf is { CasterBuffGroup: int bg } && !data.Table("BuffConfig").Values.Any(r => GameData.Int(r, "_iBuffID") == bg))
+                problems.Add($"{m.Group} {m.Name}: branchIf buff group {bg} missing");
+        }
         Assert.True(problems.Count == 0, string.Join("\n", problems));
     }
 

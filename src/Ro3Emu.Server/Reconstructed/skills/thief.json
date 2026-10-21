@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "about": "Thief line (Thief 5100, Assassin 5200, Assassin Cross 5300, Guillotine Cross 5400): skill mechanics SkillConfig does not carry, read from each skill's own description and timeline (SkillMechanics.cs documents every field). Keys are _iSkillID (all modes) or 'group:mode' for a talent mode row that differs. EatChicken_* event rows (151xxx, 158xxx, 159xxx) are not covered. Everything is (inferred); 'why' quotes the evidence. Problems the schema cannot express (blade stacks, bounces, dashes, delayed Venom Splasher detonation, poison DoT, MATK scaling, conditional multipliers) are in the thief findings report.",
+  "about": "Thief line (Thief 5100, Assassin 5200, Assassin Cross 5300, Guillotine Cross 5400): skill mechanics SkillConfig does not carry, read from each skill's own description and timeline (SkillMechanics.cs documents every field). Keys are _iSkillID (all modes) or 'group:mode' for a talent mode row that differs. EatChicken_* event rows (151xxx, 158xxx, 159xxx) are not covered. Everything is (inferred); 'why' quotes the evidence. Problems the schema still cannot express (blade stacks, poison DoT, recast returns) are in the thief findings report; bounces, the delayed Venom Splasher detonation, mixed MATK and conditional branches now are.",
   "buffTriggers": {
     "group:15119": {
       "name": "Venom Splasher detonation",
@@ -11,6 +11,58 @@
     }
   },
   "skills": {
+    "15102": {
+      "name": "Sonic Blow",
+      "why": "'If the target's HP is at or below «50»%, increases the percentage damage multiplier of [Sonic Blow] by «20»%': _kLogicData [2000, 101, 5000] (HP / Max HP at 5000 bp) and P1 [8500, 10200, ...] where 10200 = 85% x 1.2, so branch 1 below half HP.",
+      "branchIf": {
+        "targetHpBelowBp": 5000,
+        "branch": 1
+      }
+    },
+    "15105": {
+      "name": "Envenomed Blade",
+      "why": "'... to the designated ST enemy within «8» meters. Then Launches a poisoned blade at a random enemy within «3» meters of the target, dealing ... PATK * «60»%+«40», up to «3» times': the main hit, then 3 jumps to random other enemies within 3 m of the last one (_kLogicData [4] = 1 + 3 blades). The 200 ms between jumps is (inferred); the text gives none.",
+      "bounce": {
+        "radius": 3,
+        "count": 3,
+        "delayMs": 200
+      }
+    },
+    "15324": {
+      "name": "Shadow Break",
+      "why": "'... to up to «5» enemies within a «5»-meter radius centered «1» meters in front of You': the 5 m circle (_kRange [500, 0, 0, 100]: the trailing 100 is the 1 m) moves 1 m along the facing.",
+      "anchor": "caster",
+      "shape": {
+        "circle": 5
+      },
+      "offset": 1
+    },
+    "15210": {
+      "name": "Soul Destroyer",
+      "why": "'... dealing Physical ATK*«50»%+Magic ATK*«50»%+«60» Neutral ranged Physical damage': P1 5000 / P2 60 is only the PATK part; MATK x 50% is added to the same hit.",
+      "matkPercent": 50
+    },
+    "15240": {
+      "name": "Advanced Soul Destroyer",
+      "why": "'... dealing Neutral ranged Physical damage equal to Physical ATK*«85»%+Magic ATK*«85»%': P1 8500 is the PATK part; MATK x 85% is added to the same hit.",
+      "matkPercent": 85
+    },
+    "15314": {
+      "name": "Antidote",
+      "why": "'Removes the [Poisoned] status from yourself': Poisoned is BuffConfig group 9030 (the group Detoxify removes); the row has no damage or buff, so nothing happened.",
+      "cleanse": [
+        9030
+      ]
+    },
+    "15004": {
+      "name": "Steal",
+      "why": "'Deals «70»% ... If cast while [Hiding], deals «140»% Extra damage': P1 [7000, 14000] -> branch 1 (140%) while the caster has Hiding (buff group 15007, 1500701-1500710), which the attack then ends. Whether 'Extra' means 70% + 140% is unknown; branch 1 alone is used (inferred). The «20»% Slow is not named by id and is left out.",
+      "branchIf": {
+        "casterBuffGroup": 15007,
+        "branch": 1,
+        "consume": true
+      }
+    },
     "15110": {
       "name": "Venom Splasher",
       "why": "'Plants timed Dynamite ... After «2» seconds, deals ...': the cast only plants the bomb (_kBuff2 1511910 for 2000 ms); the damage is the detonation (buffTriggers group:15119 -> 15113), so the cast itself deals none.",
