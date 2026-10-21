@@ -177,6 +177,8 @@ public sealed partial class CharacterService
         IReadOnlyList<Ownership.ReservationKey>? additionalKeys = null)
     {
         if (session.Progress == null) throw new InvalidOperationException("not in game");
+        // Logged out between the request and the lock (a kill reward landing as the player disconnects): nothing to lock.
+        if (session.Role == null) throw new OperationCanceledException("Role detached before the character gate.");
         Ownership.LegacyOwnerScope? scope = null;
         long? roleId = session.Role?.Id;
         var attachment = session.Attachment;

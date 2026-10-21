@@ -66,3 +66,6 @@ patch-server/repo/chunks/*
 # Scratch deployment scripts
 check_vps.py
 deploy_to_vps.py
+
+# Fake player account password (FakePlayerService), never in git
+fakeplayers.key

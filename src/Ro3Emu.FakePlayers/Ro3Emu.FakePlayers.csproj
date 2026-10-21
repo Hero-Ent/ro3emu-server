@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Workstation GC: thousands of small clients; the server GC's per-core heaps only made the process large. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Ro3Emu.Bot/Ro3Emu.Bot.csproj" />
+    <ProjectReference Include="../Ro3Emu.LoadTest/Ro3Emu.LoadTest.csproj" />
+  </ItemGroup>
+</Project>

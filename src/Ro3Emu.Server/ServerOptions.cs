@@ -101,6 +101,9 @@ public sealed class ServerOptions
     /// </summary>
     public int GmMinGroupId { get; set; } = 10;
 
+    /// <summary>Fake players for the GM command !fakeplayer (FakePlayerService, docs/guide/fake-players.md).</summary>
+    public FakePlayerOptions FakePlayers { get; set; } = new();
+
     /// <summary>In-game bug reports (FeedbackService, docs/guide/feedback.md).</summary>
     public FeedbackOptions Feedback { get; set; } = new();
 
@@ -218,6 +221,43 @@ public sealed class BossSkillOptions
 }
 
 /// <summary>In-game bug reports: the menu's Feedback button and "/bug" in chat (FeedbackService).</summary>
+/// <summary>Fake players started by the GM command !fakeplayer (docs/guide/fake-players.md).</summary>
+public sealed class FakePlayerOptions
+{
+    /// <summary>
+    /// Path of Ro3Emu.FakePlayers(.exe|.dll). Empty: fakeplayers\ next to the server, then the repository's
+    /// src\Ro3Emu.FakePlayers\bin\{Release,Debug}\net10.0 (newest build).
+    /// </summary>
+    public string? Executable { get; set; }
+
+    /// <summary>Most fake players one command may ask for.</summary>
+    public int MaxBots { get; set; } = 100000;
+
+    /// <summary>Fake account names are this prefix + a 5-digit number; only these accounts get a fake profile applied.</summary>
+    public string AccountPrefix { get; set; } = "fp_";
+
+    /// <summary>Logins the fake player process runs at once (each one is a password hash on this server).</summary>
+    public int LoginConcurrency { get; set; } = 12;
+
+    /// <summary>Chat pace: 1 = like people (a line every few minutes per talker), higher = more often.</summary>
+    public double ChatSpeed { get; set; } = 1;
+
+    /// <summary>
+    /// Players each fake player asks to see. Every step goes to everyone who sees the walker, so a low number keeps a
+    /// crowd of fake players cheap; real players still see them (what a client sees is its own setting).
+    /// </summary>
+    public int ViewCount { get; set; } = 20;
+
+    /// <summary>Fake players learn and cast their class's damage skills (false: normal attacks only, lighter).</summary>
+    public bool Skills { get; set; } = true;
+
+    /// <summary>
+    /// Fake players also learn and cast self buffs (Blessing, Increase AGI...). Off by default: every buff starts an
+    /// expiry timer the server runs realm-wide, and with hundreds of fake players those timers stall the server.
+    /// </summary>
+    public bool Buffs { get; set; }
+}
+
 public sealed class FeedbackOptions
 {
     /// <summary>Longest report text kept (characters); longer text is cut and marked truncated.</summary>

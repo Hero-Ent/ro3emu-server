@@ -26,6 +26,9 @@ public sealed partial class CharacterService
         session.GuildChallenge = null; // a pending clear must never see the previous role's entitlement cache
         session.DungeonSyncMinute = 0;
         var progress = roles.LoadProgress(role.Id);
+        // A role prepared while it loads (fake players: class, levels, skills, stats) is saved before anything reads
+        // it. The role select already owns this role, so no other reservation is needed.
+        if (PrepareProgress?.Invoke(session, progress) == true) roles.SaveProgress(role.Id, progress);
         session.Progress = progress;
         session.Pets = null; // The next role's pets load before 5056; never reuse a previous role's stat contributions.
         session.Items = itemStore.Load(role.Id);

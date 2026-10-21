@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -35,6 +35,7 @@
     <ProjectReference Include="..\..\src\Ro3Emu.Server\Ro3Emu.Server.csproj" />
     <ProjectReference Include="..\..\src\Ro3Emu.Bot\Ro3Emu.Bot.csproj" />
     <ProjectReference Include="..\..\src\Ro3Emu.LoadTest\Ro3Emu.LoadTest.csproj" />
+    <ProjectReference Include="..\..\src\Ro3Emu.FakePlayers\Ro3Emu.FakePlayers.csproj" />
     <ProjectReference Include="..\..\tools\EconomyProbe\EconomyProbe.csproj" />
   </ItemGroup>
 

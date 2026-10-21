@@ -501,6 +501,10 @@ public sealed partial class AccountStore : IDisposable
         return await WriteAsync<bool>(new AccountRegisterPlan(name, hash, salt, DateTime.UtcNow.ToString("O"))).ConfigureAwait(false);
     }
 
+    /// <summary>Whether an account with this name exists (any letter case).</summary>
+    public async Task<bool> ExistsAsync(string name) =>
+        await ReadAsync<AccountCredentials?>(new AccountCredentialsRead(name)).ConfigureAwait(false) != null;
+
     public async Task<SignIn> SignInAsync(string name, string password, bool allowRegister = true)
     {
         var existing = await ReadAsync<AccountCredentials?>(new AccountCredentialsRead(name)).ConfigureAwait(false);

@@ -736,9 +736,10 @@ public sealed partial class CardService
         if (!changed) return;
         SaveLibrary(session);
         var attachment = session.Attachment;
-        loop.TrackLegacyDetached("card library sync", () =>
+        // A send to this player only: its role scope. Realm-wide, one per kill (Codex counts) stalled a busy server.
+        loop.PostOwned(session, () =>
             attachment?.Cancelled == true || !ReferenceEquals(session.Attachment, attachment)
-                ? Task.CompletedTask : CharacterService.SyncAsync(session, LibrarySync, session.Library.Clone()));
+                ? Task.CompletedTask : CharacterService.SyncAsync(session, LibrarySync, session.Library.Clone()), "card library sync");
     }
 
     private CharacterService.FirstCardSightPlan? StageFirstCardSight(GameSession session, IReadOnlyList<int> entries, int monster)
@@ -773,9 +774,9 @@ public sealed partial class CardService
             },
             () => { session.Library = next;
                 if (attachment?.Cancelled != true && ReferenceEquals(session.Attachment, attachment))
-                    loop.TrackLegacyDetached("card library sync", () =>
+                    loop.PostOwned(session, () =>
                         attachment?.Cancelled == true || !ReferenceEquals(session.Attachment, attachment)
-                            ? Task.CompletedTask : CharacterService.SyncAsync(session, LibrarySync, session.Library!.Clone())); });
+                            ? Task.CompletedTask : CharacterService.SyncAsync(session, LibrarySync, session.Library!.Clone()), "card library sync"); });
     }
 
     /// <summary>

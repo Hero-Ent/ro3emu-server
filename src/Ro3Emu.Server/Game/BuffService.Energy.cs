@@ -157,7 +157,9 @@ public sealed partial class BuffService
             meter.Value = Math.Clamp(meter.Value + ticks * change, 0, GameData.Int(row, "_iLimitValue"));
             meter.LastRecoverMs = meter.NextRecoverMs + (ticks - 1) * interval;
             meter.NextRecoverMs += ticks * interval;
-            loop.TrackLegacyDetached("energy recovery send", () => SendEnergyAsync(p, id, (EPlayerEnergyChangeReason)1));
+            // Only this player's meter and its own 31334 / skill-parameter refresh: the player's role scope, not the realm.
+            // Realm-wide, every recovery tick of every player waited for the whole world to be idle (under load: never).
+            loop.PostOwned(p, () => SendEnergyAsync(p, id, (EPlayerEnergyChangeReason)1), "energy recovery send");
         }
     }
 

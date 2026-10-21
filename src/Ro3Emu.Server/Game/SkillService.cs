@@ -133,6 +133,12 @@ public sealed class SkillService
         return points;
     }
 
+    /// <summary>Unspent skill points per job rank (what the skill window shows).</summary>
+    internal IReadOnlyDictionary<int, int> FreePoints(RoleProgress p) => SkillPoints(p);
+
+    /// <summary>The free level a group starts at (SkillConfig._iInitialLevel once its activation level is reached).</summary>
+    internal int InitialLevel(RoleProgress p, int group) => Initial(p, group);
+
     /// <summary>Effective learned level including configured initial skills and the normal attack.</summary>
     public int Level(RoleProgress p, int group)
     {

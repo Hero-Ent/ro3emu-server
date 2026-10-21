@@ -299,6 +299,7 @@ public sealed partial class GameLoop : IHostedService, IDisposable
         _ = StartTracked(async () =>
         {
             try { await work(); }
+            catch (OperationCanceledException e) { _log.LogDebug("Detached game loop work {Name} cancelled: {Reason}", name, e.Message); }
             catch (Exception e) { _log.LogError(e, "Detached game loop work {Name} failed", name); }
             return true;
         }, permit);
@@ -337,6 +338,7 @@ public sealed partial class GameLoop : IHostedService, IDisposable
     private async Task RunGuarded(Func<Task> work, WorkPermit permit)
     {
         try { await work(); }
+        catch (OperationCanceledException e) { _log.LogInformation("Game loop work cancelled: {Reason}", e.Message); }
         catch (Exception e) { _log.LogError(e, "Game loop work failed"); }
         finally { Release(permit); }
     }

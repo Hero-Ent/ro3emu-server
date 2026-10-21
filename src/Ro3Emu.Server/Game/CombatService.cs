@@ -966,8 +966,12 @@ public sealed partial class CombatService : IGameTicker
     /// <summary>HP/SP regeneration every 5 s out of combat: FinalReHp = ReHP + MaxHP × per_rehp (117/118, inferred).</summary>
     private async Task RegenAsync(GameSession s)
     {
-        if (s.Role == null || s.Progress == null) return;
-        using var held = await CharacterService.Lock(s);
+        if (s.Role == null || s.Progress == null || s.Attachment?.Cancelled == true) return;
+        IDisposable held;
+        // A role that is logging out or reconnecting no longer admits changes: skip this cycle, it is not an error.
+        try { held = await CharacterService.Lock(s); }
+        catch (OperationCanceledException) { return; }
+        using var _ = held;
         if (s.Role == null || s.Progress == null || s.Dead || (s.StatusBits & FightBit) != 0) return;
         if (s.CurrentHp == null && s.CurrentSp == null) return; // unset = full (CharacterService.Stats): nothing to restore
         var st = character.Stats(s);

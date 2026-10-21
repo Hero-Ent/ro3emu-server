@@ -81,6 +81,14 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
         return account != null && allowed.Contains(account, StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// Commands that change nothing in the world themselves (!fakeplayer steers another process, !online and !where
+    /// only read): they run under the GM's own role. A realm-wide admission waits for every other operation to end,
+    /// so with a full server "!fakeplayer stop" could never run.
+    /// </summary>
+    internal static bool IsRoleScopedCommand(string line) =>
+        line.Length > 1 && line[1..].Split(' ', 2)[0].ToLowerInvariant() is "fakeplayer" or "online" or "where";
+
     internal static bool IsEventOwnerCommand(string line)
     {
         if (!line.StartsWith('!')) return false;
@@ -108,7 +116,9 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
         => session.Owners is { } owners
             ? IsEventOwnerCommand(line)
                 ? owners.RunEconomicRequestAsync(session, () => RunCoreAsync(session, line, loopbackTool))
-                : owners.RunSessionAsync("GM", [Ownership.ReservationKey.Realm], session, () => RunCoreAsync(session, line, loopbackTool))
+                : IsRoleScopedCommand(line) && session.Role is { } role
+                    ? owners.RunSessionAsync("GM", [Ownership.ReservationKey.Role(role.Id)], session, () => RunCoreAsync(session, line, loopbackTool))
+                    : owners.RunSessionAsync("GM", [Ownership.ReservationKey.Realm], session, () => RunCoreAsync(session, line, loopbackTool))
             : RunCoreAsync(session, line, loopbackTool);
 
     private async Task RunCoreAsync(GameSession session, string line, bool loopbackTool)
@@ -454,8 +464,18 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
         ReplyAsync(s, string.Create(CultureInfo.InvariantCulture,
             $"Scene {s.SceneEntry} {data.MapName(s.SceneEntry)} at {s.Position.X:F1} {s.Position.Y:F1} {s.Position.Z:F1}"));
 
-    private Task Online(GameSession s, string[] _) =>
-        ReplyAsync(s, "Online: " + string.Join(", ", sessions.All().Select(o => $"{o.Role?.Name ?? o.Account} ({o.SceneEntry})")));
+    private Task Online(GameSession s, string[] _)
+    {
+        // With fake players online the full list would not fit a marquee: count them and name the real players only.
+        var all = sessions.All();
+        var fakes = services.GetService<FakePlayerService>();
+        var real = all.Where(o => fakes?.IsFake(o.Account) != true).ToList();
+        int fake = all.Count - real.Count;
+        string names = string.Join(", ", real.Take(30).Select(o => $"{o.Role?.Name ?? o.Account} ({o.SceneEntry})"));
+        return ReplyAsync(s, $"Online: {all.Count}" + (fake > 0 ? $" ({real.Count} reais, {fake} fake)" : "") + ": " + names
+            + (real.Count > 30 ? $" ... +{real.Count - 30}" : ""));
+    }
+
 
     private Task FindItem(GameSession s, string[] args)
     {

@@ -157,6 +157,7 @@ public static class ServerHost
         builder.Services.AddSingleton<SessionRegistry>();
         builder.Services.AddSingleton<GateAuthRegistry>();
         builder.Services.AddSingleton<ReconnectService>();
+        builder.Services.AddSingleton<FakePlayerService>();
         builder.Services.AddSingleton<Voice.VoiceTicketRegistry>();
         builder.Services.AddSingleton<Voice.VoiceRooms>();
         // The voice relay PoC only opens a second listener when a port is configured for it.
@@ -394,6 +395,7 @@ public static class ServerHost
             ? (await social.LoadSocialAsync([role.Id])).GetValueOrDefault(role.Id)?.Friends.LongLength : null; // 103019
         app.Services.GetRequiredService<Micro.FriendService>().RelationChanged.Add(questTasks.OnRelationChanged);
         app.Services.GetRequiredService<ReconnectService>(); // hooks the handover and registers !netdrop
+        app.Services.GetRequiredService<FakePlayerService>(); // registers !fakeplayer
         app.Services.GetRequiredService<CardEffects>(); // socketed-card passives and procs (sockets, scene loads, hits)
         // Create the key before the first client connects, so ClientPatch can read the public half.
         app.Services.GetRequiredService<GateCrypto>();

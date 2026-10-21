@@ -49,6 +49,24 @@ public sealed partial class CharacterService
 
     private Task SendStatPlanAsync(GameSession session) => SyncAsync(session, BaseAttrSync, BuildAttr(session));
 
+    /// <summary>
+    /// Changes a role's progress while it loads at login (true = changed, saved before use). Fake players get their
+    /// class, levels, skills and stats here (FakePlayerService), without any runtime operation on a live role.
+    /// </summary>
+    public Func<GameSession, RoleProgress, bool>? PrepareProgress { get; set; }
+
+    /// <summary>Career, base and job level on a progress that is not live yet (exp restarts inside the levels).</summary>
+    internal void SetCareerAndLevels(RoleProgress p, int career, int level, int jobLevel)
+    {
+        if (data.Row("JobConfig", career) == null) throw new ArgumentException($"unknown job {career}");
+        p.Career = career;
+        p.Level = Math.Clamp(Math.Max(p.Level, level), 1, MaxLevel);
+        p.Exp = 0;
+        p.JobLevel = Math.Clamp(jobLevel, 1, MaxJobLevel(career));
+        p.JobExp = 0;
+        SkipFreeJobLevels(p);
+    }
+
     /// <summary>Sets base and job level (exp inside the level restarts at 0); a higher level shows the level-up popup.</summary>
     public async Task<string> SetLevelAsync(GameSession session, int level, int? jobLevel)
     {

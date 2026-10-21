@@ -128,8 +128,8 @@ public sealed class BotClient : IAsyncDisposable
         {
             var listText = await _http.GetStringAsync("/serverlist/v2/168/serverlist.json?inline=true&force_refresh=true", _cts.Token);
             var list = JsonDocument.Parse(listText["RO3_RECOVERY_JSON:".Length..]).RootElement.GetProperty("data");
-            MicroGate = list.GetProperty("gate_address")[0].GetString()!;
-            GameGate = list.GetProperty("clusters")[0].GetProperty("game_gate")[0].GetString()!;
+            MicroGate = WithGateHost(list.GetProperty("gate_address")[0].GetString()!);
+            GameGate = WithGateHost(list.GetProperty("clusters")[0].GetProperty("game_gate")[0].GetString()!);
         });
 
         _micro = await StageAsync("micro-handshake", () => ConnectAsync(MicroGate, OnMicroFrame, requestToken: 1, confirmKey: 2));
@@ -158,6 +158,17 @@ public sealed class BotClient : IAsyncDisposable
     }
 
     public string MicroGate { get; private set; } = "";
+
+    /// <summary>
+    /// Host to dial instead of the one the server list announces (keeps its port). Fake players on the server machine
+    /// set 127.0.0.1: the list carries the public address, and loopback is exempt from the per-IP limits.
+    /// </summary>
+    public string? GateHostOverride { get; set; }
+
+    private string WithGateHost(string hostPort) =>
+        GateHostOverride is { Length: > 0 } host && hostPort.LastIndexOf(':') is var colon and > 0
+            ? host + hostPort[colon..]
+            : hostPort;
 
     public string GameGate { get; private set; } = "";
 
@@ -230,7 +241,7 @@ public sealed class BotClient : IAsyncDisposable
             using var loadedExpected = _inbox.Expect(e => e.IsGame(MsgId.SceneLoaded));
             using var selfExpected = _inbox.Expect(e => e.IsGame(MsgId.EntitySelf));
             using var endExpected = _inbox.Expect(e => e.IsGame(MsgId.SelfInfoEndFrameNotify));
-            await SendGameAsync(MsgId.SceneLoaded, new SceneLoadedReq { SceneId = sw.SceneEntry });
+            await SendGameAsync(MsgId.SceneLoaded, new SceneLoadedReq { SceneId = sw.SceneEntry, ViewMaxCount = ViewMaxCount });
             var loaded = SceneLoadedResp.Parser.ParseFrom((await loadedExpected.WaitAsync(Timeout, _cts.Token)).Body);
             if (loaded.Result != 0) throw Refused("scene-ready", loaded.Result, $"scene load refused: {loaded.Result}");
             var self = EntitySelf.Parser.ParseFrom((await selfExpected.WaitAsync(Timeout, _cts.Token)).Body);
@@ -241,6 +252,12 @@ public sealed class BotClient : IAsyncDisposable
     }
 
     public EntityBase? Self { get; private set; }
+
+    /// <summary>
+    /// Players this client asks to see (SceneLoadedReq.viewMaxCount; 0 = the server default). Fake players ask for few:
+    /// what a client sees is its own choice, so they stay visible to real players while receiving far less traffic.
+    /// </summary>
+    public ulong ViewMaxCount { get; set; }
 
     /// <summary>Back to the role screen like the client's "switch character": PRE_SWITCH_ROLE, RPC SwitchToAccount, reconnect as account.</summary>
     public async Task SwitchRoleAsync()
@@ -476,6 +493,18 @@ public sealed class BotClient : IAsyncDisposable
 
     public Task WalkAsync(float x, float y, float z, bool stop = false) =>
         SendGameAsync(MsgId.Walk, new WalkReq { Pos = new Vec3 { X = x, Y = y, Z = z }, BStop = stop, SpeedRate = 1 });
+
+    /// <summary>
+    /// A walk step as the real client sends it: <paramref name="face"/> in degrees (0 = +z, clockwise) is both the facing
+    /// and the move direction viewers animate along, and <paramref name="speedRate"/> scales the role's speed to the
+    /// pace actually walked (viewers project the motion with it until the next step).
+    /// </summary>
+    public Task WalkAsync(float x, float y, float z, bool stop, float face, float speedRate) =>
+        SendGameAsync(MsgId.Walk, new WalkReq { Pos = new Vec3 { X = x, Y = y, Z = z }, BStop = stop, Dir = face, Face = face, SpeedRate = speedRate });
+
+    /// <summary>Facing in degrees (0 = +z, clockwise) of a move from a to b, the client's convention.</summary>
+    public static float FaceTowards(float ax, float az, float bx, float bz) =>
+        (MathF.Atan2(bx - ax, bz - az) * 180f / MathF.PI + 360f) % 360f;
 
     /// <summary>
     /// Like the real client: before an avatar exists game messages go as RPC "EZAdaptorCS"(uint msgId, bin body),

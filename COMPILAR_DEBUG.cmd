@@ -18,17 +18,21 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [1/3] Compilando Servidor (Ro3Emu.Server) em Debug...
+echo [1/4] Compilando Servidor (Ro3Emu.Server) em Debug...
 dotnet build src/Ro3Emu.Server -c Debug -v q -nologo -clp:ErrorsOnly
 if errorlevel 1 goto FALHA
 
-echo [2/3] Compilando Setup (Ro3Emu.Setup) em Debug...
+echo [2/4] Compilando Setup (Ro3Emu.Setup) em Debug...
 dotnet build src/Ro3Emu.Setup -c Debug -v q -nologo -clp:ErrorsOnly
 if errorlevel 1 goto FALHA
 
-echo [3/3] Compilando ClientHooks e Loc em Debug...
+echo [3/4] Compilando ClientHooks e Loc em Debug...
 dotnet build src/Ro3Emu.ClientHooks -c Debug -v q -nologo -clp:ErrorsOnly
 dotnet build src/Ro3Emu.Loc -c Debug -v q -nologo -clp:ErrorsOnly
+
+echo [4/4] Compilando Fake Players (Ro3Emu.FakePlayers) em Release...
+dotnet build src/Ro3Emu.FakePlayers -c Release -v q -nologo -clp:ErrorsOnly
+if errorlevel 1 goto FALHA
 
 echo.
 echo ============================================================
