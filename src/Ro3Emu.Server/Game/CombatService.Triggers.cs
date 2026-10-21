@@ -97,16 +97,20 @@ public sealed partial class CombatService
         // A skill's own chance to release another on each enemy it hits (Dragon Breath "«50»% Chance to Burn").
         if (SkillMechanics.For(row) is { OnHitSkill: int onHit } mechanic && (mechanic.OnHitChance >= 10000 || Rolls.Proc(10000) < mechanic.OnHitChance))
             await CastTriggeredAsync(holder, onHit, target, target.Pos);
-        // Double Attack (15002): "When a Dagger is equipped, each Basic Attack has a «1..10»% Chance to deal «1» Extra hits
-        // of ... PATK * «50»% (this damage is not considered a Normal Attack)". The chance is BuffConfig group 15002 at the
-        // learned level (_kLogicData 100..1000 bp; SpecialEffect 16530012 raises "the trigger Chance of [Double Attack]"
-        // through that buff); the hit is row 1511501 (ThiefAttack2, P1 50%), released as an extra skill so the client
-        // plays its double slash beside the basic attack. Nothing in the client switches the basic attack to it.
-        if (GameData.Int(row, "_iIsNormalAtk") == 1 && target.Hp > 0 && holder.Progress is { } progress
-            && skills.Level(progress, DoubleAttackGroup) is var doubleLevel and > 0 && WieldsWeapon(holder, DaggerSubType)
-            && Rolls.Proc(10000) < DoubleAttackChanceBp(doubleLevel))
-            await CastTriggeredAsync(holder, DoubleAttackRow, target, target.Pos, extra: true);
     }
+
+    /// <summary>
+    /// Double Attack (15002): "When a Dagger is equipped, each Basic Attack has a «1..10»% Chance to deal «1» Extra hits
+    /// of ... PATK * «50»%". The chance is BuffConfig group 15002 at the learned level (_kLogicData 100..1000 bp;
+    /// SpecialEffect 16530012 raises "the trigger Chance of [Double Attack]" through that buff). On a proc this returns
+    /// the extra hit's row 1511501 (ThiefAttack2, P1 50%): its damage is added to the same swing, shown as two hits and
+    /// their total like a two-hit skill (the player's report of the official display), not as a separate skill number.
+    /// </summary>
+    private JsonElement? DoubleAttackRolls(GameSession s, JsonElement row) =>
+        GameData.Int(row, "_iIsNormalAtk") == 1 && s.Progress is { } progress
+        && skills.Level(progress, DoubleAttackGroup) is var level and > 0 && WieldsWeapon(s, DaggerSubType)
+        && Rolls.Proc(10000) < DoubleAttackChanceBp(level)
+            ? data.Row("SkillConfig", DoubleAttackRow) : null;
 
     private const int DoubleAttackGroup = 15002, DoubleAttackRow = 1511501, DaggerSubType = 1;
     private Dictionary<int, int>? _doubleAttackBp;

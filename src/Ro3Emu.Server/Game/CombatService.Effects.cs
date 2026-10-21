@@ -364,6 +364,13 @@ public sealed partial class CombatService
                 {
                     foreach (var modifier in DamageAdjusters) amount = Math.Max(0, modifier(s, target, row, result, amount));
                     foreach (var extra in ExtraHitDamage) amount += Math.Max(0, extra(s, target, row, amount));
+                    // Double Attack: the swing lands twice, shown like a two-hit skill (two numbers and their total).
+                    if (field == null && DoubleAttackRolls(s, row) is { } second)
+                    {
+                        var (extraAmount, _) = Damage(attacker, defender, second);
+                        amount += Math.Max(0, extraAmount);
+                        hit.Split = Math.Max(hit.Split, 2);
+                    }
                 }
                 long beforeHp = target.Hp;
                 target.Hp = Math.Max(0, beforeHp - amount);

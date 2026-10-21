@@ -96,7 +96,7 @@ public sealed partial class SkillCombatTests
             await Buffs.SetPileCountAsync(s, 1631301, 15000, s.Role!.Id, 14);
             s.SkillCds.Clear(); s.SkillModeCds.Clear();
         });
-        await Task.Delay(1500); // the first cast's action time
+        await Task.Delay(2500); // the first cast's action time (a press before it ends would be held)
         await alice.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1631301, TargetId = target.Uid });
         Assert.Equal(0, (await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser)).Result);
         await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.Dsts.Count > 0);

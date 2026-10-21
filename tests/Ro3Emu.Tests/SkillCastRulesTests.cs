@@ -70,9 +70,13 @@ public sealed partial class SkillCombatTests
             return Task.CompletedTask;
         });
         await alice.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1500001, TargetId = target.Uid });
-        Assert.Equal(0, (await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser)).Result);
-        var extra = await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.SkillId == 1511501);
-        Assert.Contains(extra.Dsts, d => d.DstID == target.Uid);
+        var accepted = await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser);
+        Assert.Equal(0, accepted.Result);
+        // The swing itself lands twice: one hit message with 2 segments (the client shows both and their total).
+        var swing = await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.SessionId == accepted.SessionId && h.Dsts.Count > 0);
+        Assert.Equal(2, swing.Split);
+        Assert.Contains(swing.Dsts, d => d.DstID == target.Uid && d.Damage > 0);
+        Assert.DoesNotContain(alice.Inbox.Snapshot(), e => e.IsGame(CombatService.SkillHit) && SkillHitInfo.Parser.ParseFrom(e.Body).SkillId == 1511501);
     }
 
     [ClientDataFact]
