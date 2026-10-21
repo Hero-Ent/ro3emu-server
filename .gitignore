@@ -69,3 +69,4 @@ deploy_to_vps.py
 
 # Fake player account password (FakePlayerService), never in git
 fakeplayers.key
+Client/RO3Emu/server/fakeplayers/
