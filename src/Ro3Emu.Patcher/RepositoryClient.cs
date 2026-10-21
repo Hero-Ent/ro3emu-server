@@ -75,6 +75,24 @@ public sealed class RepositoryClient : IDisposable
 
     async Task<ChannelInfo> FetchChannelFromUriAsync(Uri baseUri, string channel, CancellationToken ct)
     {
+        // Transient socket failures (connection reset/aborted by the host, e.g. a server
+        // that was just (re)started) are retried a few times before giving up.
+        const int maxAttempts = 3;
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await FetchChannelOnceAsync(baseUri, channel, ct);
+            }
+            catch (HttpRequestException ex) when (attempt < maxAttempts && ex.StatusCode is null && !ct.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(500 * attempt), ct);
+            }
+        }
+    }
+
+    async Task<ChannelInfo> FetchChannelOnceAsync(Uri baseUri, string channel, CancellationToken ct)
+    {
         var targetUri = new Uri(baseUri, $"channels/{channel}.json");
         using var request = new HttpRequestMessage(HttpMethod.Get, targetUri);
         request.Headers.CacheControl = new CacheControlHeaderValue { NoCache = true };

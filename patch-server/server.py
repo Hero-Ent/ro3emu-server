@@ -10,6 +10,7 @@ import socketserver
 import os
 import sys
 import mimetypes
+import socket
 
 PORT = 8790
 DEFAULT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "repo")
@@ -22,6 +23,11 @@ mimetypes.add_type("application/octet-stream", ".bin")
 mimetypes.add_type("application/vnd.microsoft.portable-executable", ".exe")
 
 class PatchHandler(http.server.SimpleHTTPRequestHandler):
+    # HTTP/1.1 com keep-alive: o launcher reutiliza conexões (milhares de chunks)
+    protocol_version = "HTTP/1.1"
+    # Fecha conexões ociosas depois do idle timeout do cliente (.NET = 60s)
+    timeout = 120
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=TARGET_DIR, **kwargs)
 
@@ -54,8 +60,28 @@ class PatchHandler(http.server.SimpleHTTPRequestHandler):
         sys.stdout.flush()
 
 class ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
-    allow_reuse_address = True
+    # No Windows, SO_REUSEADDR permite que DUAS instâncias escutem a mesma porta
+    # (uma instância antiga/travada passa a "roubar" e derrubar conexões).
+    allow_reuse_address = os.name != "nt"
     daemon_threads = True
+    request_queue_size = 128
+    address_family = socket.AF_INET6 if socket.has_ipv6 else socket.AF_INET
+
+    def server_bind(self):
+        if os.name == "nt" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        if self.address_family == socket.AF_INET6:
+            # Dual-stack: atende ::1 e 127.0.0.1 ("localhost" resolve primeiro para ::1)
+            self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        super().server_bind()
+
+    def handle_error(self, request, client_address):
+        # Clientes (launcher/WebView2) costumam abrir conexões especulativas e
+        # fechá-las abruptamente (WinError 10054/10053). Isso é inofensivo.
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)):
+            return
+        super().handle_error(request, client_address)
 
 def main():
     if not os.path.isdir(TARGET_DIR):
@@ -73,7 +99,8 @@ def main():
     print("Pressione Ctrl+C para encerrar o servidor a qualquer momento.\n")
 
     try:
-        with ThreadingTCPServer(("", PORT), PatchHandler) as httpd:
+        bind_addr = "::" if ThreadingTCPServer.address_family == socket.AF_INET6 else ""
+        with ThreadingTCPServer((bind_addr, PORT), PatchHandler) as httpd:
             httpd.serve_forever()
     except KeyboardInterrupt:
         print("\nServidor de patches encerrado.")
