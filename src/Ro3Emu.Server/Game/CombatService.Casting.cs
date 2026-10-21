@@ -516,7 +516,9 @@ public sealed partial class CombatService
         {
             if (mechanic.NoDamage) return [(ms(points.FirstOrDefault(0.2)), new Impact(0, null, First: true, SelfEffects: mechanic.ShieldBuff == null, AtCaster: false, NoDamage: true))];
             if (mechanic.Hits.Count > 0)
-                return mechanic.Hits.Select((hit, i) => (hit.Ms ?? ms(hit.Point is int p && p < points.Length ? points[p] : hit.Time ?? points.FirstOrDefault(0.2)),
+                return mechanic.Hits.Select((hit, i) => (hit.Ms is int after
+                        ? after + (hit.AfterPoint is int ap && ap < points.Length ? ms(points[ap]) : 0)
+                        : ms(hit.Point is int p && p < points.Length ? points[p] : hit.Time ?? points.FirstOrDefault(0.2)),
                     (Impact?)new Impact(hit.Branch, hit.Split, First: i == 0, SelfEffects: i == 0, AtCaster: false, Detached: hit.Ms != null))).ToList();
         }
         return [(ms(points.FirstOrDefault(0.2)), null)];

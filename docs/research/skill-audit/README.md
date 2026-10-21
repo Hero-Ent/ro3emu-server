@@ -27,3 +27,26 @@ under "Needs engine work".
 
 `SkillCombatTests.SkillMechanicsLoadAndReferenceRealData` checks that every entry loads and points at real rows,
 buffs, attack points and modes.
+
+## Resolved after the first audit (phase 2)
+
+These "Needs engine work" items now run. The reports above still describe them as open.
+
+- **Buff triggers** (`buffTriggers` in each JSON, run by `CombatService.Triggers.cs`): a buff that releases a skill
+  when it expires, when its holder is hit (`hitTaken` / `meleeHitTaken`, with `maxRange`, `front` and `whileBuff`
+  checks) or when its holder deals damage (`damageDealt`, `consume`).
+  - Knight: Parry -> Auto Counter (11211).
+  - Crusader: Shield Reflect -> 11419, Recoil -> 11420 (needs Auto Guard), Reflect Damage and Casting Shield -> Thorn
+    11618, Charge Up -> Charge Up Strike 11622, Shield Defense -> Spear Auto Counter 11621 (front only).
+  - Thief: Venom Splasher plants the bomb (no damage at the cast); the detonation (15113) happens when the bomb buff
+    expires, 3 m around the target, 5 targets.
+- **Chance to cast on hit** (`onHitCast`): Dragon Breath (Fire) has a 50% chance to Burn (1138201) each enemy it hits.
+- **Periodic zones** (`hits.everyMs` + `afterPoint`, ticks counted from the attack point where the zone appears):
+  Magnus Exorcismus (8 x 0.5 s), Sanctuary (7 x 0.6 s; heals allies, damages only Undead/Demon), Gravitation Field
+  (8 waves, 6 m), Ember Zone (8 x 0.5 s).
+- **Bonus branch vs race/element** (`branchVs`): Soul Strike (+50% vs Undead), Magnus (+30% vs Undead/Demon/Shadow).
+  Monster race ids, read from NPCConfig (inferred): 3 = Demon (Baphomet, Deviruchi), 5 = Undead (Ghoul, Mummy, Drake).
+  Element ids: 8 = Shadow, 10 = Undead.
+
+Still open: Death Bound (it reflects a % of the damage taken, and only from players), and the other engine items
+listed in each report (chains/bounces, conditional branches, ASPD scaling, stat overrides, stacks).

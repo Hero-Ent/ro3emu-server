@@ -1,7 +1,25 @@
 {
   "version": 1,
   "about": "Swordsman line (Novice 1000, Swordsman 1100, Knight 1200, Lord Knight 1300, Rune Knight 1400): skill mechanics SkillConfig does not carry, read from each skill's own description, its talent (SpecialEffectConfig) text and timeline (SkillMechanics.cs documents every field). 'group:mode' keys override a talent mode row. Dragon Breath (11304/11305) and Sonic Wave (11309) use the generic Rect360 rule and are not listed. Everything is (inferred); 'why' quotes the evidence.",
+  "buffTriggers": {
+    "group:11210": {
+      "name": "Parry -> Auto Counter",
+      "why": "Parry 11210: 'When You take melee Physical damage, casts [Auto Counter] in front of You. Internal cooldown: «1» seconds'; buff 1121001-1121010 _kLogicData names the matching Auto Counter row of group 11211 (1121101-1121110, 'dealing Physical ATK*«30»%+«20» ... to «5» enemies in a «3»m*«5»m area in front of you'), so the row follows the learned Parry level.",
+      "on": "meleeHitTaken",
+      "group": 11211,
+      "levelFrom": 11210,
+      "cooldownMs": 1000
+    }
+  },
   "skills": {
+    "11304": {
+      "name": "Dragon Breath (Fire)",
+      "why": "'... with a «50»% Chance to Burn damaged enemies, dealing Fire Ranged Physical damage totaling PATK * «120»% over @{1} hits': row 11382 'Burn' (1138201, script DragonBreathBurn, P1 12000, _kShowDmg [3]) is released on each enemy the breath damages with chance 5000 bp; _kBuff2 is empty so nothing else applies it. The shape stays on the generic Rect360 rule.",
+      "onHitCast": {
+        "skill": 1138201,
+        "chance": 5000
+      }
+    },
     "11002": {
       "name": "Magnum Break",
       "why": "'... to up to «5» enemies within a «5»-meter radius': circle of 5 m around the caster (_kRange 550 = 5.5 m).",

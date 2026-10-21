@@ -153,8 +153,9 @@ public sealed partial class CombatService
             if (Distance(center, m.Pos) > radius + 0.1f) return false;
             return !fan || Math.Atan2(Math.Abs(side), forward) <= fanDegrees * Math.PI / 360;
         }
-        bool Allowed(MonsterUnit m) => mechanic is not { } only || (only.OnlyRaces.Count == 0 && only.OnlyElements.Count == 0)
-            || only.OnlyRaces.Contains(m.Template.Race) || only.OnlyElements.Contains(m.Template.Element);
+        bool Allowed(MonsterUnit m) => (mechanic is not { ExcludeTarget: true } || m.Uid != action.Request.TargetId) // "2 other enemies near the target"
+            && (mechanic is not { } only || (only.OnlyRaces.Count == 0 && only.OnlyElements.Count == 0)
+                || only.OnlyRaces.Contains(m.Template.Race) || only.OnlyElements.Contains(m.Template.Element));
         return world.Map(s.WorldScene).Units.OfType<MonsterUnit>().Where(m => m.Hp > 0 && CanHitMonster(s, m) && Relation(row, false, race: m.Template.Race) && Allowed(m) && InShape(m))
             .OrderBy(m => Distance(center, m.Pos)).ThenBy(m => m.Uid).Take(max).ToList();
     }
@@ -305,8 +306,10 @@ public sealed partial class CombatService
                     foreach (var handler in DealtAsync)
                     {
                         if (!CanApplyMoreEffects()) break;
+                        _dealingIndependent = action.Independent;
                         await handler(s, target, row, amount);
                     }
+                _dealingIndependent = false;
                 // The hit is already committed; an unchanged (even cancelled) lease
                 // still owns its damage callback, while a replacement lease does not.
                 if (effective > 0 && CurrentKillRecipient())

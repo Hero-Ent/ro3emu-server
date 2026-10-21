@@ -1,7 +1,32 @@
 {
   "version": 1,
   "about": "Thief line (Thief 5100, Assassin 5200, Assassin Cross 5300, Guillotine Cross 5400): skill mechanics SkillConfig does not carry, read from each skill's own description and timeline (SkillMechanics.cs documents every field). Keys are _iSkillID (all modes) or 'group:mode' for a talent mode row that differs. EatChicken_* event rows (151xxx, 158xxx, 159xxx) are not covered. Everything is (inferred); 'why' quotes the evidence. Problems the schema cannot express (blade stacks, bounces, dashes, delayed Venom Splasher detonation, poison DoT, MATK scaling, conditional multipliers) are in the thief findings report.",
+  "buffTriggers": {
+    "group:15119": {
+      "name": "Venom Splasher detonation",
+      "why": "Venom Splasher 15110: 'Plants timed Dynamite on a designated ST enemy ... After «2» seconds, deals Physical ATK*«110»%+«160» ... to the designated enemy and up to «4» other enemies within a «3»-meter radius'; its _kBuff2 [[1511910, 10000, 2000]] is buff 'Venom Splasher' ('When the effect ends, deals ...') whose _kLogicData [1511301-1511310] is the detonation row of group 15113 (VenomSplasher2), at the learned Venom Splasher level.",
+      "on": "expire",
+      "group": 15113,
+      "levelFrom": 15110
+    }
+  },
   "skills": {
+    "15110": {
+      "name": "Venom Splasher",
+      "why": "'Plants timed Dynamite ... After «2» seconds, deals ...': the cast only plants the bomb (_kBuff2 1511910 for 2000 ms); the damage is the detonation (buffTriggers group:15119 -> 15113), so the cast itself deals none.",
+      "hits": {
+        "none": true
+      }
+    },
+    "15113": {
+      "name": "Venom Splasher (detonation)",
+      "why": "'... to the designated enemy and up to «4» other enemies within a «3»-meter radius': circle of 3 m around the bombed enemy (_kRange [300]), 1 + «4» = 5 targets (_iTargetMax 4 would drop one).",
+      "anchor": "target",
+      "shape": {
+        "circle": 3
+      },
+      "maxTargets": 5
+    },
     "15301": {
       "name": "Dark Illusion",
       "why": "'Charges to a point «1.5» meters in front of the target ST enemy within «12» meters ... dealing Physical ATK * «380»%' (mode 1 'Dash to a position «1.5»m in front of a targeted ST enemy'): single-target damage is already right (P1 38000); 'dash.stop' 1.5 m records the charge end point for when the loader's DashStop is wired (it is parsed but unused today, so this entry changes nothing yet).",

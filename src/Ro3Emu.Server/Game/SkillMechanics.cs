@@ -17,9 +17,11 @@ public static class SkillMechanics
     /// <summary>
     /// One damage moment: a template attack-point index, a template time (seconds, scaled with the cast like the
     /// timeline), or <see cref="Ms"/> milliseconds after the cast started (unscaled, and it still lands after the cast
-    /// ended or the player started another one: a lingering zone such as Magnus Exorcismus).
+    /// ended or the player started another one: a lingering zone such as Magnus Exorcismus). With
+    /// <see cref="AfterPoint"/> the milliseconds count from that attack point instead (where the zone appears, whatever
+    /// the chant took).
     /// </summary>
-    public sealed record Hit(int? Point, double? Time, int Branch, int? Split, int? Ms = null);
+    public sealed record Hit(int? Point, double? Time, int Branch, int? Split, int? Ms = null, int? AfterPoint = null);
 
     public sealed record Mechanic(
         int Group,
@@ -50,7 +52,34 @@ public static class SkillMechanics
         IReadOnlyList<int> OnlyElements,
         float Pull,
         int? FollowUpGroup,
-        bool DashToPoint);
+        bool DashToPoint,
+        int? OnHitSkill,
+        int OnHitChance,
+        bool ExcludeTarget);
+
+    /// <summary>
+    /// A buff that releases a skill (buffTriggers): on = "expire" (it ran out: Venom Splasher's detonation on the holder),
+    /// "hitTaken"/"meleeHitTaken" (its player holder was hit: Shield Reflect, Parry), "damageDealt" (its holder dealt
+    /// damage: Charge Up). The skill is cast by the buff's source (expire) or holder, at the holder (expire), the attacker
+    /// (hit taken) or the hit enemy (damage dealt). <see cref="Chance"/> in basis points, <see cref="CooldownMs"/> per holder,
+    /// <see cref="Consume"/> removes the buff when it fires, <see cref="MaxRange"/> (m) limits the attacker distance,
+    /// <see cref="WhileBuff"/> (a _iBuffID) must also be on the holder (Recoil "while [Auto Guard] is active") and
+    /// <see cref="Front"/> only lets attackers in the holder's front half count (Shield Defense "an enemy in front of you").
+    /// </summary>
+    public sealed record BuffTrigger(int Buff, string Name, string On, int? Skill, int? Group, int Chance, int CooldownMs, bool Consume, float MaxRange,
+        int? LevelFrom = null, int? WhileBuff = null, bool Front = false, bool ByGroup = false);
+
+    private static readonly Dictionary<int, BuffTrigger> Triggers = [];
+    private static readonly Dictionary<int, BuffTrigger> GroupTriggers = [];
+
+    /// <summary>The trigger of a buff row (key "<BuffConfig id>"), else of its whole buff group (key "group:<_iBuffID>": every level).</summary>
+    public static BuffTrigger? TriggerFor(int buff, int buffGroup = 0)
+    {
+        _ = All.Value;
+        return Triggers.TryGetValue(buff, out var t) ? t : buffGroup != 0 && GroupTriggers.TryGetValue(buffGroup, out var g) ? g : null;
+    }
+
+    public static IReadOnlyCollection<BuffTrigger> EveryTrigger { get { _ = All.Value; return Triggers.Values.Concat(GroupTriggers.Values).ToList(); } }
 
     private static readonly Lazy<IReadOnlyDictionary<long, Mechanic>> All = new(Load);
 
@@ -84,6 +113,32 @@ public static class SkillMechanics
             {
                 using var stream = assembly.GetManifestResourceStream(name)!;
                 using var doc = JsonDocument.Parse(stream, new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+                if (doc.RootElement.TryGetProperty("buffTriggers", out var triggers))
+                    foreach (var entry in triggers.EnumerateObject())
+                    {
+                        try
+                        {
+                            bool byGroup = entry.Name.StartsWith("group:", StringComparison.Ordinal);
+                            if (!int.TryParse(byGroup ? entry.Name[6..] : entry.Name, out int buff)) throw new InvalidDataException($"buff key '{entry.Name}' is not a BuffConfig id or group:<_iBuffID>");
+                            var table = byGroup ? GroupTriggers : Triggers;
+                            if (table.ContainsKey(buff)) throw new InvalidDataException($"buff trigger {entry.Name} is defined twice");
+                            var e = entry.Value;
+                            string on = e.GetProperty("on").GetString() ?? "";
+                            if (on is not ("expire" or "hitTaken" or "meleeHitTaken" or "damageDealt")) throw new InvalidDataException($"buff trigger {buff}: on '{on}'");
+                            int? skill = e.TryGetProperty("skill", out var sk) ? sk.GetInt32() : null, group = e.TryGetProperty("group", out var g) ? g.GetInt32() : null;
+                            if (skill == null && group == null) throw new InvalidDataException($"buff trigger {buff}: needs skill or group");
+                            table[buff] = new BuffTrigger(buff, e.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "", on, skill, group,
+                                e.TryGetProperty("chance", out var c) ? c.GetInt32() : 10000, e.TryGetProperty("cooldownMs", out var cd) ? cd.GetInt32() : 0,
+                                e.TryGetProperty("consume", out var cs) && cs.ValueKind == JsonValueKind.True, e.TryGetProperty("maxRange", out var mr) ? mr.GetSingle() : 0,
+                                e.TryGetProperty("levelFrom", out var lf) ? lf.GetInt32() : null,
+                                e.TryGetProperty("whileBuff", out var wb) ? wb.GetInt32() : null,
+                                e.TryGetProperty("front", out var fr) && fr.ValueKind == JsonValueKind.True, byGroup);
+                        }
+                        catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException or KeyNotFoundException or FormatException)
+                        {
+                            lock (Errors) Errors.Add($"{name}: buffTriggers {entry.Name}: {ex.Message}");
+                        }
+                    }
                 if (!doc.RootElement.TryGetProperty("skills", out var skills)) continue;
                 foreach (var entry in skills.EnumerateObject())
                 {
@@ -131,12 +186,13 @@ public static class SkillMechanics
                 int count = every.GetProperty("count").GetInt32();
                 for (int i = 0; i < count; i++) hits.Add(new Hit(null, from + (to - from) * i / Math.Max(1, count), branch, split));
             }
+            int? after = h.TryGetProperty("afterPoint", out var ap) ? ap.GetInt32() : null;
             if (h.TryGetProperty("ms", out var msList))
-                foreach (var v in msList.EnumerateArray()) hits.Add(new Hit(null, null, branch, split, v.GetInt32()));
+                foreach (var v in msList.EnumerateArray()) hits.Add(new Hit(null, null, branch, split, v.GetInt32(), after));
             if (h.TryGetProperty("everyMs", out var everyMs))
             {
                 int from = everyMs.GetProperty("from").GetInt32(), to = everyMs.GetProperty("to").GetInt32(), count = everyMs.GetProperty("count").GetInt32();
-                for (int i = 0; i < count; i++) hits.Add(new Hit(null, null, branch, split, from + (to - from) * i / Math.Max(1, count)));
+                for (int i = 0; i < count; i++) hits.Add(new Hit(null, null, branch, split, from + (to - from) * i / Math.Max(1, count), after));
             }
             if (h.TryGetProperty("final", out var final))
                 hits.Add(new Hit(final.TryGetProperty("point", out var fp) ? fp.GetInt32() : null,
@@ -181,7 +237,10 @@ public static class SkillMechanics
             Ints(e, "onlyVs", "races"), Ints(e, "onlyVs", "elements"),
             e.TryGetProperty("pull", out var pull) ? pull.GetSingle() : 0,
             e.TryGetProperty("followUp", out var follow3) && follow3.TryGetProperty("group", out var fg) ? fg.GetInt32() : null,
-            e.TryGetProperty("dash", out var dash2) && dash2.TryGetProperty("to", out var dt) && dt.GetString() == "point");
+            e.TryGetProperty("dash", out var dash2) && dash2.TryGetProperty("to", out var dt) && dt.GetString() == "point",
+            e.TryGetProperty("onHitCast", out var ohc) ? ohc.GetProperty("skill").GetInt32() : null,
+            e.TryGetProperty("onHitCast", out var ohc2) && ohc2.TryGetProperty("chance", out var ohcc) ? ohcc.GetInt32() : 10000,
+            e.TryGetProperty("excludeTarget", out var ex) && ex.ValueKind == JsonValueKind.True);
     }
 
     private static List<int> Ints(JsonElement e, string block, string key) =>

@@ -24,7 +24,10 @@ public sealed partial class SkillCombatTests
             var template = data.SkillTemplate(GameData.Int(top, "_iScriptShow"));
             int points = template is { } t && t.TryGetProperty("m_kAtkPoints", out var p) ? p.GetArrayLength() : 0;
             foreach (var hit in m.Hits)
+            {
                 if (hit.Point is int index && index >= points) problems.Add($"{m.Group} {m.Name}: attack point {index} but the template has {points}");
+                if (hit.AfterPoint is int after && after >= points) problems.Add($"{m.Group} {m.Name}: afterPoint {after} but the template has {points}");
+            }
             foreach (var (buff, _, _) in m.TargetBuffs.Concat(m.SelfBuffs))
                 if (data.Row("BuffConfig", buff) == null) problems.Add($"{m.Group} {m.Name}: buff {buff} missing");
             if (m.ShieldBuff is int shield && data.Row("BuffConfig", shield) == null) problems.Add($"{m.Group} {m.Name}: shield buff {shield} missing");
@@ -33,6 +36,18 @@ public sealed partial class SkillCombatTests
                 problems.Add($"{m.Group} {m.Name}: follow-up group {followGroup} missing");
             if (m.Mode != 0 && !rows.Any(r => GameData.Int(r, "_iMode") == m.Mode)) problems.Add($"{m.Group}:{m.Mode} {m.Name}: no row with that mode");
         }
+        Assert.True(problems.Count == 0, string.Join("\n", problems));
+        foreach (var t in SkillMechanics.EveryTrigger)
+        {
+            if (t.ByGroup ? !data.Table("BuffConfig").Values.Any(r => GameData.Int(r, "_iBuffID") == t.Buff) : data.Row("BuffConfig", t.Buff) == null)
+                problems.Add($"trigger {t.Buff} {t.Name}: buff missing");
+            if (t.WhileBuff is int w && !data.Table("BuffConfig").Values.Any(r => GameData.Int(r, "_iBuffID") == w)) problems.Add($"trigger {t.Buff} {t.Name}: whileBuff group {w} missing");
+            if (t.LevelFrom is int lf && !skills.Values.Any(r => GameData.Int(r, "_iSkillID") == lf)) problems.Add($"trigger {t.Buff} {t.Name}: levelFrom {lf} missing");
+            if (t.Skill is int s && data.Row("SkillConfig", s) == null) problems.Add($"trigger {t.Buff} {t.Name}: skill {s} missing");
+            if (t.Group is int g && !skills.Values.Any(r => GameData.Int(r, "_iSkillID") == g)) problems.Add($"trigger {t.Buff} {t.Name}: group {g} missing");
+        }
+        foreach (var m in SkillMechanics.Every)
+            if (m.OnHitSkill is int onHit && data.Row("SkillConfig", onHit) == null) problems.Add($"{m.Group} {m.Name}: onHitCast {onHit} missing");
         Assert.True(problems.Count == 0, string.Join("\n", problems));
     }
 

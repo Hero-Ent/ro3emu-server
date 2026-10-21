@@ -1,10 +1,20 @@
 {
   "version": 1,
-  "about": "Acolyte line (Acolyte 4100, Priest 4200, High Priest 4300, Archbishop 4400; no Monk rows exist under job prefix 4): skill mechanics SkillConfig does not carry, read from each skill's own description (or, for the talent procs 142xx that have none, from the SpecialEffectConfig talent text whose buff _kLogicData names the proc row). The original server scripts are not in the client, so every entry is inferred; 'why' quotes the evidence. Periodic areas (Magnus Exorcismus ticks, Sanctuary ticks) are not expressible yet and are listed in the findings report.",
+  "about": "Acolyte line (Acolyte 4100, Priest 4200, High Priest 4300, Archbishop 4400; no Monk rows exist under job prefix 4): skill mechanics SkillConfig does not carry, read from each skill's own description (or, for the talent procs 142xx that have none, from the SpecialEffectConfig talent text whose buff _kLogicData names the proc row). The original server scripts are not in the client, so every entry is inferred; 'why' quotes the evidence. Periodic areas (Magnus Exorcismus, Sanctuary) tick through 'hits.everyMs' counted from the attack point where the area appears.",
   "skills": {
     "14109": {
       "name": "Magnus Exorcismus",
-      "why": "'Summon a «7»m*«7»m cross within «10»m of yourself ... to up to «4» enemies in the area': the area centred on the dragged point is 7 x 7 m, not _kRange [800, 800] (8 x 8 m). The cross is approximated by its 7 x 7 m bounding square. The 4 s / 0.5 s ticking (8 ticks of P1 1000 + 60 each) is NOT simulated (findings).",
+      "why": "'Summon a «7»m*«7»m cross within «10»m of yourself ... For the next «4» sec., it deals Magic ATK*«10»%+«60» ... to up to «4» enemies in the area every «0.5» sec. Damage dealt to enemies of the Undead Race or Demon Race, or with the Shadow property or Undead property, is increased by «30»%': the area centred on the dragged point is 7 x 7 m, not _kRange [800, 800] (8 x 8 m); the cross is approximated by its 7 x 7 m bounding square. 8 ticks (_kLogicData [22000009, 4, **8**, 10]) every 500 ms from the moment the cross appears (attack point 0), each P1[0] 1000 + 60; branch 1 (P1 1300 = +30%) against Undead (race 5) / Demon (race 3) monsters and Shadow (8) / Undead (10) element ones.",
+      "hits": { "everyMs": { "from": 0, "to": 4000, "count": 8 }, "afterPoint": 0 },
+      "branchVs": { "races": [3, 5], "elements": [8, 10], "branch": 1 },
+      "anchor": "point",
+      "shape": { "rect": [7, 7] }
+    },
+    "14115": {
+      "name": "Sanctuary",
+      "why": "'Summon a «7»m*«7»m Holy Spirit blessing area within «15»m of yourself. For the next «4» seconds, every «0.6» seconds, it restores Life equal to your Magic ATK*«10»%+«100» points to up to «4» allies within the area. Undead-property and Demon Race monsters within the area take ranged Holy magic damage equal to your Magic ATK*«10»%+«100»': 7 ticks (0 to 3.6 s, _kLogicData [4] = 4 s) from attack point 0; the row's selector is friend+enemy (m_kSelectType 4), so each tick heals allies and damages only Undead-element (10) / Demon-race (3) monsters on the 7 x 7 m square (_kRange [700, 700]).",
+      "hits": { "everyMs": { "from": 0, "to": 4200, "count": 7 }, "afterPoint": 0 },
+      "onlyVs": { "races": [3], "elements": [10] },
       "anchor": "point",
       "shape": { "rect": [7, 7] }
     },

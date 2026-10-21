@@ -2,6 +2,23 @@
   "version": 1,
   "about": "Mage line (Mage 2100, Wizard 2200, High Wizard 2300, Warlock 2400): skill mechanics SkillConfig does not carry, read from each skill's own description and timeline (SkillMechanics.cs documents every field). The original server scripts are not in the client, so every entry is inferred; 'why' quotes the evidence. Fire/Cold/Lightning Bolt, Earth Spike, Heaven's Drive, Thunderstorm, Jack Frost, Thunderclap, Crimson Rock and Comet already deliver their description total through _kShowDmg; the ground fields (Fire Wall, Quagmire, Fire Pillar, Meteor Storm, Lord of Vermilion, Storm Gust, Safety Wall) are CreateSkillObjectAsync objects and ignore these entries.",
   "skills": {
+    "12008": {
+      "name": "Soul Strike",
+      "why": "'... dealing a total of Magic ATK*«160»%+«220» ranged Ghost magic damage. Deals an Extra «50»% ranged Ghost magic damage to Undead enemies': P1 [16000, 24000] / P2 [220, 330] -> branch 1 (+50%) against Undead-race (5) or Undead-element (10) monsters; the generic path always used branch 0.",
+      "branchVs": { "races": [5], "elements": [10], "branch": 1 }
+    },
+    "12212": {
+      "name": "Gravitation Field",
+      "why": "'... in a designated area with a «6»-meter radius ... dealing ... Magic ATK*«10»%+«200» to up to «5» enemies per wave. The gravity field lasts «4» seconds and strikes a total of «8» times': 8 waves every 500 ms (_kLogicData [500, 3900, 550]: interval 500 within 3.9 s) from attack point 0, each the row damage (P1 1000 + 200), on a 6 m circle at the dragged point (_kRange [500] is 5 m). The generic path dealt one wave.",
+      "hits": { "everyMs": { "from": 0, "to": 4000, "count": 8 }, "afterPoint": 0 },
+      "anchor": "point",
+      "shape": { "circle": 6 }
+    },
+    "12443": {
+      "name": "Ember Zone",
+      "why": "'Creates an «4»-second [Ember Zone] that deals ... Magic ATK * «5»%+«45» to up to «5» enemies within the area every «0.5» seconds': 8 ticks (_kLogicData [500, 4000, 550]: every 500 ms for 4 s) from attack point 0, each P1 500 + 45. Talent proc row: only applies when something casts it.",
+      "hits": { "everyMs": { "from": 0, "to": 4000, "count": 8 }, "afterPoint": 0 }
+    },
     "12101": {
       "name": "Sightrasher",
       "why": "'dealing Magic ATK*«100»%+«180» Fire ranged magic damage to up to «5» enemies within a «5»-meter radius, and knocking them back «2» meters': the script Sightrasher has no displacement rule and no movement EffectData, so the 2 m push is missing.",
