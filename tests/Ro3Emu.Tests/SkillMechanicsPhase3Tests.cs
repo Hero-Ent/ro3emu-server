@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Romsg;
 using Ro3Emu.Server.Game;
 using Ro3Emu.Server.Maps;
@@ -41,6 +42,11 @@ public sealed partial class SkillCombatTests
         await Loop.InvokeAsync(() =>
         {
             foreach (var m in new[] { locked, near, nearer, far }) { m.Hp = 50_000_000; m.Moving = false; }
+            // Field monsters that roam by would be fair bounce targets: move them out of the way.
+            var mine = new[] { locked.Uid, near.Uid, nearer.Uid, far.Uid };
+            foreach (var other in app.Services.GetRequiredService<World>().Map(Session("alice").WorldScene).Units.OfType<MonsterUnit>()
+                         .Where(m => !mine.Contains(m.Uid) && MathF.Abs(m.X - origin.X) < 40 && MathF.Abs(m.Z - origin.Z) < 40))
+            { other.X = origin.X + 200; other.Moving = false; }
             locked.X = origin.X; locked.Z = origin.Z + 1;
             nearer.X = origin.X + 2; nearer.Z = origin.Z + 1;   // 2 m from the target
             near.X = origin.X + 4; near.Z = origin.Z + 1;       // 2 m from nearer, 4 m from the target: reached by the second jump
@@ -56,4 +62,50 @@ public sealed partial class SkillCombatTests
         Assert.Equal([locked.Uid, nearer.Uid, near.Uid], struck);
         Assert.Equal(50_000_000, far.Hp);
     }
+
+    [ClientDataFact]
+    public void EveryAxeTornadoAndHighEnergyImpactModeUsesItsSchedule()
+    {
+        var data = app.Services.GetRequiredService<Ro3Emu.Server.Data.GameData>();
+        foreach (var row in data.Table("SkillConfig").Values)
+        {
+            long group = Ro3Emu.Server.Data.GameData.Int(row, "_iSkillID");
+            if (group == 16304) { Assert.True(CombatService.IsSpin(row)); Assert.True(CombatService.SpinTicks(row) > 0); }
+            if (group == 16307) Assert.True(CombatService.IsLeapSlam(row));
+        }
+    }
+
+    [ClientDataFact]
+    public async Task VulcanArmLoadsFirepowerOnlyAtFifteenStacks()
+    {
+        await using var alice = await InWorld("Alice");
+        await Gm("alice", "!job 6400"); await Teach("alice", 16313);
+        var s = Session("alice");
+        var target = await Target("alice", stationary: true);
+        var origin = s.Position.Clone();
+        await Loop.InvokeAsync(() => { target.Hp = 50_000_000; target.Moving = false; target.X = origin.X; target.Z = origin.Z + 1; return Task.CompletedTask; });
+        await alice.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1631301, TargetId = target.Uid });
+        Assert.Equal(0, (await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser)).Result);
+        await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.Dsts.Count > 0);
+        await Task.Delay(200);
+        var first = await BuffsOf(s);
+        Assert.Contains(first, b => b.ConfigId == 1631301 && b.PileCount == 1); // the counter grows...
+        Assert.DoesNotContain(first, b => b.ConfigId == 1631701);               // ...and Firepower Loaded waits
+        await Loop.InvokeAsync(async () =>
+        {
+            await Buffs.SetPileCountAsync(s, 1631301, 15000, s.Role!.Id, 14);
+            s.SkillCds.Clear(); s.SkillModeCds.Clear();
+        });
+        await Task.Delay(1500); // the first cast's action time
+        await alice.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1631301, TargetId = target.Uid });
+        Assert.Equal(0, (await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser)).Result);
+        await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.Dsts.Count > 0);
+        await Task.Delay(200);
+        var loaded = await BuffsOf(s);
+        Assert.DoesNotContain(loaded, b => b.ConfigId == 1631301);
+        Assert.Contains(loaded, b => b.ConfigId == 1631701 && b.PileCount == 3);
+    }
+
+    /// <summary>A snapshot of the buffs, taken on the game loop that mutates them.</summary>
+    private Task<List<ActiveBuff>> BuffsOf(GameSession s) => Loop.InvokeAsync(() => Task.FromResult(s.Buffs.ToList()));
 }

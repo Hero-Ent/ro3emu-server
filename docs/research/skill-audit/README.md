@@ -13,7 +13,7 @@ under "Needs engine work".
 | Archer / Hunter / Sniper / Ranger | [archer.md](archer.md) | `archer.json` |
 | Acolyte / Priest / High Priest / Archbishop | [acolyte.md](acolyte.md) | `acolyte.json` |
 | Thief / Assassin / Assassin Cross / Guillotine Cross | [thief.md](thief.md) | `thief.json` |
-| Merchant / Blacksmith / Whitesmith / Mechanic | done by hand, see the "why" of each entry | `merchant.json` |
+| Merchant / Blacksmith / Whitesmith / Mechanic | [merchant.md](merchant.md) | `merchant.json` |
 
 ## Re-running the audit
 
@@ -65,6 +65,12 @@ Still open after phase 2: Death Bound (it reflects a % of the damage taken, and 
 - **Cooldown reset** (`resetCooldown`): Warg Bite resets Warg Hunt.
 - Archer: Fear Breeze (30% piercing arrows on hit, `buffTriggers`), Focused Arrow Strike (18 m line, 1 + 5 targets),
   Warg Hunt shows its 3 hits.
+- Charges and leaps (`dash`, `dash.minDistance`): Charge Attack, Warg Strike and Warg Hunt (only from farther than
+  5 m), Rift Impact and Twilight move the caster; Fearless Charge moves 12 m (PinpointAttack2).
+- Crusader per-mode entries: Shield Cast mode 0 (monster branch, 5 m), Earthshaker (10 ticks + final), Crescent Moon pull.
+- Mechanic: every Axe Tornado / High-Energy Impact mode row (AxeTornadoPro, ...S1BD1/2, AxeLeapAttack2...) now uses
+  the spin / leap schedule (they fell back to one hit); Vulcan Arm grants Firepower Loaded only at 15 stacks, with
+  3 uses that Arm Cannon - Enhance spends (`stackGrant`, `consumePiles`).
 
 Still open: blade stacks (Cross Ripper Slasher), poison DoT rows, Reading Spellbook extra casts, per-hit elements and
 pulls (Tetra Vortex), dispatch by distance (Warg Hunt melee/ranged), proc tables for talents that cannot be learned,

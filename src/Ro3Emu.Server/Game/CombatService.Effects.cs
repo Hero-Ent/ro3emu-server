@@ -381,8 +381,22 @@ public sealed partial class CombatService
         {
             if (!CanApplyMoreEffects()) break;
             if (field == null && impact?.SelfEffects != false)
+            {
                 foreach (var tuple in Tuples(row, "_kBuff1"))
-                    if (CanApplyMoreEffects() && RollBuff(tuple, out int id, out int duration)) await buffs.AddAsync(recipient, id, duration, castingRole.Id);
+                {
+                    if (!CanApplyMoreEffects() || !RollBuff(tuple, out int id, out int duration)) continue;
+                    if (mechanic?.AtStacks is { } gate && recipient == s && gate.Grants.Contains(id)) continue; // held for the counter
+                    await buffs.AddAsync(recipient, id, duration, castingRole.Id);
+                }
+                if (mechanic?.AtStacks is { } stack && recipient == s && CanApplyMoreEffects()
+                    && s.Buffs.FirstOrDefault(b => b.ConfigId == stack.Counter) is { } counter && counter.PileCount >= stack.At)
+                {
+                    await buffs.RemoveAsync(s, counter);
+                    foreach (var tuple in Tuples(row, "_kBuff1"))
+                        if (tuple.GetArrayLength() >= 3 && (int)(GameData.Number(tuple[0]) ?? 0) is var grant && stack.Grants.Contains(grant))
+                            await buffs.SetPileCountAsync(s, grant, (int)(GameData.Number(tuple[2]) ?? 0), castingRole.Id, stack.Piles);
+                }
+            }
             if (friendly && damage)
             {
                 double multiplier = Numbers(row, "_kDamageParam1").FirstOrDefault() * StatScale(row, id => stats[id], s.Progress!.Level), flat = Numbers(row, "_kDamageParam2").FirstOrDefault();

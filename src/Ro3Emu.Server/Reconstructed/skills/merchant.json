@@ -1,7 +1,12 @@
 {
   "version": 1,
-  "about": "Merchant line (Merchant 6100, Blacksmith 6200, Whitesmith 6300, Mechanic 6400): skill mechanics SkillConfig does not carry, read from each skill's own description and timeline (SkillMechanics.cs documents every field). The original server scripts are not in the client, so every entry is inferred; 'why' quotes the evidence. Axe Tornado (16304) and High-Energy Impact (16307) are scheduled in CombatService.CastImpacts.",
+  "about": "Merchant line (Merchant 6100, Blacksmith 6200, Whitesmith 6300, Mechanic 6400): skill mechanics SkillConfig does not carry, read from each skill's own description and timeline (SkillMechanics.cs documents every field). The original server scripts are not in the client, so every entry is inferred; 'why' quotes the evidence. Axe Tornado (16304) and High-Energy Impact (16307) are scheduled in CombatService.CastImpacts. Talent proc rows without a usable text of their own (16010, 16205) quote their talent's BuffConfig text; 'group:mode' keys override a mode row (Arm Cannon's enhanced volleys).",
   "skills": {
+    "16313": {
+      "name": "Vulcan Arm",
+      "why": "'Every «15» casts of [Vulcan Arm] trigger [Firepower Loaded] «1» times. [Firepower Loaded]: Increases the number of Cannon shells Launched by each [Arm Cannon] attack to «8» for «3» attacks': _kBuff1 [[1631301, 10000, 15000], [1631701, 10000, -1]] (mode 1: 1631501) gave Firepower Loaded on every cast. 1631301 'Firepower Ready: At @{1} stacks, triggers [Firepower Loading]' stacks to 15 (_iStackType 7, _iMaxStack 15); Firepower Loaded has _iMaxStack 3. So the grant waits for 15 piles of the counter, which it then spends, and comes with 3 piles (one per Arm Cannon - Enhance shot, consumePiles on 16312 modes 1/3/4).",
+      "stackGrant": { "counter": 1631301, "at": 15, "grants": [1631701, 1631501], "piles": 3 }
+    },
     "16006": {
       "name": "Cart Revolution",
       "why": "'up to @{2} selected enemies within @{1} meters and up to «3» other enemies within «2» meters of them': a 2 m splash around the locked target, 1 + 3 targets (_iTargetMax is 1).",
@@ -11,10 +16,34 @@
     },
     "16010": {
       "name": "Gunpowder Throw",
-      "why": "'... up to «5» other enemies within «2» meters of them': 2 m splash around the target, 1 + 5 targets.",
+      "why": "The row's own text is a copy of Cart Revolution's ('Ram enemies with your cart, dealing Physical ATK * «10»% + «40» Neutral ... up to «5» other enemies within «2» meters of them') although _iEleType is 4 (Fire). Its talent text (10220300051, buff 1640301 _kDescData ['4','5','10','40','1.5']) matches the row: 'After using [Cart Revolution], immediately trigger «1» instances of [Gunpowder Throw], dealing Fire melee Physical damage equal to PATK * «10»% + «40» to up to «5» enemies within «4» meters': a 4 m area around the locked target (Lock, _iRangeType 2, empty kRange), 5 targets in total (_iTargetMax is 1).",
       "anchor": "target",
-      "shape": { "circle": 2 },
-      "maxTargets": 6
+      "shape": { "circle": 4 },
+      "maxTargets": 5
+    },
+    "16201": {
+      "name": "Cart Boost",
+      "why": "'Increases your Movement Speed by «20»% and removes [Slow] from you for «5» sec': _kBuff1 is the speed buff 1620110 and 1620201 (the High Speed Cart Ram mode switch); nothing removes [Slow]. Cleanses every BuffConfig group named 'Slow' (11606, 12111, 12309, 12367, 12484, 14016, 15009, 16306, 23362, 23434, 49009, 50049, 111652, 115326, 215307) once at the cast; the 5 s immunity is not modelled.",
+      "cleanse": [11606, 12111, 12309, 12367, 12484, 14016, 15009, 16306, 23362, 23434, 49009, 50049, 111652, 115326, 215307]
+    },
+    "16205": {
+      "name": "Explosive Strike (High Speed Cart Ram talent proc)",
+      "why": "The row has no description; its talent text (10220300067, buff 1646301 _kDescData ['4','5','20','100','1.5']): '[High Speed Cart Ram] triggers [Explosive Strike] an Extra «1» times when cast, dealing Neutral melee Physical damage equal to PATK * «20»% + «100» to up to «5» enemies within «4» meters' (row P1 2000, P2 100). Lock with _iRangeType 2 and empty kRange would use the 3 m default and _iTargetMax 1: 4 m around the locked target, 5 targets.",
+      "anchor": "target",
+      "shape": { "circle": 4 },
+      "maxTargets": 5
+    },
+    "16308": {
+      "name": "Crescent Wheel",
+      "why": "'Throw flying axes around you, dealing ... totaling PATK * «600»% to up to «4» members of the Enemy Team within a «7»-meter radius': circle of 7 m around the caster (_kRange 750 = 7.5 m); one hit of P1 60000 is the total.",
+      "anchor": "caster",
+      "shape": { "circle": 7 }
+    },
+    "16350": {
+      "name": "High-Energy Pulse",
+      "why": "'Releases a pulse within a «8» m radius, dealing Physical ATK * «200»% ... «1» times' (mode 1: 'Release a pulse in a «8»-meter radius around you'): circle of 8 m around the caster (_kRange 750 = 7.5 m).",
+      "anchor": "caster",
+      "shape": { "circle": 8 }
     },
     "16305": {
       "name": "Heavy Axe Smash",
@@ -37,6 +66,33 @@
       "anchor": "target",
       "shape": { "circle": 6 },
       "maxTargets": 6
+    },
+    "16312:1": {
+      "name": "Arm Cannon - Enhance (Firepower Loaded)",
+      "why": "Mode 1 (set by [Firepower Loaded] 1631701 -> 1632001 _kSkillAttributeList [0,16312,15,1,1]): 'Launch «8» Cannon shells at «1» selected enemies within «15» meters and up to «5» Other enemies within «6» meters of them, dealing ... totaling PATK * «160»%': P1 4000 (40%) shown as 2 shells (_kShowDmg [2]); 4 volleys x 2 shells x 40% = 8 shells, 160%, on the first four of the five attack points of template 163121 (0.08, 0.12, 0.2, 0.23 s; the group entry's two points would deal only 80%). Same 6 m splash around the target, 1 + 5 targets.",
+      "hits": { "points": [0, 1, 2, 3] },
+      "anchor": "target",
+      "shape": { "circle": 6 },
+      "maxTargets": 6,
+      "consumePiles": [16317, 16315]
+    },
+    "16312:3": {
+      "name": "Arm Cannon - Enhance (Melody talent + Firepower Loaded)",
+      "why": "Mode 3 (same script ArmCannonPro and template 163121 as mode 1): 'Launch «8» Cannon shells at «1» selected enemies within «15» meters and up to «5» Other enemies within «6» meters of them, dealing ... totaling PATK * «160»%' with P1 4000, _kShowDmg [2]: 4 volleys x 40% = 160% on attack points 0-3; 6 m around the target, 1 + 5 targets.",
+      "hits": { "points": [0, 1, 2, 3] },
+      "anchor": "target",
+      "shape": { "circle": 6 },
+      "maxTargets": 6,
+      "consumePiles": [16317, 16315]
+    },
+    "16312:4": {
+      "name": "Melody Cannon - Enhance",
+      "why": "Mode 4 (template 1631212, five attack points 0.08-0.28 s): 'Launch «12» Cannon rounds at «1» designated enemies within «15» meters and up to «5» Other enemies within «6» meters around them, dealing total ... PATK*«208»%': P1 5200 (52%) shown as 3 rounds (_kShowDmg [3]); 4 volleys x 3 rounds x 52% = 12 rounds, 208%, on attack points 0-3; 6 m around the target, 1 + 5 targets.",
+      "hits": { "points": [0, 1, 2, 3] },
+      "anchor": "target",
+      "shape": { "circle": 6 },
+      "maxTargets": 6,
+      "consumePiles": [16317, 16315]
     },
     "16314": {
       "name": "Pile Bunker",

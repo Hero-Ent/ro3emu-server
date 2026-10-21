@@ -55,6 +55,11 @@ public sealed partial class SkillCombatTests
                 if (!data.Table("BuffConfig").Values.Any(r => GameData.Int(r, "_iBuffID") == g)) problems.Add($"{m.Group} {m.Name}: cleanse group {g} missing");
             if (m.BranchIf is { CasterBuffGroup: int bg } && !data.Table("BuffConfig").Values.Any(r => GameData.Int(r, "_iBuffID") == bg))
                 problems.Add($"{m.Group} {m.Name}: branchIf buff group {bg} missing");
+            foreach (int g in m.ConsumePiles ?? [])
+                if (!data.Table("BuffConfig").Values.Any(r => GameData.Int(r, "_iBuffID") == g)) problems.Add($"{m.Group} {m.Name}: consumePiles group {g} missing");
+            if (m.AtStacks is { } st)
+                foreach (int b in st.Grants.Append(st.Counter))
+                    if (data.Row("BuffConfig", b) == null) problems.Add($"{m.Group} {m.Name}: stackGrant buff {b} missing");
         }
         Assert.True(problems.Count == 0, string.Join("\n", problems));
     }

@@ -76,12 +76,12 @@ public sealed partial class SkillCombatTests
             // Heavy Cannon Shot's own hit keeps it.
             foreach (var handler in Combat.DealtAsync) await handler(s, target, data.Row("SkillConfig", 1160201)!.Value, 100);
         });
-        Assert.Contains(s.Buffs, b => b.ConfigId == 1160401);
+        Assert.Contains(await BuffsOf(s), b => b.ConfigId == 1160401);
         await Loop.InvokeAsync(async () =>
         {
             foreach (var handler in Combat.DealtAsync) await handler(s, target, data.Row("SkillConfig", 1160101)!.Value, 100);
         });
-        Assert.DoesNotContain(s.Buffs, b => b.ConfigId == 1160401);
+        Assert.DoesNotContain(await BuffsOf(s), b => b.ConfigId == 1160401);
         var strike = await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.SkillId == 1162201);
         Assert.Contains(strike.Dsts, d => d.DstID == target.Uid);
     }

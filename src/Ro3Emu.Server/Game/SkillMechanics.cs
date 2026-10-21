@@ -29,7 +29,9 @@ public static class SkillMechanics
     /// physical hit ("Physical ATK*«50»%+Magic ATK*«50»%"), <see cref="AtkFromMatk"/> ("stat": "matk") makes a physical
     /// row scale with MATK ("Physical damage equal to MATK * «60»%"), and <see cref="Cleanse"/> lists the BuffConfig
     /// _iBuffID groups removed from the recipients ("Removes the [Poisoned] status") and <see cref="ResetCooldown"/> the
-    /// skill groups whose cooldown the cast ends ("resetting the Cooldown of [Warg Hunt]").
+    /// skill groups whose cooldown the cast ends ("resetting the Cooldown of [Warg Hunt]"); <see cref="ConsumePiles"/>
+    /// spends one pile of the first of those buff groups the caster has when the cast starts (an Arm Cannon - Enhance
+    /// shot uses one of Firepower Loaded's «3» attacks).
     /// </summary>
     public sealed record Mechanic(
         int Group,
@@ -71,7 +73,17 @@ public static class SkillMechanics
         IReadOnlyList<int>? Cleanse = null,
         bool AtkFromMatk = false,
         IReadOnlyList<int>? ResetCooldown = null,
-        float DashMinDistance = 0);
+        float DashMinDistance = 0,
+        StackGrant? AtStacks = null,
+        IReadOnlyList<int>? ConsumePiles = null);
+
+    /// <summary>
+    /// The row's _kBuff1 holds a counter buff and the buff it leads to (Vulcan Arm: Firepower Ready 1631301, max 15, and
+    /// Firepower Loaded 1631701): the <see cref="Grants"/> are held back until the <see cref="Counter"/> reaches
+    /// <see cref="At"/> piles ("Every «15» casts ... trigger [Firepower Loaded]"), then the counter is spent and the grant
+    /// comes with <see cref="Piles"/> piles ("for «3» attacks").
+    /// </summary>
+    public sealed record StackGrant(int Counter, int At, IReadOnlyList<int> Grants, int Piles);
 
     /// <summary>
     /// After the main hit, the attack jumps <see cref="Count"/> times to a random other enemy within
@@ -286,7 +298,13 @@ public static class SkillMechanics
             e.TryGetProperty("cleanse", out var cl) ? cl.EnumerateArray().Select(v => v.GetInt32()).ToList() : null,
             e.TryGetProperty("stat", out var st) && (st.GetString() is "matk" ? true : throw new InvalidDataException($"{file}: skill {group} stat '{st.GetString()}'")),
             e.TryGetProperty("resetCooldown", out var rc) ? rc.EnumerateArray().Select(v => v.GetInt32()).ToList() : null,
-            e.TryGetProperty("dash", out var dash3) && dash3.TryGetProperty("minDistance", out var dmin) ? dmin.GetSingle() : 0);
+            e.TryGetProperty("dash", out var dash3) && dash3.TryGetProperty("minDistance", out var dmin) ? dmin.GetSingle() : 0,
+            e.TryGetProperty("stackGrant", out var sgr)
+                ? new StackGrant(sgr.GetProperty("counter").GetInt32(), sgr.GetProperty("at").GetInt32(),
+                    sgr.GetProperty("grants").EnumerateArray().Select(v => v.GetInt32()).ToList(),
+                    sgr.TryGetProperty("piles", out var sgp) ? sgp.GetInt32() : 1)
+                : null,
+            e.TryGetProperty("consumePiles", out var cp) ? cp.EnumerateArray().Select(v => v.GetInt32()).ToList() : null);
     }
 
     private static List<int> Ints(JsonElement e, string block, string key) =>

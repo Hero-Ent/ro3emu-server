@@ -441,7 +441,7 @@ public sealed partial class CombatService
             });
         }
         // A leap grants its _kBuff1 (High-Energy Impact's flight shield) on take-off; the slam comes at landing.
-        if (Script(row) == LeapSlamScript && points.Length > 1)
+        if (IsLeapSlam(row) && points.Length > 1)
             ScheduleRuntime(action.WorldScene, TimeSpan.FromMilliseconds(Ms(points[0])), async () =>
             {
                 if (!Live(s, action)) return;
@@ -479,6 +479,8 @@ public sealed partial class CombatService
         }
         foreach (var (buff, chance, ms) in mechanic.SelfBuffs)
             if (Rolls.Proc(10000) < chance) await buffs.AddAsync(s, buff, ms, role.Id);
+        foreach (int group in mechanic.ConsumePiles ?? [])
+            if (await buffs.ConsumeBuffPilesAsync(s, group, 1)) break;
         // A fixed row, or the named group at the cast's own level (Auto Counter lv3 releases the lv3 counter).
         int? followId = mechanic.FollowUpSkill
             ?? (mechanic.FollowUpGroup is int fg ? FollowUpRow(fg, (int)GameData.Int(action.Row, "_iLevel")) : null);
@@ -504,6 +506,11 @@ public sealed partial class CombatService
     /// <summary>High-Energy Impact: flies (the caster moves) and slams the ground where it lands.</summary>
     internal const string LeapSlamScript = "AxeLeapAttack";
 
+    // The enhanced and talent mode rows carry suffixed scripts (AxeTornadoPro, AxeTornadoProS1BD2, AxeLeapAttack2,
+    // AxeLeapAttackS1BD1...) with the same [per tick, final] / take-off + slam layout, so they share the schedule.
+    internal static bool IsSpin(JsonElement row) => Script(row).StartsWith(SpinScript, StringComparison.Ordinal);
+    internal static bool IsLeapSlam(JsonElement row) => Script(row).StartsWith(LeapSlamScript, StringComparison.Ordinal);
+
     /// <summary>
     /// When a cast deals its damage. Ordinarily once, at the template's first attack point (attack-point count is not a
     /// hit count: Basic Attack has [0.15, 0.15]). Two scripts are scheduled from their descriptions instead:
@@ -518,7 +525,7 @@ public sealed partial class CombatService
     {
         string script = Script(row);
         if (script == "Resurrection") return [(action.ChantMs, null)];
-        if (script == SpinScript && points.Length >= 2 && SpinTicks(row) is var ticks and > 0)
+        if (IsSpin(row) && points.Length >= 2 && SpinTicks(row) is var ticks and > 0)
         {
             double start = points.Length >= 3 ? points[1] : points[0];
             double end = points.Length >= 4 ? points[^2] : points[^1];
@@ -528,7 +535,7 @@ public sealed partial class CombatService
             impacts.Add((ms(points[^1]), new Impact(1, null, First: false, SelfEffects: false, AtCaster: true)));
             return impacts;
         }
-        if (script == LeapSlamScript && points.Length > 1)
+        if (IsLeapSlam(row) && points.Length > 1)
             return [(ms(points[^1]), new Impact(0, null, First: true, SelfEffects: false, AtCaster: true))];
         if (SkillMechanics.For(row) is { } mechanic)
         {
@@ -581,7 +588,7 @@ public sealed partial class CombatService
         // High-Energy Impact: "tap the skill again or wait until the Flying duration ends to attack below" (inferred:
         // the early tap arrives as the player's own interrupt). The slam lands now, where the caster is, instead of
         // cancelling the flight; the scheduled landing then finds the cast finished.
-        if (req != null && s.SkillCast is { Resolved: false, Cancelled: false } leap && Script(leap.Row) == LeapSlamScript
+        if (req != null && s.SkillCast is { Resolved: false, Cancelled: false } leap && IsLeapSlam(leap.Row)
             && (req.InterruptSkillId == 0 || req.InterruptSkillId == leap.Request.SkillId) && Live(s, leap))
         {
             leap.Resolved = true;
