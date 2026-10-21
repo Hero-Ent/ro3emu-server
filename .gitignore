@@ -77,3 +77,19 @@ patch-server/repo/.publish.lock
 r2-credentials.txt
 /bin-temp-launcher/
 patch-server/repo/manifests/*-dev.*
+
+# DLLs do cliente que o patcher/launcher reescreve (variam entre producao/local e a cada versao).
+# As originais ficam versionadas em Client/Ragnarok3/ro3emu-backup; o launcher instala as patchadas.
+Client/Ragnarok3/ro3_Data/Managed/Happyengine.Network.dll
+Client/Ragnarok3/ro3_Data/Managed/Assembly-CSharp.dll
+Client/Ragnarok3/ro3_Data/Managed/Phonest.Common.dll
+Client/Ragnarok3/ro3_Data/Managed/Happyengine.Base.Runtime.dll
+Client/Ragnarok3/ro3_Data/Managed/Unity.TextMeshPro.dll
+Client/Ragnarok3/ro3_Data/Managed/HUD.dll
+Client/Ragnarok3/ro3_Data/Managed/HappyEngine.Resource.dll
+Client/Ragnarok3/ro3_Data/Managed/UnityEngine.UI.dll
+Client/Ragnarok3/ro3_Data/Managed/Ro3Emu.ClientHooks.dll
+Client/Ragnarok3/ro3_Data/Managed/Ro3Emu.Loc.dll
+Client/Ragnarok3/ro3emu-backup/patched.sha256
+Client/Ragnarok3/ro3emu-backup/patching.journal
+

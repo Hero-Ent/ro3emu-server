@@ -157,6 +157,13 @@ próprio launcher de produção:
 A escolha da pasta fica salva em `%APPDATA%\RO3Emu\launcher-settings.json` e vale para **os dois** launchers
 (Produção e Local) — eles usam o mesmo cliente, então você não precisa de 2 cópias de 23 GB.
 
+> [!IMPORTANT]
+> As DLLs patchadas do jogo (`ro3_Data/Managed/Assembly-CSharp.dll`, `Happyengine.Network.dll`, `Ro3Emu.ClientHooks.dll`
+> e as outras que o patcher reescreve) **não ficam no git**: elas mudam entre produção/local e a cada versão. As
+> **originais** ficam versionadas em `Client/Ragnarok3/ro3emu-backup`. Por isso, **abra o launcher antes de compilar**
+> (as DLLs do cliente são usadas para compilar os hooks). Se um `git pull` apagar essas DLLs da sua pasta, é só
+> abrir o launcher: ele baixa de novo em segundos.
+
 Depois, gere a sua primeira versão local (cria o `Launcher-Local` pronto para usar):
 
 ```powershell
@@ -478,6 +485,7 @@ Se der conflito no merge, ele avisa: resolva os arquivos marcados no editor, dep
 | Launcher dos jogadores não se atualiza | A versão do launcher não subiu | Publique com `-Launcher` (sobe a versão) e envie |
 | ENVIAR: "credenciais do R2 não encontradas" | Falta o `r2-credentials.txt` | Veja a [seção 12](#primeira-vez-credenciais) |
 | ENVIAR falhou no meio | Internet/R2 instável | Rode de novo: o que já subiu é pulado; o canal só muda no fim |
+| Compilar hooks/PUBLICAR: "Assembly-CSharp.dll não encontrado" | As DLLs patchadas não vêm do git | Abra o `Launcher-Dist` ou `Launcher-Local` uma vez (ele instala as DLLs) e tente de novo |
 | Windows: "O Windows protegeu o computador" | Executável sem assinatura | "Mais informações" → "Executar assim mesmo" |
 | Site: `database is locked` | Emulador e site abrem o mesmo banco | Aviso normal ao iniciar; se cadastro/login falhar, reinicie o site |
 
@@ -510,7 +518,7 @@ de patches.
 |---|---|---|
 | `src/` | Todo o código (servidor, launcher, patcher, DLLs do cliente…) | Sim |
 | `tests/` | Testes automáticos | Sim |
-| `Client/Ragnarok3` | O jogo (cliente) | Parcial (sem VFS/Videos) |
+| `Client/Ragnarok3` | O jogo (cliente) | Parcial (sem VFS/Videos e sem as DLLs patchadas; as originais ficam em `ro3emu-backup`) |
 | `Client/RO3Emu/data` | Dados e chaves do emulador local (inclui `gate_rsa_public.pem`) | Sim (menos o banco `.db`) |
 | `patch-server/repo` | Repositório de patches (o que vai para o R2) | `channels/`, `manifests/`, `news.json` sim; `chunks/` e `.exe` não |
 | `patch-server/release-config.json` | Endereços, canais e pastas dos alvos produção/local | Sim |
