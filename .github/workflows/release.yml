@@ -20,6 +20,8 @@ permissions:
 
 jobs:
   pack:
+    # Hero Saga: o release do fork e feito por tools/release/publicar.ps1 (R2); este job so roda no upstream.
+    if: github.repository == 'aethai/ro3emu-server'
     runs-on: windows-latest
     env:
       TAG: ${{ github.ref_type == 'tag' && github.ref_name || (inputs.version && format('v{0}', inputs.version) || '') }}
