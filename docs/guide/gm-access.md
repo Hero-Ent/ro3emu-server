@@ -48,6 +48,13 @@ or through environment variables, one per account: `Ro3Emu__GmAccounts__0=your-a
 keeps its own rule: with an empty list it runs for any online account, with a list only for listed accounts.
 Production does not close it; it is the operator's tool on the server machine.
 
+## Training dummies on the field
+
+`Ro3Emu:FieldDummies` places the Training Ground's dummy (NPC 3500000) on public maps, one `"<sceneEntry> <x> <z>"`
+each, to try skills without hunting. It never moves, never fights back and never dies (its HP is restored inside every
+hit). Empty by default; `appsettings.Development.json` (the local `RODAR_LOCAL.cmd` server) puts one at Prontera South
+Gate, `"10111 166 361"`.
+
 ## A public server
 
 On a server that other people can reach, start the host as Production and list the GM accounts. With systemd, a

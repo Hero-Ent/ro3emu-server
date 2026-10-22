@@ -1,0 +1,12 @@
+# The game's URP is a fork that renamed some of URP 14's own shaders. Each line: package shader name|game name.
+# setup-project.ps1 compiles the package shader under the game's name too, so ShaderFixer swaps the game's
+# D3D11-only copy for it.
+Hidden/Universal Render Pipeline/FinalPost|Universal Render Pipeline/FinalPost
+Hidden/Universal Render Pipeline/Scaling Setup|Universal Render Pipeline/Scaling Setup
+Hidden/Universal Render Pipeline/Edge Adaptive Spatial Upsampling|Universal Render Pipeline/Edge Adaptive Spatial Upsampling
+Hidden/Universal Render Pipeline/SubpixelMorphologicalAntialiasing|PostFX/Universal Render Pipeline/SubpixelMorphologicalAntialiasing
+Hidden/Universal Render Pipeline/CameraMotionBlur|PostFX/Universal Render Pipeline/CameraMotionBlur
+Hidden/Universal Render Pipeline/GaussianDepthOfField|PostFX/Universal Render Pipeline/GaussianDepthOfField
+Hidden/Universal Render Pipeline/BokehDepthOfField|PostFX/Universal Render Pipeline/BokehDepthOfField
+Hidden/Universal Render Pipeline/Stop NaN|PostFX/Universal Render Pipeline/Stop NaN
+Hidden/Universal Render Pipeline/PaniniProjection|PostFX/Universal Render Pipeline/PaniniProjection
