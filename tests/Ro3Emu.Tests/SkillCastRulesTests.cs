@@ -123,7 +123,7 @@ public sealed partial class SkillCombatTests
         await using var alice = await InWorld("Alice");
         var s = Session("alice");
         var monster = await Target("alice", stationary: true);
-        var monsters = app.Services.GetRequiredService<MonsterService>();
+        var monsters = _app.Services.GetRequiredService<MonsterService>();
         await Loop.InvokeAsync(async () =>
         {
             monster.Hp = 50_000_000; monster.Moving = false;

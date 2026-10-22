@@ -9,7 +9,7 @@ namespace Ro3Emu.Tests;
 /// <summary>SkillMechanics buffTriggers / periodic zones: skills released by a buff (expiry, hit taken, damage dealt) and lingering areas.</summary>
 public sealed partial class SkillCombatTests
 {
-    private BuffService Buffs => app.Services.GetRequiredService<BuffService>();
+    private BuffService Buffs => _app.Services.GetRequiredService<BuffService>();
 
     [ClientDataFact]
     public async Task VenomSplasherDetonatesAroundTheTargetWhenTheBombRunsOut()
@@ -66,7 +66,7 @@ public sealed partial class SkillCombatTests
         await using var alice = await InWorld("Alice");
         await Gm("alice", "!job 1410"); await Teach("alice", 11602);
         var s = Session("alice");
-        var data = app.Services.GetRequiredService<GameData>();
+        var data = _app.Services.GetRequiredService<GameData>();
         var target = await Target("alice", stationary: true);
         var origin = s.Position.Clone();
         await Loop.InvokeAsync(async () =>

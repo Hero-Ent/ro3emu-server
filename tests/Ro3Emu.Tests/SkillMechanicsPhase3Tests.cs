@@ -44,7 +44,7 @@ public sealed partial class SkillCombatTests
             foreach (var m in new[] { locked, near, nearer, far }) { m.Hp = 50_000_000; m.Moving = false; }
             // Field monsters that roam by would be fair bounce targets: move them out of the way.
             var mine = new[] { locked.Uid, near.Uid, nearer.Uid, far.Uid };
-            foreach (var other in app.Services.GetRequiredService<World>().Map(Session("alice").WorldScene).Units.OfType<MonsterUnit>()
+            foreach (var other in _app.Services.GetRequiredService<World>().Map(Session("alice").WorldScene).Units.OfType<MonsterUnit>()
                          .Where(m => !mine.Contains(m.Uid) && MathF.Abs(m.X - origin.X) < 40 && MathF.Abs(m.Z - origin.Z) < 40))
             { other.X = origin.X + 200; other.Moving = false; }
             locked.X = origin.X; locked.Z = origin.Z + 1;
@@ -66,7 +66,7 @@ public sealed partial class SkillCombatTests
     [ClientDataFact]
     public void EveryAxeTornadoAndHighEnergyImpactModeUsesItsSchedule()
     {
-        var data = app.Services.GetRequiredService<Ro3Emu.Server.Data.GameData>();
+        var data = _app.Services.GetRequiredService<Ro3Emu.Server.Data.GameData>();
         foreach (var row in data.Table("SkillConfig").Values)
         {
             long group = Ro3Emu.Server.Data.GameData.Int(row, "_iSkillID");

@@ -13,7 +13,7 @@ public sealed partial class SkillCombatTests
     public void SkillMechanicsLoadAndReferenceRealData()
     {
         Assert.Empty(SkillMechanics.LoadErrors);
-        var data = app.Services.GetRequiredService<GameData>();
+        var data = _app.Services.GetRequiredService<GameData>();
         var skills = data.Table("SkillConfig");
         var problems = new List<string>();
         foreach (var m in SkillMechanics.Every)
