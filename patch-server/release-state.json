@@ -1,9 +1,9 @@
 {
     "_comentario":  "Atualizado automaticamente pelo PUBLICAR_ATUALIZACAO.cmd. Guarda a ultima versao publicada e uma impressao digital (hash) do codigo que gera o cliente e o launcher, para saber se algo mudou. Faca commit deste arquivo junto com channels/ e manifests/.",
-    "clientVersion":  "0.0.5",
-    "clientInputsHash":  "9f29ddeabdd8dbe8226adf865489a8bcd119d08b3a8a5dc91a271509754939de",
-    "launcherVersion":  "1.0.9",
-    "launcherInputsHash":  "7950de7a2b4b9b1dc50450c14c57b2f7e12ca232aa0db798981fbb14d899f0b7",
-    "updated":  "2026-10-21 02:01:46",
+    "clientVersion":  "1.1.0",
+    "clientInputsHash":  "8565d9a51b8fb7038fe9d236c12a22c26333b75d16f2e5153292727a021fd0b4",
+    "launcherVersion":  "1.1.0",
+    "launcherInputsHash":  "aaf5c95a0b527e9b95b5ef805078ca90fc1f7ff6b2944e2edb40be39abb4fc06",
+    "updated":  "2026-10-22 15:56:42",
     "by":  "User"
 }

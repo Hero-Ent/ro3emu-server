@@ -204,7 +204,7 @@ Abra **uma janela para cada** (deixe todas abertas enquanto joga):
 | Baixa de | `https://patch.herosaga.com.br/` | `http://localhost:8790/` (servidor de patches local) |
 | Canal | `live` | `test` |
 | Cliente aponta para | `http://45.130.137.89:5380` (VPS) | `http://127.0.0.1:5380` (seu PC) |
-| Versão | `0.0.5` | `0.0.5-local` |
+| Versão | `1.1.0` | `1.1.0-local` |
 | Configuração | `Launcher-Dist\launcher.json` | `Launcher-Local\launcher.json` |
 
 - O **exe é o mesmo** nos dois; só muda o `launcher.json` ao lado. O `PUBLICAR_ATUALIZACAO.cmd` copia o exe novo e
@@ -281,9 +281,10 @@ O que ele faz, sozinho:
    - **cliente** mudou se mexeram em `src/Ro3Emu.ClientHooks`, `src/Ro3Emu.Loc`, `src/Ro3Emu.ClientTools`, na chave do
      gate, nos endereços dos servidores ou na lista oficial de arquivos do jogo;
    - **launcher** mudou se mexeram em `src/Ro3Emu.Launcher` ou `src/Ro3Emu.Patcher`.
-2. **Escolhe as versões** (sobe o último número: cliente `0.0.4 → 0.0.5`, launcher `1.0.8 → 1.0.9`).
+2. **Escolhe a versão**: cliente e launcher têm sempre **o mesmo número** e são publicados juntos (sobe o último
+   número da maior das duas: `1.1.0 → 1.1.1`).
 3. **Compila** o que precisa.
-4. **Publica o cliente** duas vezes no `patch-server/repo`: produção (`live`, `0.0.5`) e local (`test`, `0.0.5-local`).
+4. **Publica o cliente** duas vezes no `patch-server/repo`: produção (`live`, `1.1.0`) e local (`test`, `1.1.0-local`).
    Os arquivos pesados são iguais e lidos uma vez só (cache em `patch-server/.publish-cache.json.zst`).
 5. **Publica o launcher** nos dois canais, atualiza a versão no `Ro3Emu.Launcher.csproj`, copia o exe para
    `Launcher-Dist`, `Launcher-Local`, raiz e `patch-server/repo/HeroLauncher.exe` (link de download).
@@ -368,7 +369,7 @@ Depois de publicar/enviar, faça commit para a equipe ficar sincronizada:
 
 ```powershell
 git add patch-server/release-state.json patch-server/repo/channels patch-server/repo/manifests src/Ro3Emu.Launcher/Ro3Emu.Launcher.csproj
-git commit -m "release: cliente 0.0.5, launcher 1.0.9"
+git commit -m "release: cliente 1.1.0, launcher 1.1.0"
 git push
 ```
 
@@ -391,28 +392,30 @@ Edite `patch-server/repo/news.json` (`tag`, `color` = blue/green/orange/red, `ti
 
 ## 13. Regras de versão (padrões da equipe)
 
-As versões seguem `MAIOR.MENOR.CORREÇÃO` (ex.: `0.0.5`). O `PUBLICAR_ATUALIZACAO.cmd` já sobe a **CORREÇÃO**
+As versões seguem `MAIOR.MENOR.CORREÇÃO` (ex.: `1.1.0`). O `PUBLICAR_ATUALIZACAO.cmd` já sobe a **CORREÇÃO**
 sozinho; mude à mão (`-Versao` / `-VersaoLauncher`) só para os casos abaixo.
 
 ### Cliente (o que o jogador baixa)
 
 | Quando | O que fazer | Exemplo |
 |---|---|---|
-| Qualquer mudança no cliente: hooks, tradução, correção, endereço do servidor | Sobe **CORREÇÃO** (automático) | `0.0.4 → 0.0.5` |
-| O jogo oficial atualizou, ou conteúdo grande novo | Sobe **MENOR** e zera a correção | `-Versao 0.1.0` |
-| Marco grande (lançamento oficial, nova temporada) | Sobe **MAIOR** | `-Versao 1.0.0` |
+| Qualquer mudança no cliente: hooks, tradução, correção, endereço do servidor | Sobe **CORREÇÃO** (automático) | `1.1.0 → 1.1.1` |
+| O jogo oficial atualizou, ou conteúdo grande novo | Sobe **MENOR** e zera a correção | `-Versao 1.2.0` |
+| Marco grande (lançamento oficial, nova temporada) | Sobe **MAIOR** | `-Versao 2.0.0` |
 
 - **Nunca reaproveite um número.** Uma versão publicada é imutável (o script recusa).
-- A versão local é sempre **a mesma da produção + `-local`** (`0.0.5` / `0.0.5-local`). Versões `-dev.<data>` são
+- A versão local é sempre **a mesma da produção + `-local`** (`1.1.0` / `1.1.0-local`). Versões `-dev.<data>` são
   testes pessoais (`-SoLocal`) e nunca vão para produção.
 
 ### Launcher (`HeroLauncher.exe`)
 
 | Quando | O que fazer |
 |---|---|
-| Mudou qualquer coisa em `src/Ro3Emu.Launcher` (tela, textos, botões) ou `src/Ro3Emu.Patcher` (motor de atualização) | Sobe a versão do launcher (automático: `1.0.8 → 1.0.9`) |
+| Mudou qualquer coisa em `src/Ro3Emu.Launcher` (tela, textos, botões) ou `src/Ro3Emu.Patcher` (motor de atualização) | Publica o launcher **junto com o cliente, com a mesma versão** (automático: `1.1.0 → 1.1.1`) |
 | Mudança grande de visual/comportamento | `-VersaoLauncher 1.1.0` |
 
+- Desde a `1.1.0`, o launcher tem sempre a **mesma versão do cliente** (pedido da equipe): mudou o cliente ou o
+  launcher, o PUBLICAR gera os dois com o mesmo número. `-VersaoLauncher` só para casos especiais.
 - A versão fica em `src/Ro3Emu.Launcher/Ro3Emu.Launcher.csproj` (`<Version>`). O script atualiza sozinho.
 - O launcher do jogador **só se atualiza se a versão nova for maior** que a dele. Esqueceu de subir = ninguém recebe.
 

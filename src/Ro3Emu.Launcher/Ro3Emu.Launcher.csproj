@@ -10,7 +10,7 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>HeroLauncher</AssemblyName>
     <RootNamespace>Ro3Emu.Launcher</RootNamespace>
-    <Version>1.0.9</Version>
+    <Version>1.1.0</Version>
     <Product>Hero Ragnarok Launcher</Product>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <!-- Release: one self-contained exe, players need no .NET install. -->

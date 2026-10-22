@@ -1,6 +1,13 @@
 {
   "items": [
     {
+      "tag": "PATCH 1.1.0",
+      "color": "green",
+      "title": "Patch Notes v1.1.0 - Barras de Atalho Expandidas",
+      "text": "• Barras de atalho expandidas no PC (modos Clássico e Moderno): agora são 9 slots de habilidades e 9 slots de consumíveis. No celular continuam 6.\n• Teclas padrão dos novos slots: habilidades 7, 8 e 9 em - = e `; consumíveis 7, 8 e 9 em F5, F6 e F7. Todas podem ser trocadas em Config > Teclas de Atalho > Batalha.\n• Arraste habilidades e itens para os novos slots como nos outros: tudo fica salvo no personagem, e a Batalha Automática também usa as habilidades dos slots 7 a 9.\n• As barras agora ficam centralizadas na tela, com o Auto Pot e o Auto Attack logo ao lado. Em Editar layout, esse é o novo padrão (Redef. layout volta para ele).\n• A prévia de Teclas de Atalho mostra as barras com os 9 slots.\n• A tela de login mostra a versão real do jogo instalada.\n• Lembrete: as habilidades da barra só podem ser trocadas fora de combate.\n• Atualizador 1.1.0: agora com a mesma versão do jogo e com os novos links do Discord e do Instagram.",
+      "date": "2026-10-22"
+    },
+    {
       "tag": "PATCH 0.0.5",
       "color": "green",
       "title": "Patch Notes v0.0.5 - Combate e Habilidades",
