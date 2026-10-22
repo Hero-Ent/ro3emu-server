@@ -98,7 +98,7 @@ namespace Ro3Emu.ClientHooks
             {
                 if (go.name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) continue;
                 if (++hits > 60) break;
-                sb.Append("\n  go ").Append(go.name).Append(" (scene=").Append(go.scene.name ?? "asset").Append(")");
+                sb.Append("\n  go ").Append(go.name).Append(" (scene=").Append(go.scene.name ?? "asset").Append(')');
                 foreach (var r in go.GetComponentsInChildren<RawImage>(true))
                     sb.Append("\n      raw ").Append(r.name).Append(" tex=").Append(r.texture != null ? r.texture.name + " (" + r.texture.width + "x" + r.texture.height + ")" : "null");
                 foreach (var img in go.GetComponentsInChildren<Image>(true))

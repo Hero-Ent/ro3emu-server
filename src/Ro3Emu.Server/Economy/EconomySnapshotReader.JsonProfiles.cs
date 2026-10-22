@@ -29,6 +29,19 @@ public static partial class EconomySnapshotReader
         AllowTrailingCommas = false,
         ReadCommentHandling = JsonCommentHandling.Disallow
     };
+    // StrictJson with unknown members skipped: a value strict reading refuses but this one reads has only unknown
+    // members wrong (an unknown schema). A value with an unknown member and another fault is corruption: the fault
+    // is real whatever the schema. Declared after StrictJson in the same file, so it is initialized after it.
+    private static readonly JsonSerializerOptions UnmappedJson = new(StrictJson)
+    {
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip
+    };
+
+    private static bool OnlyUnmappedMembers(JsonElement root, Type type)
+    {
+        try { return root.Deserialize(type, UnmappedJson) != null; }
+        catch (JsonException) { return false; }
+    }
 
     private sealed partial class State
     {
@@ -45,7 +58,7 @@ public static partial class EconomySnapshotReader
             Type? type = typeof(ShopService).Assembly.GetType("Ro3Emu.Server.Game." + typeName);
             if (type == null) { Issue(EconomyIssueKind.UnknownSchema, key, "Persisted JSON type unavailable: " + typeName); return; }
             try { _ = root.Deserialize(type, StrictJson) ?? throw new JsonException("Null persisted JSON value."); }
-            catch (JsonException e) when (e.Message.Contains("could not be mapped", StringComparison.OrdinalIgnoreCase))
+            catch (JsonException e) when (OnlyUnmappedMembers(root, type))
             { throw new UnknownPersistedFieldException(e.Message); }
             catch (NotSupportedException e) { throw new UnknownPersistedFieldException(e.Message); }
             if (name == "mounts" && Try(root, "Info", out var info) && info.ValueKind == JsonValueKind.String)

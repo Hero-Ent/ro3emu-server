@@ -55,7 +55,7 @@ namespace Ro3Emu.ClientHooks
                         var child = uiroot.transform.GetChild(i);
                         if (!child.gameObject.activeInHierarchy) continue;
 
-                        if (child.name.IndexOf("Login", StringComparison.OrdinalIgnoreCase) >= 0 && Done.Add(child.gameObject.GetInstanceID()))
+                        if (child.name.Contains("Login", StringComparison.OrdinalIgnoreCase) && Done.Add(child.gameObject.GetInstanceID()))
                         {
                             Debug.Log("[Ro3Emu.UiTweaks] Login panel active: " + child.name);
                             foreach (var raw in child.GetComponentsInChildren<RawImage>(true))
@@ -64,7 +64,7 @@ namespace Ro3Emu.ClientHooks
                                 Debug.Log($"[Ro3Emu.UiTweaks] Login Image: {img.name} sprite={(img.sprite != null ? img.sprite.name : "null")} tex={(img.sprite?.texture != null ? img.sprite.texture.name : "null")}");
                         }
 
-                        if (child.name.IndexOf("Announcement", StringComparison.OrdinalIgnoreCase) >= 0)
+                        if (child.name.Contains("Announcement", StringComparison.OrdinalIgnoreCase))
                         {
                             TweakAnnouncement(child);
                         }
@@ -102,15 +102,15 @@ namespace Ro3Emu.ClientHooks
                     if (!child.gameObject.activeInHierarchy) continue;
 
                     // If any modal (announcement, server selection, loading) is open, do not handle login keys
-                    if (child.name.IndexOf("Announcement", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        child.name.IndexOf("ChoiceServer", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        child.name.IndexOf("Loading", StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (child.name.Contains("Announcement", StringComparison.OrdinalIgnoreCase) ||
+                        child.name.Contains("ChoiceServer", StringComparison.OrdinalIgnoreCase) ||
+                        child.name.Contains("Loading", StringComparison.OrdinalIgnoreCase))
                     {
                         return;
                     }
 
-                    if (child.name.IndexOf("LoginPanel", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        child.name.IndexOf("LoginWidget", StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (child.name.Contains("LoginPanel", StringComparison.OrdinalIgnoreCase) ||
+                        child.name.Contains("LoginWidget", StringComparison.OrdinalIgnoreCase))
                     {
                         loginPanel = child;
                     }
@@ -204,7 +204,7 @@ namespace Ro3Emu.ClientHooks
                         // Clean any stray tab characters
                         for (int i = 0; i < tmpInputs.Count; i++)
                         {
-                            if (tmpInputs[i].text != null && tmpInputs[i].text.IndexOf('\t') >= 0)
+                            if (tmpInputs[i].text != null && tmpInputs[i].text.Contains('\t'))
                             {
                                 tmpInputs[i].text = tmpInputs[i].text.Replace("\t", "");
                             }
@@ -256,7 +256,7 @@ namespace Ro3Emu.ClientHooks
 
                         for (int i = 0; i < uiInputs.Count; i++)
                         {
-                            if (uiInputs[i].text != null && uiInputs[i].text.IndexOf('\t') >= 0)
+                            if (uiInputs[i].text != null && uiInputs[i].text.Contains('\t'))
                             {
                                 uiInputs[i].text = uiInputs[i].text.Replace("\t", "");
                             }
@@ -297,9 +297,9 @@ namespace Ro3Emu.ClientHooks
                 var tmp = btn.GetComponentInChildren<TMPro.TMP_Text>(true);
                 var txt = btn.GetComponentInChildren<Text>(true);
                 string label = (tmp != null ? tmp.text : (txt != null ? txt.text : "")) ?? "";
-                if (label.IndexOf("Entrar", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    label.IndexOf("Login", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    label.IndexOf("Start", StringComparison.OrdinalIgnoreCase) >= 0)
+                if (label.Contains("Entrar", StringComparison.OrdinalIgnoreCase) ||
+                    label.Contains("Login", StringComparison.OrdinalIgnoreCase) ||
+                    label.Contains("Start", StringComparison.OrdinalIgnoreCase))
                 {
                     targetButton = btn;
                     break;
@@ -313,9 +313,9 @@ namespace Ro3Emu.ClientHooks
                 {
                     if (!btn.gameObject.activeInHierarchy || !btn.interactable) continue;
                     string name = btn.gameObject.name;
-                    if (name.IndexOf("Login", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        name.IndexOf("Enter", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        name.IndexOf("Start", StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (name.Contains("Login", StringComparison.OrdinalIgnoreCase) ||
+                        name.Contains("Enter", StringComparison.OrdinalIgnoreCase) ||
+                        name.Contains("Start", StringComparison.OrdinalIgnoreCase))
                     {
                         targetButton = btn;
                         break;
@@ -356,9 +356,9 @@ namespace Ro3Emu.ClientHooks
                     var mb = clickHandler as MonoBehaviour;
                     if (mb == null || !mb.gameObject.activeInHierarchy) continue;
                     string name = mb.gameObject.name;
-                    if (name.IndexOf("Login", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        name.IndexOf("Enter", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        name.IndexOf("Start", StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (name.Contains("Login", StringComparison.OrdinalIgnoreCase) ||
+                        name.Contains("Enter", StringComparison.OrdinalIgnoreCase) ||
+                        name.Contains("Start", StringComparison.OrdinalIgnoreCase))
                     {
                         var eventData = new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current)
                         {
@@ -378,22 +378,22 @@ namespace Ro3Emu.ClientHooks
                 if (string.IsNullOrEmpty(tmp.text)) continue;
                 string t = tmp.text;
                 bool changed = false;
-                if (t.IndexOf("Obrigado por participar do Closed Beta de Ragnarok Online 3.", StringComparison.Ordinal) >= 0)
+                if (t.Contains("Obrigado por participar do Closed Beta de Ragnarok Online 3.", StringComparison.Ordinal))
                 {
                     t = t.Replace("Obrigado por participar do Closed Beta de Ragnarok Online 3.", "Closed Beta do Hero Saga RO3");
                     changed = true;
                 }
-                else if (t.IndexOf("Closed Beta de Ragnarok Online 3", StringComparison.Ordinal) >= 0)
+                else if (t.Contains("Closed Beta de Ragnarok Online 3", StringComparison.Ordinal))
                 {
                     t = t.Replace("Closed Beta de Ragnarok Online 3", "Closed Beta do Hero Saga RO3");
                     changed = true;
                 }
-                if (t.IndexOf("https://discord.com/invite/ro3global", StringComparison.Ordinal) >= 0)
+                if (t.Contains("https://discord.com/invite/ro3global", StringComparison.Ordinal))
                 {
                     t = t.Replace("https://discord.com/invite/ro3global", "https://discord.com/invite/herosagammo");
                     changed = true;
                 }
-                else if (t.IndexOf("ro3global", StringComparison.Ordinal) >= 0)
+                else if (t.Contains("ro3global", StringComparison.Ordinal))
                 {
                     t = t.Replace("ro3global", "herosagammo");
                     changed = true;
@@ -406,22 +406,22 @@ namespace Ro3Emu.ClientHooks
                 if (string.IsNullOrEmpty(txt.text)) continue;
                 string t = txt.text;
                 bool changed = false;
-                if (t.IndexOf("Obrigado por participar do Closed Beta de Ragnarok Online 3.", StringComparison.Ordinal) >= 0)
+                if (t.Contains("Obrigado por participar do Closed Beta de Ragnarok Online 3.", StringComparison.Ordinal))
                 {
                     t = t.Replace("Obrigado por participar do Closed Beta de Ragnarok Online 3.", "Closed Beta do Hero Saga RO3");
                     changed = true;
                 }
-                else if (t.IndexOf("Closed Beta de Ragnarok Online 3", StringComparison.Ordinal) >= 0)
+                else if (t.Contains("Closed Beta de Ragnarok Online 3", StringComparison.Ordinal))
                 {
                     t = t.Replace("Closed Beta de Ragnarok Online 3", "Closed Beta do Hero Saga RO3");
                     changed = true;
                 }
-                if (t.IndexOf("https://discord.com/invite/ro3global", StringComparison.Ordinal) >= 0)
+                if (t.Contains("https://discord.com/invite/ro3global", StringComparison.Ordinal))
                 {
                     t = t.Replace("https://discord.com/invite/ro3global", "https://discord.com/invite/herosagammo");
                     changed = true;
                 }
-                else if (t.IndexOf("ro3global", StringComparison.Ordinal) >= 0)
+                else if (t.Contains("ro3global", StringComparison.Ordinal))
                 {
                     t = t.Replace("ro3global", "herosagammo");
                     changed = true;

@@ -351,7 +351,7 @@ namespace Ro3Emu.ClientHooks
             {
                 if (field.FieldType != typeof(InputActionMap) || !(field.GetValue(manager) is InputActionMap map) || map.name != "RO3Current") continue;
                 foreach (var action in map.actions)
-                    if (action.name.IndexOf(part, StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (action.name.Contains(part, StringComparison.OrdinalIgnoreCase))
                         sb.Append("\n  ").Append(action.name).Append(" = ").Append(string.Join(" | ", action.bindings.Select(b => b.effectivePath)))
                           .Append(" (\"").Append(manager.Obf_ln(action.name)).Append("\")");
             }

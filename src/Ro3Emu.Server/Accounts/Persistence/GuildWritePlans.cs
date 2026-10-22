@@ -37,7 +37,7 @@ internal sealed class GuildSavePlan : DbPlan
 
     internal override object Execute(SqliteConnection db, SqliteTransaction tx)
     {
-        DbWriter.AfterJob(GuildStore.Invalidate);
+        DbWriter.AfterJob(WrittenCache.Guild);
         long id = _id;
         byte[] state = _state;
         if (id == 0)
@@ -60,7 +60,7 @@ internal sealed class GuildSavePlan : DbPlan
             update.Parameters.AddWithValue("$name", _name);
             update.Parameters.AddWithValue("$state", state);
             update.Parameters.AddWithValue("$id", id);
-            if (update.ExecuteNonQuery() != 1) throw new InvalidOperationException(_missingMessage);
+            if (update.ExecuteNonQuery() != 1) throw new RowMissingException(GuildStore.Table, id, _missingMessage);
         }
         using (var clear = DbSql.Command(db, tx, "DELETE FROM guild_member WHERE guild_id=$id"))
         {
@@ -103,7 +103,7 @@ internal sealed class GuildMaterialContributionPlan(long role, long guild, long 
 
     internal override object Execute(SqliteConnection db, SqliteTransaction tx)
     {
-        DbWriter.AfterJob(GuildStore.Invalidate);
+        DbWriter.AfterJob(WrittenCache.Guild);
         using var query = DbSql.Command(db, tx,
             "SELECT g.state FROM guild g JOIN guild_member m ON m.guild_id=g.id WHERE g.id=$guild AND m.role_id=$role");
         query.Parameters.AddWithValue("$guild", guild);
@@ -125,7 +125,7 @@ internal sealed class GuildCaravanRewardPlan(long guild, long role, long funds, 
 
     internal override object Execute(SqliteConnection db, SqliteTransaction tx)
     {
-        DbWriter.AfterJob(GuildStore.Invalidate);
+        DbWriter.AfterJob(WrittenCache.Guild);
         using var query = DbSql.Command(db, tx, "SELECT state FROM guild WHERE id=$id");
         query.Parameters.AddWithValue("$id", guild);
         if (query.ExecuteScalar() is not byte[] bytes)

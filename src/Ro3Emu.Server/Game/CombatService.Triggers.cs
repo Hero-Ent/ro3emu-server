@@ -99,6 +99,10 @@ public sealed partial class CombatService
             await CastTriggeredAsync(holder, onHit, target, target.Pos);
     }
 
+    /// <summary>Hero Saga's own Double Attack (below) stays off: the upstream passive rule (d0cf8b47) handles it with
+    /// the talents (decision D1 of the 2026-10-22 upstream sync). Kept so it can be compared or restored.</summary>
+    internal static bool LegacyDoubleAttack => false;
+
     /// <summary>
     /// Double Attack (15002): "When a Dagger is equipped, each Basic Attack has a «1..10»% Chance to deal «1» Extra hits
     /// of ... PATK * «50»%". The chance is BuffConfig group 15002 at the learned level (_kLogicData 100..1000 bp;

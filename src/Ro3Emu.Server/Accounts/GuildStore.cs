@@ -6,6 +6,9 @@ namespace Ro3Emu.Server.Accounts;
 /// <summary>Durable guild aggregate and exclusive role membership.</summary>
 public sealed class GuildStore(AccountStore accounts)
 {
+    /// <summary>The aggregate's table, as <see cref="RowMissingException"/> names it.</summary>
+    internal const string Table = "guild";
+
     private readonly AccountStore _accounts = accounts;
 
     public sealed class State
@@ -138,7 +141,7 @@ public sealed class GuildStore(AccountStore accounts)
     {
         var plan = MarketPlan(market, affected);
         try { plan.Commit(_accounts, "guild/market"); return true; }
-        catch (InvalidOperationException e) when (e.Message == "Guild disappeared during save.") { return false; }
+        catch (RowMissingException e) when (e.Table == Table) { return false; }
     }
 
     /// <summary>Commit the complete market book, guild balances, and membership indexes as one value-only writer plan.</summary>
@@ -148,7 +151,7 @@ public sealed class GuildStore(AccountStore accounts)
         var plan = MarketPlan(market, affected);
         plan.WithEscrowEconomy(economy);
         try { await plan.CommitAsync(_accounts, "guild/market"); return true; }
-        catch (InvalidOperationException e) when (e.Message == "Guild disappeared during save.") { return false; }
+        catch (RowMissingException e) when (e.Table == Table) { return false; }
     }
 
     private RoleItemPlanBuilder MarketPlan(MarketState market, IEnumerable<State> affected)
@@ -176,7 +179,7 @@ public sealed class GuildStore(AccountStore accounts)
             Current();
             if (_byId.TryGetValue(id, out var cached)) return cached is { } hit ? Copy(hit) : null;
         }
-        long generation = Volatile.Read(ref _cacheGeneration);
+        long generation = _accounts.Caches.Current(WrittenCache.Guild);
         var state = _accounts.ReadSync<State?>(new GuildReadPlan(GuildReadKind.Guild, id));
         lock (_cacheLock)
             if (Current() == generation) _byId[id] = state == null ? null : Cache(state);
@@ -186,21 +189,18 @@ public sealed class GuildStore(AccountStore accounts)
     // C/D 16: committed guild aggregates and role membership served from memory instead of a synchronous SQL read on
     // the loop per call (S1: 18k ForRole reads, 2.9 s of loop waits). Every caller still gets its own copy to
     // mutate. Any writer job that touches the guild tables bumps the generation after it ends (DbWriter.AfterJob);
-    // a read during which the generation changed is returned but not cached. A read that began before a commit and ended before the bump
-    // is cached until the bump: callers may see pre-commit bytes in that window, and a save from them then
-    // conflicts on the revision (never a silent overwrite).
-    private static long _cacheGeneration;
+    // a read during which the generation changed is returned but not cached. A read that began before a commit and
+    // ended before the bump is cached until the bump: callers may see pre-commit bytes in that window, and a save from
+    // them then conflicts on the revision (never a silent overwrite). The generation belongs to this store's database
+    // (AccountStore.Caches), so another host's writes leave this cache alone.
     private readonly object _cacheLock = new();
     private long _cachedGeneration = -1;
     private readonly Dictionary<long, (byte[] Json, OwnerRevisionValue? Revision)?> _byId = [];
     private readonly Dictionary<long, long> _guildOfRole = [];
 
-    /// <summary>Called by the writer after a job that wrote guild or guild_member rows.</summary>
-    internal static void Invalidate() => Interlocked.Increment(ref _cacheGeneration);
-
     private long Current()
     {
-        long generation = Volatile.Read(ref _cacheGeneration);
+        long generation = _accounts.Caches.Current(WrittenCache.Guild);
         if (_cachedGeneration != generation) { _byId.Clear(); _guildOfRole.Clear(); _cachedGeneration = generation; }
         return generation;
     }
@@ -222,7 +222,7 @@ public sealed class GuildStore(AccountStore accounts)
         long? known;
         lock (_cacheLock) { Current(); known = _guildOfRole.TryGetValue(roleId, out long guildId) ? guildId : null; }
         if (known is { } member) return member == 0 ? null : Get(member);
-        long generation = Volatile.Read(ref _cacheGeneration);
+        long generation = _accounts.Caches.Current(WrittenCache.Guild);
         var state = _accounts.ReadSync<State?>(new GuildReadPlan(GuildReadKind.ForRole, roleId));
         lock (_cacheLock)
             if (Current() == generation)
@@ -258,7 +258,7 @@ public sealed class GuildStore(AccountStore accounts)
         EnlistSave(state, plan);
         try { plan.Commit(_accounts, "guild/save"); return true; }
         catch (SqliteException e) when (e.SqliteErrorCode == 19) { return false; }
-        catch (InvalidOperationException e) when (e.Message == "Guild disappeared during save.") { return false; }
+        catch (RowMissingException e) when (e.Table == Table) { return false; }
     }
 
     /// <summary>Capture payment-enlisted guild state; publish a generated identity on the caller only after commit.</summary>

@@ -67,7 +67,7 @@ namespace Ro3Emu.ClientHooks
             try
             {
                 if (texture == null || Ours.Contains(texture.GetInstanceID())) return texture;
-                if (texture.name != null && (texture.name.IndexOf("logo", StringComparison.OrdinalIgnoreCase) >= 0 || texture.name.IndexOf("login", StringComparison.OrdinalIgnoreCase) >= 0))
+                if (texture.name != null && (texture.name.Contains("logo", StringComparison.OrdinalIgnoreCase) || texture.name.Contains("login", StringComparison.OrdinalIgnoreCase)))
                 {
                     Debug.Log($"[Ro3Emu.TextureSwap] MapTexture candidate: {texture.name} ({texture.width}x{texture.height})");
                 }
@@ -89,7 +89,7 @@ namespace Ro3Emu.ClientHooks
                 int id = sprite.GetInstanceID();
                 if (Ours.Contains(id)) return sprite;
                 if (Sprites.TryGetValue(id, out var made)) return made;
-                if (sprite.name != null && (sprite.name.IndexOf("logo", StringComparison.OrdinalIgnoreCase) >= 0 || sprite.name.IndexOf("login", StringComparison.OrdinalIgnoreCase) >= 0))
+                if (sprite.name != null && (sprite.name.Contains("logo", StringComparison.OrdinalIgnoreCase) || sprite.name.Contains("login", StringComparison.OrdinalIgnoreCase)))
                 {
                     Debug.Log($"[Ro3Emu.TextureSwap] MapSprite candidate: sprite={sprite.name} tex={sprite.texture?.name} rect={sprite.rect}");
                 }
@@ -136,7 +136,7 @@ namespace Ro3Emu.ClientHooks
             {
                 if (raw.texture != null)
                 {
-                    if (raw.name.IndexOf("logo", StringComparison.OrdinalIgnoreCase) >= 0 || (raw.texture.name != null && raw.texture.name.IndexOf("logo", StringComparison.OrdinalIgnoreCase) >= 0))
+                    if (raw.name.Contains("logo", StringComparison.OrdinalIgnoreCase) || (raw.texture.name != null && raw.texture.name.Contains("logo", StringComparison.OrdinalIgnoreCase)))
                     {
                         var rect = raw.rectTransform != null ? raw.rectTransform.rect : Rect.zero;
                         Debug.Log($"[Ro3Emu.TextureSwap] Enabled RawImage: name={raw.name} tex={raw.texture.name} ({raw.texture.width}x{raw.texture.height}) rect={rect.width}x{rect.height}");
@@ -166,7 +166,7 @@ namespace Ro3Emu.ClientHooks
             {
                 if (image.sprite != null)
                 {
-                    if (image.name.IndexOf("logo", StringComparison.OrdinalIgnoreCase) >= 0 || (image.sprite.name != null && image.sprite.name.IndexOf("logo", StringComparison.OrdinalIgnoreCase) >= 0))
+                    if (image.name.Contains("logo", StringComparison.OrdinalIgnoreCase) || (image.sprite.name != null && image.sprite.name.Contains("logo", StringComparison.OrdinalIgnoreCase)))
                     {
                         Debug.Log($"[Ro3Emu.TextureSwap] Enabled Image: name={image.name} sprite={image.sprite.name} tex={image.sprite.texture?.name}");
                     }

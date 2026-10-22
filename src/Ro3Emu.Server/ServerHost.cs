@@ -36,6 +36,7 @@ public static class ServerHost
         // First hosted service: everything after it (loop, gates, HTTP) starts with the game data already parsed.
         if (options.PreloadGameData) builder.Services.AddHostedService<Ro3Emu.Server.Data.GameDataPreload>();
         builder.Services.AddSingleton<Diagnostics.ServerMetrics>();
+        builder.Services.AddSingleton<Diagnostics.SessionCensus>();
         builder.Services.AddSingleton<ILoggerProvider, Diagnostics.MetricsLoggerProvider>();
         // Recent log lines for bug reports (FeedbackService); kept out of the pipeline when reports keep no context.
         builder.Services.AddSingleton<Diagnostics.RecentLogBuffer>();
@@ -293,12 +294,12 @@ public static class ServerHost
                 return Results.Json(new { code = ok ? 0 : 500, message = ok ? $"{current.Name} deleted" : "not deleted" });
             });
         });
-        // Public status for the launcher's online pill: only a count, never account or character names.
-        app.MapGet("/ro3emu/status", (SessionRegistry sessions, Micro.MicroSessions micro) =>
+        // Public status for the launcher's online pill: only a count, never account or character names. Read from the
+        // loop's census, so anyone polling it adds no work to the loop. Hero Saga: counts accounts in the game and in
+        // the launcher/login (micro sessions), not only characters in the world.
+        app.MapGet("/ro3emu/status", (Diagnostics.SessionCensus census, Micro.MicroSessions micro) =>
         {
-            var gameAccounts = sessions.All().Where(s => s.Account != null).Select(s => s.Account!);
-            var microAccounts = micro.ActiveAccounts;
-            int total = gameAccounts.Concat(microAccounts).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+            int total = census.Current.Accounts.Concat(micro.ActiveAccounts).Distinct(StringComparer.OrdinalIgnoreCase).Count();
             return Results.Json(new { online = true, players = total });
         });
         // A clean stop for RO3Emu.exe (loopback only): the same shutdown as Ctrl+C, the loop drains and the database closes.
@@ -321,11 +322,11 @@ public static class ServerHost
             app.Logger.LogInformation("Kick requested for {Account}: kicked={Kicked}", account, kicked);
             return Results.Json(new { ok = true, kicked, account });
         });
-        // Who is online, for the admin (loopback only).
-        app.MapGet("/ro3emu/online", (HttpContext context, SessionRegistry sessions) =>
+        // Who is online, for the admin (loopback only): read on the loop, where the sessions change.
+        app.MapGet("/ro3emu/online", async (HttpContext context, SessionRegistry sessions, GameLoop loop) =>
         {
             if (context.Connection.RemoteIpAddress is not { } ip || !System.Net.IPAddress.IsLoopback(ip)) return Results.NotFound();
-            return Results.Json(sessions.All().Select(s => new
+            var online = await loop.InvokeAsync(() => Task.FromResult(sessions.All().Select(s => new
             {
                 account = s.Account,
                 role = s.Role?.Name,
@@ -333,7 +334,8 @@ public static class ServerHost
                 x = s.Position.X,
                 z = s.Position.Z,
                 remote = s.Channel.Remote,
-            }));
+            }).ToArray()));
+            return Results.Json(online);
         });
         app.MapFallback((HttpContext context) =>
         {
@@ -522,6 +524,7 @@ internal sealed class GameLoopTickers(IServiceProvider services) : IHostedServic
         Add<TotemEffects>();
         Add<Game.Persistence.PositionPersistence>();
         Add<Game.Persistence.SettingsPersistence>();
+        Add<Diagnostics.SessionCensus>();
         Add<ShopService>(); // 05:00 purchase-limit rollover
         Add<ItemBoxService>(); // award boxes; 05:00 item use-time rollover
         Add<PowerService>(); // throttled 31502/31503 republish of changed power
