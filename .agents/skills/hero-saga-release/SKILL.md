@@ -51,8 +51,9 @@ do agente. Fale com o usuário em português.
      `channels/test.json` e manifestos `*-local` / `*-dev.*`. Se falhar no meio, é só rodar de novo.
    - Verificação: `Invoke-WebRequest https://patch.herosaga.com.br/channels/live.json` deve mostrar a versão nova
      (pode haver cache do Cloudflare por alguns minutos).
-6. **Commit** (o usuário costuma pedir "pode commitar"):
-   `git add patch-server/release-state.json patch-server/repo/channels patch-server/repo/manifests src/Ro3Emu.Launcher/Ro3Emu.Launcher.csproj`
+6. **Commit** (o usuário costuma pedir "pode commitar"). Antes, faça o checklist de versão abaixo
+   ("OBRIGATÓRIO: sempre que a versão ... mudar"):
+   `git add patch-server/release-state.json patch-server/repo/channels patch-server/repo/manifests patch-server/repo/news.json docs/GUIA-DESENVOLVEDOR.md src/Ro3Emu.Launcher/Ro3Emu.Launcher.csproj`
    Mensagem: `release: cliente X.Y.Z, launcher A.B.C`. Push só se o usuário pedir.
 
 ## Regras de versão
@@ -63,6 +64,23 @@ do agente. Fale com o usuário em português.
 - Launcher: qualquer mudança em `src/Ro3Emu.Launcher` ou `src/Ro3Emu.Patcher` → sobe a versão (automático). O
   launcher do jogador só se atualiza se a versão for **maior**.
 - Mudança só no servidor (emulador) não precisa de PUBLICAR/ENVIAR.
+
+### OBRIGATÓRIO: sempre que a versão do cliente ou do launcher (patch) mudar, atualizar a versão em todo lugar
+
+Pedido fixo do usuário. Depois de um PUBLICAR que trocou a versão do cliente (`X.Y.Z`) e/ou do launcher (`A.B.C`),
+antes de enviar e commitar, confira e atualize:
+
+1. `patch-server/repo/news.json`: o card de patch notes da versão nova no topo, com `"tag": "PATCH X.Y.Z"` e
+   `"title": "Patch Notes vX.Y.Z - ..."` (mesma versão do cliente publicado). Se o launcher mudou, cite a versão
+   dele (`Atualizador A.B.C`) nas notas. Nunca deixe o card com a versão anterior.
+2. `docs/GUIA-DESENVOLVEDOR.md`: a linha `| Versão | X.Y.Z | X.Y.Z-local |` da tabela produção/local e os exemplos
+   que citam a versão atual.
+3. Confirme que o PUBLICAR gravou: `patch-server/release-state.json` (`clientVersion` / `launcherVersion`),
+   `channels/live.json` e `channels/test.json`, e `<Version>` em `src/Ro3Emu.Launcher/Ro3Emu.Launcher.csproj`
+   (quando o launcher mudou).
+4. Envie (`python upload_to_r2.py`, com confirmação) e confira em `https://patch.herosaga.com.br/news.json` e
+   `channels/live.json` que as duas versões aparecem.
+5. Inclua `patch-server/repo/news.json` e `docs/GUIA-DESENVOLVEDOR.md` no commit `release: cliente X.Y.Z, launcher A.B.C`.
 
 ## Rollback
 
