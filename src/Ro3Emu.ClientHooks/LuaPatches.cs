@@ -28,6 +28,7 @@ namespace Ro3Emu.ClientHooks
     /// <item>Map config modules this build does not ship (Dracula's Lair, the territory maps) go into package.loaded
     /// before any scene needs them (MapModules).</item>
     /// <item>Profile cards without stickers parse (LC_DAL_Personal.ParsePersonalInfo walks a nil list; PersonalCards).</item>
+    /// <item>Hero Saga: 9 skill and 9 consumable slots on the PC bars, their keys and settings rows (HotbarExpansion).</item>
     /// </list>
     /// </summary>
     public static class LuaPatches
@@ -117,6 +118,7 @@ namespace Ro3Emu.ClientHooks
                     global.Obf_RuA<Obf_R.Obf_ff>("LC_SeasonHelper") ?? Module(manager, global, "lc_seasonhelper"),
                     global.Obf_RuA<Obf_R.Obf_ff>("LC_SeasonExplorationHelper") ?? Module(manager, global, "lc_seasonexplorationhelper"));
                 PersonalCards.Install((Obf_R.Obf_Cf)env, Module(manager, global, "lc_dal_personal"));
+                HotbarExpansion.Install(manager, (Obf_R.Obf_Cf)env, global, name => Module(manager, global, name));
                 Debug.Log("[Ro3Emu.LuaPatches] lc_itemshowfunc: " + added + " card show-func method(s) added; stall name limit "
                     + (param != null ? StallNameMaxLength.ToString() : "not set (publicparamconfig missing)"));
             }

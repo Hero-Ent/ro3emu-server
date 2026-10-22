@@ -40,6 +40,11 @@
     <Reference Include="UnityEngine.UI"><HintPath>$(ClientManaged)\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.UIModule"><HintPath>$(ClientManaged)\UnityEngine.UIModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.InputLegacyModule"><HintPath>$(ClientManaged)\UnityEngine.InputLegacyModule.dll</HintPath><Private>false</Private></Reference>
+    <!-- The client's InputSystem: HotbarExpansion adds its key actions to the client's InputActionAsset. -->
+    <Reference Include="Unity.InputSystem"><HintPath>$(ClientManaged)\Unity.InputSystem.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Happyengine.UI.Framework"><HintPath>$(ClientManaged)\Happyengine.UI.Framework.dll</HintPath><Private>false</Private></Reference>
+    <!-- DevDriver (RO3EMU_DEVDRIVER only): in-game screenshots for unattended UI checks. -->
+    <Reference Include="UnityEngine.ScreenCaptureModule"><HintPath>$(ClientManaged)\UnityEngine.ScreenCaptureModule.dll</HintPath><Private>false</Private></Reference>
     <!-- English replacements for Chinese-text UI textures (TextureSwap), carried inside this DLL. -->
     <EmbeddedResource Include="Textures\*.png" LogicalName="textures/%(Filename)%(Extension)" />
     <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(ClientManaged)\UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>

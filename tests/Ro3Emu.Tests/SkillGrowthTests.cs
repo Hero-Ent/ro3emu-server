@@ -133,6 +133,36 @@ public sealed class SkillGrowthTests : IAsyncLifetime
     }
 
     [ClientDataFact]
+    public async Task ExtraBarSlotsUseTheirOwnWheelKeysAndSurviveLogin()
+    {
+        await using (var novice = await InWorld("NoviceNine"))
+        {
+            await Next(novice, SkillService.SkillDataSync, DBSkillDataIncrement.Parser);
+            // Slot 9 of the Hero Saga PC bar is socket 8; socket 9 is past the bar.
+            await novice.SendGameAsync(SkillService.SkillLoad, new SkillLoadReq
+                { OpType = SkillLoadOperation.SkillLoadOpLoad, IsManual = true, SocketNum = SkillService.BarSlots - 1,
+                    Info = new SkillData { SkillId = 10000, SkillLevel = 1 } });
+            Assert.Equal(0, (await Next(novice, SkillService.SkillLoad, SkillLoadResp.Parser)).Result);
+        }
+
+        await using var again = await InWorld("NoviceNine", create: false);
+        var saved = await Next(again, SkillService.SkillDataSync, DBSkillDataIncrement.Parser);
+        var wheel = saved.SkillWheel.All.WhellSkills;
+        Assert.Equal(103, SkillService.WheelKey(SkillService.BarSlots));
+        Assert.Equal(1000001, wheel[SkillService.WheelKey(SkillService.BarSlots)].SkillConfigId);
+        // Wheel keys 7-14 stay the skill queue, mounts, pet and gameplay slots.
+        Assert.DoesNotContain(wheel.Keys, key => key is >= 7 and <= 14);
+        Assert.Equal(10000, saved.SkillAssignPlans.All.Value[0].ManualLoadSkill[SkillService.BarSlots - 1].SkillId);
+    }
+
+    [Fact]
+    public void WheelKeysKeepTheOriginalSixAndMoveTheExtraSlotsPastTheClientEnum()
+    {
+        Assert.Equal([1, 2, 3, 4, 5, 6, 101, 102, 103],
+            Enumerable.Range(1, SkillService.BarSlots).Select(SkillService.WheelKey).ToArray());
+    }
+
+    [ClientDataFact]
     public async Task AllocationAndDependentRefundAreAtomic()
     {
         await using var alice = await InWorld("Alice");
@@ -257,7 +287,7 @@ public sealed class SkillGrowthTests : IAsyncLifetime
             Assert.Equal(ErrorCodes.Parameter,
                 (await Next(alice, SkillService.QueueUpdate, SkillQueueUpdateResp.Parser)).Result);
             await alice.SendGameAsync(SkillService.SkillLoad, new SkillLoadReq
-                { OpType = SkillLoadOperation.SkillLoadOpLoad, IsManual = true, SocketNum = 6,
+                { OpType = SkillLoadOperation.SkillLoadOpLoad, IsManual = true, SocketNum = SkillService.BarSlots,
                     Info = new SkillData { SkillId = 13006, SkillLevel = 1 } });
             Assert.Equal(ErrorCodes.Parameter,
                 (await Next(alice, SkillService.SkillLoad, SkillLoadResp.Parser)).Result);

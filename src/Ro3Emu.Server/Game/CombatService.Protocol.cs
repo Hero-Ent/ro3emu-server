@@ -154,13 +154,14 @@ public sealed partial class CombatService
             int current = old.GetValueOrDefault(slot);
             if (next == baseId && current == 0) continue;
             if (current == next) continue;
+            // Slot is the bar slot (1-9); the client keys its wheel by SkillWheelSlotType (7-9 live at 101-103).
             if (next == 0)
-                await session.SendGameAsync(SkillSlotModify, new SkillSlotModifyNotify { Type = 4, SkillId = current, Slot = slot });
+                await session.SendGameAsync(SkillSlotModify, new SkillSlotModifyNotify { Type = 4, SkillId = current, Slot = SkillService.WheelKey(slot) });
             else
                 await session.SendGameAsync(SkillSlotModify, new SkillSlotModifyNotify
                 {
                     Type = 1, SourceSkillId = current == 0 ? baseId : current, SkillId = next,
-                    Slot = slot, Enable = true,
+                    Slot = SkillService.WheelKey(slot), Enable = true,
                 });
             if (next == baseId) old.Remove(slot);
             else old[slot] = next;

@@ -35,7 +35,9 @@ public sealed partial class CharacterService
         [(1600301, 50), (1600501, 55), (1600502, 60), (1600503, 70), (1600504, 80), (1600505, 90)];
     private const int StatPlanCount = 5; // PublicParamConfig.SchemeNum=5 (inferred for attribute plans).
     private const int StatPlanNameLimit = 8; // PublicParamConfig.SchemeNameNumMax=8.
-    public const int ShortcutSlotLimit = 12; // (inferred) bounded by the visible bar; no server field declares its size.
+    // Hero Saga: the PC consumable bar has 9 slots (client hook HotbarExpansion). The client's props widget calls
+    // SetData on one item widget per synced slot, so the server syncs exactly the visible count.
+    public const int ShortcutSlotLimit = 9;
 
     public static void NormalizeShortcutBar(Google.Protobuf.Collections.RepeatedField<ShortcutBarInfo> list, int count = ShortcutSlotLimit)
     {

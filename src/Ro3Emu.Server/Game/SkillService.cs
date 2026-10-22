@@ -19,7 +19,19 @@ public sealed class SkillService
     public const uint SwitchPlan = 31152, RenamePlan = 31157, PlanNameChange = RenamePlan;
     public const uint SkillReset = 31156, QueueUpdate = 31159, SwitchGenre = 31160;
     private const int PlanCount = 5; // (inferred) PublicParamConfig.SchemeNum.
-    private const int BarSlots = 6;
+    /// <summary>
+    /// Hero Saga: the PC skill bar has 9 slots (the client hook HotbarExpansion adds slots 7-9). Slots 1-6 keep the
+    /// original SkillWheelNormal1..6 wheel keys; 7-9 go to <see cref="ExtraWheelKeyBase"/>+1..3 because wheel keys 7-14
+    /// already belong to the skill queue, mounts, pet and gameplay slots.
+    /// </summary>
+    public const int BarSlots = 9;
+    /// <summary>The original bar size: the default bar (nothing saved yet) still fills only these.</summary>
+    public const int DefaultBarSlots = 6;
+    public const int ExtraWheelKeyBase = 100;
+
+    /// <summary>The SkillWheel.whellSkills key of a bar slot (1-based): 1-6 as the client defines, 7-9 as 101-103.</summary>
+    public static int WheelKey(int slot) => slot <= DefaultBarSlots ? slot : ExtraWheelKeyBase + slot - DefaultBarSlots;
+
     private const long FightBit = 1L << 15;
 
     private readonly GameData data;
@@ -186,7 +198,7 @@ public sealed class SkillService
 
         var wheel = new SkillWheel { AtkSkillId = atk };
         foreach (var (slot, group) in Bar(p))
-            if (RealId(group, Level(p, group)) is var id and > 0) wheel.WhellSkills[slot] = new SkillWheelSlot { SkillConfigId = id, Enable = true };
+            if (RealId(group, Level(p, group)) is var id and > 0) wheel.WhellSkills[WheelKey(slot)] = new SkillWheelSlot { SkillConfigId = id, Enable = true };
         skillData.SkillWheel = wheel;
         skillData.OriginSkillWheel = wheel.Clone();
         return skillData;
@@ -403,7 +415,7 @@ public sealed class SkillService
             for (int slot = 1; slot <= Math.Min(BarSlots, selected.ManualLoadSkill.Count); slot++)
                 if (selected.ManualLoadSkill[slot - 1] is { SkillId: > 0 } skill
                     && RealId(skill.SkillId, skill.SkillLevel) is var id and > 0)
-                    state.SkillWheel.WhellSkills[slot] = new SkillWheelSlot { SkillConfigId = id, Enable = true };
+                    state.SkillWheel.WhellSkills[WheelKey(slot)] = new SkillWheelSlot { SkillConfigId = id, Enable = true };
         }
         foreach (var (_, skill) in selected.SkillQueue.OrderBy(kv => kv.Key))
             if (skill.SkillId > 0 && RealId(skill.SkillId, skill.SkillLevel) is var id and > 0)
@@ -431,7 +443,7 @@ public sealed class SkillService
         }
         foreach (var (group, _) in Tree(p.Career))
         {
-            if (next > BarSlots) break;
+            if (next > DefaultBarSlots) break;
             if (Level(p, group) > 0 && IsActive(group) && !IsNormalGroup(p, group)) yield return (next++, group);
         }
     }
@@ -716,6 +728,8 @@ public sealed class SkillService
             else await CommitAsync(session, plans, kind: "cd13c/skill-load");
             if (code == 0) { session.SkillPlans = plans; await SyncAsync(session); }
         }
+        log.LogInformation("{Name} skill load: op {Op} socket {Socket} skill {Skill} lv {Level} manual {Manual}: {Result}",
+            session.Role!.Name, op, target, group, req.Info?.SkillLevel ?? 0, req.IsManual, code == 0 ? "ok" : "refused " + code);
         await session.SendGameAsync(SkillLoad, new SkillLoadResp { Result = code, IsManual = req.IsManual });
     }
 

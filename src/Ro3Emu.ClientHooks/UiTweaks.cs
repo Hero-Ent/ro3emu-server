@@ -31,6 +31,7 @@ namespace Ro3Emu.ClientHooks
         public static void Tick()
         {
             Diagnostics.AutoDump();
+            DevDriver.Tick();
             TextFit.Tick();
             HandleLoginKeyboard(); // Must be checked EVERY frame for responsive keyboard input!
             if (++_frame % 10 != 0) return;
@@ -71,6 +72,8 @@ namespace Ro3Emu.ClientHooks
                 }
                 if (Done.Count > 128) Done.Clear();
                 QuitButton.Tick();
+                HotbarExpansion.TickInput();
+                HotbarExpansion.TickLayout();
                 LuaPatches.Tick();
                 PassChallenges.Tick();
                 PassButton.Tick();
@@ -387,12 +390,12 @@ namespace Ro3Emu.ClientHooks
                 }
                 if (t.IndexOf("https://discord.com/invite/ro3global", StringComparison.Ordinal) >= 0)
                 {
-                    t = t.Replace("https://discord.com/invite/ro3global", "https://discord.com/invite/mnUBY54jAe");
+                    t = t.Replace("https://discord.com/invite/ro3global", "https://discord.com/invite/herosagammo");
                     changed = true;
                 }
                 else if (t.IndexOf("ro3global", StringComparison.Ordinal) >= 0)
                 {
-                    t = t.Replace("ro3global", "mnUBY54jAe");
+                    t = t.Replace("ro3global", "herosagammo");
                     changed = true;
                 }
                 if (changed) tmp.text = t;
@@ -415,12 +418,12 @@ namespace Ro3Emu.ClientHooks
                 }
                 if (t.IndexOf("https://discord.com/invite/ro3global", StringComparison.Ordinal) >= 0)
                 {
-                    t = t.Replace("https://discord.com/invite/ro3global", "https://discord.com/invite/mnUBY54jAe");
+                    t = t.Replace("https://discord.com/invite/ro3global", "https://discord.com/invite/herosagammo");
                     changed = true;
                 }
                 else if (t.IndexOf("ro3global", StringComparison.Ordinal) >= 0)
                 {
-                    t = t.Replace("ro3global", "mnUBY54jAe");
+                    t = t.Replace("ro3global", "herosagammo");
                     changed = true;
                 }
                 if (changed) txt.text = t;
