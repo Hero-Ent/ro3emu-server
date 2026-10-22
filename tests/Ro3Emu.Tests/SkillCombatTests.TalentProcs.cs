@@ -117,9 +117,11 @@ public sealed partial class SkillCombatTests
         await alice.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1500001, TargetId = monster.Uid });
         var accepted = await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser);
         Assert.Equal(0, accepted.Result);
-        await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, x => x.SessionId == accepted.SessionId);
+        // Hero Saga: the described hit is published in the swing's own session (CombatService.ExtraSession), after the
+        // basic attack's two attack points.
+        for (int i = 0; i < 2; i++) await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, x => x.SessionId == accepted.SessionId);
         var extra = await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser,
-            x => x.SkillId == 1500001 && x.SessionId != accepted.SessionId && x.SrcID == Session("alice").Role!.Id);
+            x => x.SkillId == 1500001 && x.SessionId == accepted.SessionId && x.SrcID == Session("alice").Role!.Id);
         Assert.Contains(extra.Dsts, d => d.DstID == monster.Uid && d.Damage > 0);
 
         // The described hit keeps the attack's id. With the attack's effective row cached by now (Normal Attack Boost is
@@ -148,7 +150,7 @@ public sealed partial class SkillCombatTests
         var accepted = await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser);
         Assert.Equal(0, accepted.Result);
         var proc = await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser,
-            x => x.SessionId != accepted.SessionId && x.Dsts.Any(d => d.DstID == bystander.Uid));
+            x => x.SessionId == accepted.SessionId && x.Dsts.Any(d => d.DstID == bystander.Uid)); // in the swing's session (CombatService.ExtraSession)
         Assert.True(proc.Dsts.Single(d => d.DstID == bystander.Uid).Damage > 0);
     }
 

@@ -565,12 +565,32 @@ public sealed partial class CombatService
         // multi-hit cast (SkillMechanics hits/everyMs, spins, bounces) resolves once, on its first damage moment, and a
         // server follow-up (Independent, CastTriggeredAsync) is an extra cast too (inferred: one proc roll per cast).
         if (field == null && !action.Request.IsExtraSkill && !action.Independent && impact is not { First: false })
-            foreach (var handler in CastResolved)
+        {
+            _resolving.Value = action;
+            try
             {
-                if (!CanApplyMoreEffects()) break;
-                await handler(s, action, processed, hit);
+                foreach (var handler in CastResolved)
+                {
+                    if (!CanApplyMoreEffects()) break;
+                    await handler(s, action, processed, hit);
+                }
             }
+            finally { _resolving.Value = null; }
+        }
     }
+
+    // Hero Saga: the player's cast whose CastResolved handlers (talent and passive procs) are running, per async flow.
+    private readonly AsyncLocal<ActiveSkillCast?> _resolving = new();
+
+    /// <summary>
+    /// The session of an extra hit. A described talent hit keeps its trigger's skill id (Double Attack on a basic attack):
+    /// on a session of its own the client opened a second context of that skill that never ended, so the attack stance
+    /// stayed until a walk and the auto attack stopped after one swing (in-game 22.10, Assassin with a dagger). It is
+    /// published in the trigger's session, as one more hit of that swing (inferred, as Hero Saga's Double Attack did).
+    /// </summary>
+    private long ExtraSession(GameSession s, JsonElement row) =>
+        _resolving.Value is { } trigger && trigger.OwnerId == s.Role?.Id
+            && GameData.Int(trigger.Row, "_iID") == new SkillConfig(row).Id ? trigger.Id : ++_sessionIds;
 
     /// <summary>
     /// An extra cast of a SkillConfig row on monsters the caller chose, through the ordinary effect path (damage, kills,
@@ -582,7 +602,7 @@ public sealed partial class CombatService
         var target = targets[0];
         var action = new ActiveSkillCast
         {
-            Id = ++_sessionIds, OwnerId = s.Role.Id, WorldScene = s.WorldScene, SceneGeneration = s.SceneGeneration,
+            Id = ExtraSession(s, row), OwnerId = s.Role.Id, WorldScene = s.WorldScene, SceneGeneration = s.SceneGeneration,
             Attachment = s.Attachment, Row = ExtraRow(s, row),
             Request = new CastSkillReq
             {

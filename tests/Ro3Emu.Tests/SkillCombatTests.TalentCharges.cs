@@ -30,9 +30,12 @@ public sealed partial class SkillCombatTests
         await alice.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1500001, TargetId = monster.Uid });
         var accepted = await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser);
         Assert.Equal(0, accepted.Result);
-        await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, x => x.SessionId == accepted.SessionId);
+        // Hero Saga: the extra hit is published in the swing's own session (CombatService.ExtraSession): a session of its
+        // own left the client's attack stance on. A Thief's basic attack lands at its two attack points, so the Double
+        // Attack is the swing's third hit.
+        for (int i = 0; i < 2; i++) await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, x => x.SessionId == accepted.SessionId);
         var extra = await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser,
-            x => x.SkillId == 1500001 && x.SessionId != accepted.SessionId);
+            x => x.SkillId == 1500001 && x.SessionId == accepted.SessionId);
         Assert.Contains(extra.Dsts, d => d.DstID == monster.Uid && d.Damage > 0);
     }
 

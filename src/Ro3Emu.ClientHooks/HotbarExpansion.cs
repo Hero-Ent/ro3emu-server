@@ -728,12 +728,35 @@ namespace Ro3Emu.ClientHooks
                 if (bottom.Find(name) is RectTransform left) Place(left, -half);
             foreach (var name in after)
                 if (bottom.Find(name) is RectTransform right) Place(right, half);
+            // A frame the player placed in Edit layout (or a bar the player moved) is not shifted above, so the grown bar
+            // could cover the buttons after it (players' report, 22.10). One that overlaps the bar's row goes right of the
+            // 9th slot; once clear it is left alone, so a saved layout does not drift (inferred placement).
+            if (offset > 0)
+                foreach (var name in after)
+                    if (bottom.Find(name) is RectTransform right) KeepClear(bottom, six.parent.GetChild(0) as RectTransform, nine, right);
             // The bar's own divider is anchored to the middle of the grown row, which the growth moved right by half
             // and the container left by half: the other half puts it after the 9th slot.
             if (innerDivider != null && Ancestor(six, "Pan_Cell") is RectTransform cell && cell.Find(innerDivider) is RectTransform divider)
                 Place(divider, half);
         }
 
+        private const float ClearGap = 6f;
+
+        /// <summary>Moves <paramref name="element"/> (a child of <paramref name="space"/>) right of <paramref name="last"/>
+        /// when it overlaps the row from <paramref name="first"/> to <paramref name="last"/>.</summary>
+        private static void KeepClear(Transform space, RectTransform first, RectTransform last, RectTransform element)
+        {
+            if (first == null || element.parent != space || !element.gameObject.activeInHierarchy || !last.gameObject.activeInHierarchy) return;
+            first.GetWorldCorners(Corners);
+            float rowLeft = space.InverseTransformPoint(Corners[0]).x;
+            last.GetWorldCorners(Corners);
+            Vector3 rowMin = space.InverseTransformPoint(Corners[0]), rowMax = space.InverseTransformPoint(Corners[2]);
+            element.GetWorldCorners(Corners);
+            Vector3 min = space.InverseTransformPoint(Corners[0]), max = space.InverseTransformPoint(Corners[2]);
+            if (max.y <= rowMin.y || min.y >= rowMax.y || max.x <= rowLeft || min.x >= rowMax.x) return;
+            float push = rowMax.x + ClearGap - min.x;
+            if (push > 0.5f) element.anchoredPosition += new Vector2(push, 0);
+        }
         private static float RightEdge(Transform space, RectTransform rect)
         {
             rect.GetWorldCorners(Corners);
