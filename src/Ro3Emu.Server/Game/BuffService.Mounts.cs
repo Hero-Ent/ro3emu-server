@@ -18,9 +18,9 @@ public sealed partial class BuffService
     {
         if (p.Role == null) return;
         long rider = MountService.Rider(p);
-        var row = rider == 0 ? null : data.Row("CartRemouldTable", rider) ?? data.Row("MountsConfig", rider);
+        var row = rider == 0 ? null : _data.Row("CartRemouldTable", rider) ?? _data.Row("MountsConfig", rider);
         var want = row is { } r && r.TryGetProperty("_kBindBuff", out var list) && list.ValueKind == JsonValueKind.Array
-            ? list.EnumerateArray().Select(v => (int)(GameData.Number(v) ?? 0)).Where(id => id > 0 && data.Row("BuffConfig", id) != null).ToHashSet()
+            ? list.EnumerateArray().Select(v => (int)(GameData.Number(v) ?? 0)).Where(id => id > 0 && _data.Row("BuffConfig", id) != null).ToHashSet()
             : [];
         bool changed = false;
         foreach (var buff in p.Buffs.Where(b => b.IsPassive && !b.IsTotemOwned && b.SourceId == MountBindSource && !want.Contains(b.ConfigId)).ToArray())
@@ -36,7 +36,7 @@ public sealed partial class BuffService
         // AddPassiveAsync does not raise Changed: the skill parameters (type 15 modes) and stats must follow.
         if (changed)
         {
-            await character.RefreshStatsAsync(p);
+            await _character.RefreshStatsAsync(p);
             foreach (var handler in Changed) await handler(p);
         }
     }

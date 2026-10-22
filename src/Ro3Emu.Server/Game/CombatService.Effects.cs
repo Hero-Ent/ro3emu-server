@@ -70,14 +70,14 @@ public sealed partial class CombatService
             if (Script(row) == "Resurrection")
             {
                 var target = FindPlayer(s, action.Request.TargetId, dead: true);
-                if (target == null || target.SceneLoading || buffs.HasForbidden(target, 16)
+                if (target == null || target.SceneLoading || _buffs.HasForbidden(target, 16)
                     || s.WorldState.ResurrectionCastId != action.Id
                     || Distance(s.Position, target.Position) > Range(row) + 1.5f) return;
                 s.WorldState.ResurrectionCastId = 0;
                 if (action.Request.SkillId == PublicSkill("WorldTreeSkillId"))
                 {
                     if (ReviveItemSkill != null && await ReviveItemSkill(s, target, row))
-                        await buffs.NotifyWorldTreeReviveAsync(s, target.Role!.Name);
+                        await _buffs.NotifyWorldTreeReviveAsync(s, target.Role!.Name);
                 }
                 else if (ReviveOffer != null) await ReviveOffer(s, target, row);
                 return;
@@ -111,7 +111,7 @@ public sealed partial class CombatService
             if (chain.DelayMs > 0) await Task.Delay(chain.DelayMs);
             if (!CurrentCastMap(s, action) || s.Dead) return;
             var from = at;
-            var candidates = world.Map(s.WorldScene).Units.OfType<MonsterUnit>()
+            var candidates = _world.Map(s.WorldScene).Units.OfType<MonsterUnit>()
                 .Where(m => m.Hp > 0 && !struck.Contains(m.Uid) && CanHitMonster(s, m) && Relation(row, false, race: m.Template.Race)
                     && Distance(from, m.Pos) <= chain.Radius + 0.1f)
                 .OrderBy(m => m.Uid).ToList();
@@ -192,7 +192,7 @@ public sealed partial class CombatService
         bool Allowed(MonsterUnit m) => (mechanic is not { ExcludeTarget: true } || m.Uid != action.Request.TargetId) // "2 other enemies near the target"
             && (mechanic is not { } only || (only.OnlyRaces.Count == 0 && only.OnlyElements.Count == 0)
                 || only.OnlyRaces.Contains(m.Template.Race) || only.OnlyElements.Contains(m.Template.Element));
-        return world.Map(s.WorldScene).Units.OfType<MonsterUnit>().Where(m => m.Hp > 0 && CanHitMonster(s, m) && Relation(row, false, race: m.Template.Race) && Allowed(m) && InShape(m))
+        return _world.Map(s.WorldScene).Units.OfType<MonsterUnit>().Where(m => m.Hp > 0 && CanHitMonster(s, m) && Relation(row, false, race: m.Template.Race) && Allowed(m) && InShape(m))
             .OrderBy(m => Distance(center, m.Pos)).ThenBy(m => m.Uid).Take(max).ToList();
     }
 
@@ -205,7 +205,7 @@ public sealed partial class CombatService
         var castingRole = s.Role;
         bool CurrentCaster() => ReferenceEquals(s.Role, castingRole) && !s.SceneLoading
             && s.SceneGeneration == action.SceneGeneration && (field != null ? !field.Removing : !action.Cancelled)
-            && s.WorldScene == action.WorldScene && sessions.All().Contains(s);
+            && s.WorldScene == action.WorldScene && _sessions.All().Contains(s);
         bool CanApplyMoreEffects() => CurrentCaster() && ReferenceEquals(s.Attachment, action.Attachment)
             && action.Attachment?.Cancelled != true;
         // A published death still owes its callbacks after the cast/field is cancelled.
@@ -213,7 +213,7 @@ public sealed partial class CombatService
         bool CurrentKillRecipient() => ReferenceEquals(s.Role, castingRole) && !s.SceneLoading
             && s.SceneGeneration == action.SceneGeneration && s.WorldScene == action.WorldScene
             && ReferenceEquals(s.Attachment, action.Attachment)
-            && sessions.All().Contains(s);
+            && _sessions.All().Contains(s);
         string script = Script(row);
         // Heal's enemy branch is [1] for damage, and so is its segment count; a spin's final hit is branch [1] too.
         int branch = impact?.Branch ?? (script == "Heal" ? 1 : 0);
@@ -320,13 +320,13 @@ public sealed partial class CombatService
             else
             {
                 float radius = field?.Radius ?? (float)(Numbers(row, "_kRange").FirstOrDefault(0) / 100);
-                allies.AddRange(world.PlayersIn(s.WorldScene).Where(p => !p.Dead && Relation(row, true, p == s)
+                allies.AddRange(_world.PlayersIn(s.WorldScene).Where(p => !p.Dead && Relation(row, true, p == s)
                     && (p == s || radius > 0 && Distance(p.Position, center) <= radius))
                     .OrderBy(p => Distance(p.Position, center)).Take((int)Math.Max(1, GameData.Int(row, "_iTargetMax"))));
                 if (allies.Count == 0 && Relation(row, true, true)) allies.Add(s);
             }
         }
-        var stats = character.Stats(s);
+        var stats = _character.Stats(s);
         var attacker = new Fighter(stats[103], stats[104], stats[109], stats[111], s.Progress!.Level, 1) { Stats = stats };
         var hit = new SkillHitInfo
         {
@@ -392,7 +392,7 @@ public sealed partial class CombatService
                         {
                             if (!CurrentKillRecipient()) break;
                             try { await handler(s, target, effective); }
-                            catch (Exception ex) { log.LogError(ex, "Monster damage callback failed for {Uid}", target.Uid); }
+                            catch (Exception ex) { _log.LogError(ex, "Monster damage callback failed for {Uid}", target.Uid); }
                         }
                     long extraShown = doubles.Where(d => d.Target == target).Sum(d => d.Amount);
                     hit.Dsts.Add(new DamageInfo { DstID = target.Uid, Damage = amount - extraShown, HitResult = result, DstElement = target.Template.Element, IsDead = target.Hp == 0 && extraShown == 0 });
@@ -400,12 +400,12 @@ public sealed partial class CombatService
                 if (CanApplyMoreEffects())
                     foreach (var tuple in Tuples(row, "_kBuff2"))
                         if (CanApplyMoreEffects() && RollHostileBuff(tuple, s, null, null, target, out int id, out int duration))
-                            await buffs.ShowOnUnitAsync(target, id, duration, castingRole.Id);
+                            await _buffs.ShowOnUnitAsync(target, id, duration, castingRole.Id);
                 // Statuses a description names that the row's _kBuff2 lacks (Pile Bunker's 0.5 s Stun).
                 if (mechanic != null && CanApplyMoreEffects())
                     foreach (var (buff, chance, ms) in mechanic.TargetBuffs)
-                        if (CanApplyMoreEffects() && Rolls.Proc(10000) < chance) await buffs.ShowOnUnitAsync(target, buff, ms, castingRole.Id);
-                if (CanApplyMoreEffects() && script is ("Provoke" or "Taunt")) monsters.Engage(target, s);
+                        if (CanApplyMoreEffects() && Rolls.Proc(10000) < chance) await _buffs.ShowOnUnitAsync(target, buff, ms, castingRole.Id);
+                if (CanApplyMoreEffects() && script is ("Provoke" or "Taunt")) _monsters.Engage(target, s);
                 if (CanApplyMoreEffects() && !target.Dead && target.Hp > 0) await DisplaceTargetAsync(s, action, target, mechanic?.Knockback ?? field?.Knockback ?? 0, mechanic?.Pull ?? 0, center, field?.Pos);
             }
             // Buff1 is self for hostile selectors, but actual friend recipients for ally selectors (Detoxify, Blessing).
@@ -418,15 +418,15 @@ public sealed partial class CombatService
                     {
                         if (!CanApplyMoreEffects() || !RollBuff(tuple, out int id, out int duration)) continue;
                         if (mechanic?.AtStacks is { } gate && recipient == s && gate.Grants.Contains(id)) continue; // held for the counter
-                        await buffs.AddAsync(recipient, id, duration, castingRole.Id);
+                        await _buffs.AddAsync(recipient, id, duration, castingRole.Id);
                     }
                     if (mechanic?.AtStacks is { } stack && recipient == s && CanApplyMoreEffects()
                         && s.Buffs.FirstOrDefault(b => b.ConfigId == stack.Counter) is { } counter && counter.PileCount >= stack.At)
                     {
-                        await buffs.RemoveAsync(s, counter);
+                        await _buffs.RemoveAsync(s, counter);
                         foreach (var tuple in Tuples(row, "_kBuff1"))
                             if (tuple.GetArrayLength() >= 3 && (int)(GameData.Number(tuple[0]) ?? 0) is var grant && stack.Grants.Contains(grant))
-                                await buffs.SetPileCountAsync(s, grant, (int)(GameData.Number(tuple[2]) ?? 0), castingRole.Id, stack.Piles);
+                                await _buffs.SetPileCountAsync(s, grant, (int)(GameData.Number(tuple[2]) ?? 0), castingRole.Id, stack.Piles);
                     }
                 }
                 if (friendly && damage)
@@ -435,9 +435,9 @@ public sealed partial class CombatService
                     // Heal's friendly branch is P1[0]/P2[0]; its enemy branch is [1] (description + select race mask).
                     long amount = (long)Math.Max(0, Math.Round(stats[104] * multiplier / 10000 + flat));
                     foreach (var modifier in ExtraHeal) amount = modifier(s, amount);
-                    var before = character.Stats(recipient);
+                    var before = _character.Stats(recipient);
                     long actual = Math.Min(amount, Math.Max(0, before[101] - before[2000]));
-                    await character.SetHpSpAsync(recipient, before[2000] + amount, null);
+                    await _character.SetHpSpAsync(recipient, before[2000] + amount, null);
                     hit.Dsts.Add(new DamageInfo { DstID = recipient.Role!.Id, Damage = actual, DamageType = DamageType.Heal, DstElement = 1 });
                     foreach (var handler in Healed) handler(s, actual);
                     foreach (var handler in HealedAsync) await handler(s, actual);
@@ -448,8 +448,8 @@ public sealed partial class CombatService
                 {
                     // (inferred) cleanse exact described groups rather than removing every beneficial/hostile status.
                     IReadOnlyList<int> groups = mechanic?.Cleanse is { Count: > 0 } named ? named : script == "Detoxify" ? [9030] : [9023, 9025];
-                    foreach (var buff in recipient.Buffs.Where(b => data.Row("BuffConfig", b.ConfigId) is { } br && groups.Contains((int)GameData.Int(br, "_iBuffID"))).ToArray())
-                        await buffs.RemoveAsync(recipient, buff);
+                    foreach (var buff in recipient.Buffs.Where(b => _data.Row("BuffConfig", b.ConfigId) is { } br && groups.Contains((int)GameData.Int(br, "_iBuffID"))).ToArray())
+                        await _buffs.RemoveAsync(recipient, buff);
                 }
             }
             if (hit.Dsts.Count > 0)
@@ -463,8 +463,8 @@ public sealed partial class CombatService
                         DamageBeShield = result.SheildDamage, DamageType = result.DamageType, HitResult = result.HitResult, SkillId = hit.SkillId,
                     });
                 }
-                if (CurrentCaster() && hit.Dsts.Any(d => d.HitResult != DamageHitResult.Miss)) await buffs.RecoverEnergyOnHitAsync(s, row);
-                var sourceViewers = CurrentCaster() ? world.Viewers(s).Append(s) : Enumerable.Empty<GameSession>();
+                if (CurrentCaster() && hit.Dsts.Any(d => d.HitResult != DamageHitResult.Miss)) await _buffs.RecoverEnergyOnHitAsync(s, row);
+                var sourceViewers = CurrentCaster() ? _world.Viewers(s).Append(s) : Enumerable.Empty<GameSession>();
                 foreach (var viewer in processed.SelectMany(t => t.Viewers).Concat(sourceViewers).Distinct()) await viewer.SendGameAsync(SkillHit, hit);
                 if (doubles.Count > 0)
                 {
@@ -483,27 +483,27 @@ public sealed partial class CombatService
             {
                 if (!damage) continue;
                 if (target.Hp == 0 && !target.DeathDurable) continue; // another cast is still committing that death
-                await world.ToUnitViewersAsync(target, AoiAttrChange, MonsterService.Hp(target));
+                await _world.ToUnitViewersAsync(target, AoiAttrChange, MonsterService.Hp(target));
                 await FightingAsync(target);
-                if (target.Hp > 0 && CurrentCaster()) monsters.Engage(target, s);
+                if (target.Hp > 0 && CurrentCaster()) _monsters.Engage(target, s);
             }
             if (processed.Count > 0 && CurrentCaster()) await FightingAsync(s);
             if (casterCondition && mechanic?.BranchIf is { Consume: true, CasterBuffGroup: int spent } && processed.Count > 0 && CurrentCaster())
-                foreach (var buff in s.Buffs.Where(b => data.Row("BuffConfig", b.ConfigId) is { } br && GameData.Int(br, "_iBuffID") == spent).ToArray())
-                    await buffs.RemoveAsync(s, buff);
+                foreach (var buff in s.Buffs.Where(b => _data.Row("BuffConfig", b.ConfigId) is { } br && GameData.Int(br, "_iBuffID") == spent).ToArray())
+                    await _buffs.RemoveAsync(s, buff);
             if (field != null) field.LastHits = damage ? processed.Count : 0;
             // "You then lose N% of your Max HP. This HP loss cannot be fatal." (Energy Release), once per cast.
             if (mechanic is { SelfHpLossPercent: > 0 } && impact is not { First: false } && CurrentCaster())
             {
-                var self = character.Stats(s);
+                var self = _character.Stats(s);
                 long loss = self[101] * mechanic.SelfHpLossPercent / 100;
-                await character.SetHpSpAsync(s, Math.Max(1, self[2000] - loss), null);
+                await _character.SetHpSpAsync(s, Math.Max(1, self[2000] - loss), null);
             }
             foreach (var target in killed.Where(target => target.Hp == 0 && target.DeathDurable))
             {
-                log.LogInformation("{Name} killed {Monster} ({Npc})", castingRole.Name, target.Uid, target.Template.NpcId);
-                await monsters.KillAsync(target);
-                foreach (var other in sessions.All().Where(o => o.Attack?.Target == target))
+                _log.LogInformation("{Name} killed {Monster} ({Npc})", castingRole.Name, target.Uid, target.Template.NpcId);
+                await _monsters.KillAsync(target);
+                foreach (var other in _sessions.All().Where(o => o.Attack?.Target == target))
                 {
                     other.Attack = null;
                     await other.SendGameAsync(SkillEnd, new SkillEndNotify
@@ -521,8 +521,8 @@ public sealed partial class CombatService
             foreach (var target in killed.Where(target => target.Hp == 0 && target.DeathDurable))
             {
                 if (!target.Dead)
-                    try { await monsters.KillAsync(target); }
-                    catch (Exception ex) { log.LogError(ex, "Could not finalize reserved monster death for {Uid}", target.Uid); }
+                    try { await _monsters.KillAsync(target); }
+                    catch (Exception ex) { _log.LogError(ex, "Could not finalize reserved monster death for {Uid}", target.Uid); }
                 // A later target/effect can fail after this source committed. Its room observers must still run.
                 await PublishDurableKillAsync(s, target, CurrentKillRecipient);
                 await FinalizeLethalPublicationAsync(target);
@@ -572,7 +572,7 @@ public sealed partial class CombatService
     /// </summary>
     internal (int Id, int Ms) MovementEffect(long scriptShow) => _movementEffects.GetOrAdd(scriptShow, show =>
     {
-        var (id, ms, _) = FindMovementEffect(data, show);
+        var (id, ms, _) = FindMovementEffect(_data, show);
         return (id, ms);
     });
 
@@ -614,7 +614,7 @@ public sealed partial class CombatService
         // MoveAsync updates persistent position and AOI membership from the same authoritative destination.
         s.PreviousPosition = start;
         s.Position = end;
-        await world.MoveAsync(s, new WalkReq { Pos = end, Dir = s.Face, Face = s.Face, BStop = true }, forceTeleport: true);
+        await _world.MoveAsync(s, new WalkReq { Pos = end, Dir = s.Face, Face = s.Face, BStop = true }, forceTeleport: true);
         ConfirmSkillMoveEnd(s, end, move.Ms > 0 ? move.Ms : action.ActionMs);
     }
 
@@ -639,7 +639,7 @@ public sealed partial class CombatService
                 // A stale position sync from the cast spot pulled the server back too: the dash end stands.
                 s.PreviousPosition = s.Position.Clone();
                 s.Position = at.Clone();
-                await world.MoveAsync(s, new WalkReq { Pos = at.Clone(), Dir = s.Face, Face = s.Face, BStop = true }, forceTeleport: true);
+                await _world.MoveAsync(s, new WalkReq { Pos = at.Clone(), Dir = s.Face, Face = s.Face, BStop = true }, forceTeleport: true);
             }
             await s.SendGameAsync(GameAoiSink.MovementChange, new MovementChangeNtf
             {
@@ -673,7 +673,7 @@ public sealed partial class CombatService
         });
         s.PreviousPosition = start;
         s.Position = end;
-        await world.MoveAsync(s, new WalkReq { Pos = end, Dir = s.Face, Face = s.Face, BStop = true }, forceTeleport: true);
+        await _world.MoveAsync(s, new WalkReq { Pos = end, Dir = s.Face, Face = s.Face, BStop = true }, forceTeleport: true);
         ConfirmSkillMoveEnd(s, end, ms > 0 ? ms : 200);
     }
 
@@ -691,12 +691,12 @@ public sealed partial class CombatService
             var to = WalkableEnd(s.SceneEntry, pullStart, px / gap * step, pz / gap * step);
             target.Moving = false;
             target.X = to.X; target.Y = to.Y; target.Z = to.Z;
-            await world.ToUnitViewersAsync(target, SkillMove, new SkillStartMoveNotify
+            await _world.ToUnitViewersAsync(target, SkillMove, new SkillStartMoveNotify
             {
                 EntityID = (ulong)target.Uid, StartPos = pullStart, EndPos = to, SkillConfigId = action.Request.SkillId,
                 EffectId = pullEffect, MoveType = 2, StartTimestampMs = Now, Face = target.Face, MoveTimeMs = pullMs > 0 ? pullMs : 300,
             });
-            await world.MoveUnitAsync(target, new MovementChangeNtf { Uid = target.Uid, MovementInfo = target.CurrentMovement(Now) });
+            await _world.MoveUnitAsync(target, new MovementChangeNtf { Uid = target.Uid, MovementInfo = target.CurrentMovement(Now) });
             return;
         }
         if (rule is null && knockback > 0)
@@ -717,18 +717,18 @@ public sealed partial class CombatService
         var end = WalkableEnd(s.SceneEntry, start, dx / length * distance, dz / length * distance);
         target.Moving = false;
         target.X = end.X; target.Y = end.Y; target.Z = end.Z;
-        await world.ToUnitViewersAsync(target, SkillMove, new SkillStartMoveNotify
+        await _world.ToUnitViewersAsync(target, SkillMove, new SkillStartMoveNotify
         {
             EntityID = (ulong)target.Uid, StartPos = start, EndPos = end, SkillConfigId = action.Request.SkillId,
             EffectId = move.EffectId, MoveType = 2, StartTimestampMs = Now, Face = target.Face,
             MoveTimeMs = move.Ms > 0 ? move.Ms : 300,
         });
-        await world.MoveUnitAsync(target, new MovementChangeNtf { Uid = target.Uid, MovementInfo = target.CurrentMovement(Now) });
+        await _world.MoveUnitAsync(target, new MovementChangeNtf { Uid = target.Uid, MovementInfo = target.CurrentMovement(Now) });
     }
 
     private Vec3 WalkableEnd(long sceneId, Vec3 start, float dx, float dz)
     {
-        var nav = worldData.Map(sceneId)?.Nav;
+        var nav = _worldData.Map(sceneId)?.Nav;
         var end = start.Clone();
         int steps = Math.Max(1, (int)Math.Ceiling(Math.Sqrt(dx * dx + dz * dz) / 0.25));
         for (int i = 1; i <= steps; i++)
@@ -769,12 +769,12 @@ public sealed partial class CombatService
             default:
                 if (script.Contains("Summon", StringComparison.OrdinalIgnoreCase))
                 {
-                    npc = logic.Select(v => (int)v).FirstOrDefault(id => data.Row("NPCConfig", id) != null);
+                    npc = logic.Select(v => (int)v).FirstOrDefault(id => _data.Row("NPCConfig", id) != null);
                     duration = 30000; // (inferred) bounded lifecycle for a named summon without an explicit lifetime tuple.
                 }
                 break;
         }
-        if (npc == 0 || data.Row("NPCConfig", npc) is not { } npcRow) return false;
+        if (npc == 0 || _data.Row("NPCConfig", npc) is not { } npcRow) return false;
         if (trap)
         {
             var desc = row.TryGetProperty("_kDescData", out var d) && d.ValueKind == JsonValueKind.Array ? d.EnumerateArray().ToArray() : [];
@@ -810,10 +810,10 @@ public sealed partial class CombatService
         };
         foreach (int skill in Numbers(npcRow, "_kSkills").Select(v => (int)v)) unit.Skills.Add(skill);
         s.SkillObjects.Add(unit);
-        await world.AddUnitAsync(unit);
+        await _world.AddUnitAsync(unit);
         if (!CurrentCastMap(s, action)) { await RemoveSkillObjectAsync(unit); return true; }
         foreach (var tuple in Tuples(row, "_kBuff1"))
-            if (RollBuff(tuple, out int buffId, out int buffDuration)) await buffs.AddAsync(s, buffId, buffDuration, s.Role.Id);
+            if (RollBuff(tuple, out int buffId, out int buffDuration)) await _buffs.AddAsync(s, buffId, buffDuration, s.Role.Id);
         return true;
     }
 
@@ -834,7 +834,7 @@ public sealed partial class CombatService
             if (Now < unit.NextTickMs) return;
             unit.NextTickMs = Now + unit.IntervalMs;
             if (unit.ProtectionDistanceType != 0) return;
-            if (unit.Trap && !world.Map(unit.WorldScene).Near(unit.X, unit.Z, 1.5f).OfType<MonsterUnit>().Any(m => !m.Dead && Distance(m.Pos, unit.Pos) <= 1.5f)) return;
+            if (unit.Trap && !_world.Map(unit.WorldScene).Near(unit.X, unit.Z, 1.5f).OfType<MonsterUnit>().Any(m => !m.Dead && Distance(m.Pos, unit.Pos) <= 1.5f)) return;
             await ApplyEffectsAsync(owner, unit.Cast, unit.Pos, unit);
             if (unit.Trap) await RemoveSkillObjectAsync(unit);
             else if (unit.LastHits > 0 && unit.TouchesLeft is int left && (unit.TouchesLeft = left - unit.LastHits) <= 0) await RemoveSkillObjectAsync(unit);
@@ -848,13 +848,13 @@ public sealed partial class CombatService
         if (unit.Removing) return;
         unit.Removing = true;
         unit.OwnerSession.SkillObjects.Remove(unit);
-        await world.RemoveUnitAsync(unit);
+        await _world.RemoveUnitAsync(unit);
     }
 
     /// <summary>Scene/role/disconnect teardown invalidates callbacks before despawning owned skill entities.</summary>
     public async Task ClearSkillsAsync(GameSession s)
     {
-        eventAttacks.Remove(s);
+        _eventAttacks.Remove(s);
         s.WorldState.ResurrectionCastId = 0;
         s.Attack = null;
         if (s.SkillCast is { } cast) cast.Cancelled = true;
@@ -865,7 +865,7 @@ public sealed partial class CombatService
     private async Task<bool> GroundProtectsAsync(GameSession target, JsonElement? skill)
     {
         int distanceType = skill is { } row ? (int)GameData.Int(row, "_iDistanceType") : 1;
-        var field = world.Map(target.WorldScene).Units.OfType<SkillObject>().FirstOrDefault(u => !u.Removing && u.ExpiresMs > Now
+        var field = _world.Map(target.WorldScene).Units.OfType<SkillObject>().FirstOrDefault(u => !u.Removing && u.ExpiresMs > Now
             && u.ProtectionDistanceType == distanceType && u.Charges > 0 && Distance(u.Pos, target.Position) <= u.Radius);
         if (field == null) return false;
         if (--field.Charges == 0) await RemoveSkillObjectAsync(field);
