@@ -87,7 +87,9 @@ public sealed partial class SkillCombatTests
         Assert.InRange(MathF.Abs(reset.MovementInfo.Pos.X - move.EndPos.X) + MathF.Abs(reset.MovementInfo.Pos.Z - move.EndPos.Z), 0, 0.1f);
         Assert.True(MathF.Abs(move.EndPos.Z - origin.Z) + MathF.Abs(move.EndPos.X - origin.X) > 1);
     }
-    [ClientDataFact]
+    // Hero Saga's own Double Attack is off (CombatService.LegacyDoubleAttack, decision D1 of the 2026-10-22 upstream sync);
+    // the upstream passive rule and its tests own it now.
+    [ClientDataFact(Skip = "Hero Saga's Double Attack is disabled: CombatService.LegacyDoubleAttack")]
     public async Task DoubleAttackReleasesItsExtraHitWithADagger()
     {
         Combat.Rolls = new AlwaysProcRolls();
