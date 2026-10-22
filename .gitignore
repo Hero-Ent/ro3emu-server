@@ -94,3 +94,6 @@ Client/Ragnarok3/ro3_Data/Managed/Ro3Emu.Loc.dll
 Client/Ragnarok3/ro3emu-backup/patched.sha256
 Client/Ragnarok3/ro3emu-backup/patching.journal
 
+
+# Dossie gerado por tools/upstream/status.ps1 (sync com aethai/ro3emu-server)
+.upstream-sync/
