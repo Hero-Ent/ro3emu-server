@@ -58,6 +58,24 @@ Fale com o usuario em portugues. O Hero Saga e um fork com historico compartilha
   (`pack.ps1 -UpdatePrebuiltClientDlls`, ver README) e lembre que isso implica nova versao do cliente.
 - Mudancas de protocolo/cliente (Lua payload, ClientHooks): avisar que exigem publicar cliente novo.
 
+## Licoes do sync de 2026-10-22 (145 commits)
+
+- **Merge em etapas**: corte nos merges da linha principal (`git log --first-parent`) e isole PRs mecanicos
+  grandes (renomeacao, formatacao) numa etapa so deles. Build + testes verdes ao fim de cada etapa.
+- **Antes de um PR de formatacao**: rode `dotnet format whitespace --folder` no nosso codigo e commite; os
+  conflitos de espaco somem.
+- **Antes de um PR de renomeacao em massa**: aplique a mesma renomeacao do nosso lado com Roslyn, so nos tipos
+  que alteramos, usando a arvore do upstream como referencia (nome novo existe la e o antigo nao); depois o
+  merge funde as linhas iguais sozinho. Referencias a campos renomeados que sobrarem viram CS0103 no build.
+- Lado "deles" de um conflito igual a base (so renomeado/formatado) = fique com o nosso trecho, nunca com o
+  arquivo inteiro (`--ours` apagaria as mudancas deles fora do conflito).
+- **Nunca** crie junction/symlink dentro de um worktree temporario: `git worktree remove --force` apaga o conteudo
+  do alvo (aconteceu com `Client/RO3Emu/data`; restaurado por `git checkout -- Client/RO3Emu/data`).
+- Testes `[ClientDataFact]` precisam de `data/config` (dados reais em `Client/RO3Emu/data`); falhas de EXP vem do
+  `scripts/exp_bonus.json` (multiplicador do servidor) e nao do merge: compare sempre com a `main`.
+- `pwsh` nao esta instalado: `client-stamp.ps1` nao roda no Windows PowerShell; calcule o carimbo com
+  `git hash-object -- <arquivos>` (nunca por pipe: o PowerShell 5 poe BOM no stdin do git).
+
 ## Fase 2 - Integracao (so depois do "aprovado")
 
 1. `git status --short`: se houver mudancas nao commitadas, pare e pergunte (commitar ou adiar). Nao faca stash.
