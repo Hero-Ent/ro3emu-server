@@ -101,7 +101,34 @@ namespace Ro3Emu.Loc
             {
                 // no overrides
             }
+            ApplyVersion(map);
             return map;
+        }
+
+        /// <summary>
+        /// "{version}" in an override is the published client version (ro3emu/version.txt, written by the release
+        /// builder); without that file (developer patches) those overrides are dropped and the client's text stays.
+        /// </summary>
+        private static void ApplyVersion(Dictionary<string, string> map)
+        {
+            const string Token = "{version}";
+            string version = null;
+            try
+            {
+                string file = Path.Combine(AppDomain.CurrentDomain.BaseDirectory ?? ".", "ro3emu", "version.txt");
+                if (File.Exists(file)) version = File.ReadAllText(file, Encoding.UTF8).Trim();
+            }
+            catch
+            {
+                version = null;
+            }
+            foreach (var key in new List<string>(map.Keys))
+            {
+                string value = map[key];
+                if (value.IndexOf(Token, StringComparison.Ordinal) < 0) continue;
+                if (string.IsNullOrEmpty(version)) map.Remove(key);
+                else map[key] = value.Replace(Token, version);
+            }
         }
 
         private static string MapFrom(string text, int hook)

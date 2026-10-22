@@ -58,12 +58,16 @@ do agente. Fale com o usuário em português.
 
 ## Regras de versão
 
-- Cliente `MAIOR.MENOR.CORREÇÃO`: qualquer mudança no cliente (hooks, tradução, endereço) → CORREÇÃO (automático);
-  jogo oficial atualizou / conteúdo grande → MENOR (`-Versao`); marco → MAIOR. Nunca reaproveitar número
-  (manifestos são imutáveis; o script recusa). Local = mesma versão + `-local`; `-dev.<data>` = teste pessoal (`-SoLocal`).
-- Launcher: qualquer mudança em `src/Ro3Emu.Launcher` ou `src/Ro3Emu.Patcher` → sobe a versão (automático). O
-  launcher do jogador só se atualiza se a versão for **maior**.
-- Mudança só no servidor (emulador) não precisa de PUBLICAR/ENVIAR.
+- Desde a 1.1.0, **cliente e launcher têm sempre a mesma versão** (pedido do usuário): mudou um dos dois, o PUBLICAR
+  publica os dois juntos com o mesmo número (sobe o último número da maior das duas: 1.1.0 → 1.1.1).
+- `MAIOR.MENOR.CORREÇÃO`: qualquer mudança no cliente ou no launcher → CORREÇÃO (automático); jogo oficial
+  atualizou / conteúdo grande → MENOR (`-Versao 1.2.0`); marco → MAIOR. Nunca reaproveitar número (manifestos são
+  imutáveis; o script recusa). Local = mesma versão + `-local`; `-dev.<data>` = teste pessoal (`-SoLocal`).
+- O launcher do jogador só se atualiza se a versão for **maior**.
+- A versão na tela de login do jogo vem de `ro3emu/version.txt` (o ReleaseBuilder grava em cada versão publicada;
+  `{version}` em `src/Ro3Emu.Loc/en_overrides.tsv`). Não editar números de versão à mão nesse arquivo.
+- Mudança só no servidor (emulador) não precisa de PUBLICAR/ENVIAR, mas o servidor de produção precisa ser atualizado.
+  Recursos que mexem nos dois lados (ex.: slots 7-9 da barra) só funcionam com o servidor novo rodando.
 
 ### OBRIGATÓRIO: sempre que a versão do cliente ou do launcher (patch) mudar, atualizar a versão em todo lugar
 

@@ -11,9 +11,9 @@ namespace Ro3Emu.ClientHooks
             {
                 if (url.IndexOf("ro3global", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
-                    url = url.Replace("https://discord.com/invite/ro3global", "https://discord.com/invite/mnUBY54jAe")
-                             .Replace("https://discord.gg/ro3global", "https://discord.com/invite/mnUBY54jAe")
-                             .Replace("ro3global", "mnUBY54jAe");
+                    url = url.Replace("https://discord.com/invite/ro3global", "https://discord.com/invite/herosagammo")
+                             .Replace("https://discord.gg/ro3global", "https://discord.com/invite/herosagammo")
+                             .Replace("ro3global", "herosagammo");
                 }
             }
             Debug.Log("[Ro3Emu.UrlRedirect] Opening URL: " + url);

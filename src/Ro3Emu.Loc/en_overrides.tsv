@@ -4,11 +4,12 @@ Welcome to RO Ragnarok Online 3!	Welcome to Ragnarok Online 3!
 Goodbye, imitators! Only the real RO can fight!	Adventure awaits across Rune-Midgard!
 # Auction list cell (PUBLIC lot): the shipped sentence overflows the cell on both sides.
 Fixed price purchases will become available after the listing period ends.	Buyout opens when the listing ends.
-# Versão do Client (canto superior esquerdo da tela de login)
-0.0.1_1.1.0	0.0.4
-0.0.1	0.0.4
-0.0.2	0.0.4
-0.0.3	0.0.4
+# Versão do Client (canto superior esquerdo da tela de login). {version} = ro3emu/version.txt, que o PUBLICAR grava
+# em cada versão publicada (Ro3Loc); sem esse arquivo o texto original do cliente fica.
+0.0.1_1.1.0	{version}
+0.0.1	{version}
+0.0.2	{version}
+0.0.3	{version}
 # Nome do Servidor
 RO3Emu	Hero Saga Ro3
 # Aviso tela de login e discord link
@@ -16,5 +17,5 @@ Obrigado por participar do Closed Beta de Ragnarok Online 3.	Closed Beta do Hero
 Obrigado por participar do Closed Beta de Ragnarok Online 3	Closed Beta do Hero Saga RO3
 Closed Beta de Ragnarok Online 3.	Closed Beta do Hero Saga RO3
 Closed Beta de Ragnarok Online 3	Closed Beta do Hero Saga RO3
-https://discord.com/invite/ro3global	https://discord.com/invite/mnUBY54jAe
-ro3global	mnUBY54jAe
+https://discord.com/invite/ro3global	https://discord.com/invite/herosagammo
+ro3global	herosagammo

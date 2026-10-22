@@ -8,7 +8,9 @@
 #         - cliente : src/Ro3Emu.ClientHooks, src/Ro3Emu.Loc, src/Ro3Emu.ClientTools, data/loc, a chave do gate,
 #                     a lista oficial de arquivos do cliente e os enderecos dos servidores;
 #         - launcher: src/Ro3Emu.Launcher e src/Ro3Emu.Patcher.
-#    2. Escolhe as versoes (sobe o ultimo numero: 0.0.4 -> 0.0.5, launcher 1.0.8 -> 1.0.9) se voce nao informar.
+#    2. Escolhe a versao se voce nao informar. Cliente e launcher tem sempre a MESMA versao e sao publicados juntos
+#       quando qualquer um dos dois mudou (sobe o ultimo numero da maior das duas: 1.1.0 -> 1.1.1). O launcher do
+#       jogador so se atualiza para uma versao MAIOR que a dele.
 #    3. Compila o que precisa.
 #    4. Publica o cliente para CADA alvo de patch-server/release-config.json, no mesmo repositorio de patches:
 #         producao -> canal "live", versao X.Y.Z       (cliente patchado para o IP de producao)
@@ -25,7 +27,7 @@
 #    PUBLICAR_ATUALIZACAO.cmd -Cliente             publica o cliente mesmo sem mudanca detectada
 #    PUBLICAR_ATUALIZACAO.cmd -Launcher            publica o launcher mesmo sem mudanca detectada
 #    PUBLICAR_ATUALIZACAO.cmd -Forcar              publica os dois
-#    PUBLICAR_ATUALIZACAO.cmd -Versao 0.1.0        escolhe a versao do cliente
+#    PUBLICAR_ATUALIZACAO.cmd -Versao 1.2.0        escolhe a versao (cliente e launcher)
 #    PUBLICAR_ATUALIZACAO.cmd -VersaoLauncher 1.1.0
 #    PUBLICAR_ATUALIZACAO.cmd -SoLocal             so a versao local (para devs que nao publicam em producao)
 #    PUBLICAR_ATUALIZACAO.cmd -Simular             mostra o que faria, sem compilar nem publicar
@@ -146,6 +148,8 @@ $launcherHash = Get-InputsHash @('src\Ro3Emu.Launcher', 'src\Ro3Emu.Patcher') ''
 
 $doClient = $Cliente -or $Forcar -or $Versao -or ($clientHash -ne $state.clientInputsHash)
 $doLauncher = $Launcher -or $Forcar -or $VersaoLauncher -or ($launcherHash -ne $state.launcherInputsHash)
+# Hero Saga: cliente e launcher tem sempre a MESMA versao (1.1.0, 1.1.1, ...): mudou um, publica os dois juntos.
+if (-not $SoLocal -and ($doClient -or $doLauncher)) { $doClient = $true; $doLauncher = $true }
 if ($SoLocal) { $doClient = $true; $doLauncher = $false }
 
 # --- Versoes ---------------------------------------------------------------------------------------------------------
@@ -160,7 +164,10 @@ if ($doClient) {
     } elseif ($Versao) {
         $clientVersion = $Versao
     } else {
-        $clientVersion = Bump $state.clientVersion
+        # A maior das duas versoes atuais, +1 (o launcher do jogador so se atualiza para uma versao MAIOR).
+        $base = $state.clientVersion
+        foreach ($other in @($state.launcherVersion, $csprojVersion)) { if ($other -and (VersionGreater $other $base)) { $base = $other } }
+        $clientVersion = Bump $base
         # Nunca reaproveita um numero: releases sao imutaveis.
         while ($targets | Where-Object { Test-Path (Join-Path $repoDir "manifests\$clientVersion$($_.versionSuffix).json.zst") }) { $clientVersion = Bump $clientVersion }
     }
@@ -173,6 +180,7 @@ if ($doClient) {
 $launcherVersion = $null
 if ($doLauncher) {
     if ($VersaoLauncher) { $launcherVersion = $VersaoLauncher }
+    elseif ($clientVersion -and -not $SoLocal) { $launcherVersion = $clientVersion }   # mesma versao do cliente
     elseif (VersionGreater $csprojVersion $state.launcherVersion) { $launcherVersion = $csprojVersion }   # ja subiram a mao no .csproj
     else { $launcherVersion = Bump $(if (VersionGreater $state.launcherVersion $csprojVersion) { $state.launcherVersion } else { $csprojVersion }) }
     try { [void][version]$launcherVersion } catch { Fail "Versao do launcher invalida: $launcherVersion (use 1.2.3)" }

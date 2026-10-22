@@ -66,6 +66,12 @@ public static class ReleaseBuilder
         {
             files.Add(new("ro3emu/en_overrides.tsv", enOverrides));
         }
+        // The version the login screen shows ("{version}" in en_overrides.tsv, Ro3Loc): this release's number.
+        string versionFile = Path.Combine(staging, "ro3emu", "version.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(versionFile)!);
+        File.WriteAllText(versionFile, version);
+        files.RemoveAll(f => string.Equals(f.Key, "ro3emu/version.txt", StringComparison.OrdinalIgnoreCase));
+        files.Add(new("ro3emu/version.txt", versionFile));
 
         var progress = new Progress<string>(Console.WriteLine);
         var result = await Publisher.PublishAsync(new PublishOptions
