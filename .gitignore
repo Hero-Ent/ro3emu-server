@@ -97,3 +97,5 @@ Client/Ragnarok3/ro3emu-backup/patching.journal
 
 # Dossie gerado por tools/upstream/status.ps1 (sync com aethai/ro3emu-server)
 .upstream-sync/
+# Temporary solution of tools/AnalyzerBaseline
+/.analyzer-baseline.slnx

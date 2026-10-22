@@ -61,7 +61,8 @@ public sealed class MicroSessions(ILogger<MicroSessions> log)
         }
         if (session != null)
         {
-            try { _ = session.Channel.DisposeAsync(); } catch { }
+            // Fire-and-forget close; a failed dispose only means the socket is already gone.
+            try { _ = session.Channel.DisposeAsync().AsTask().ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted); } catch { }
         }
     }
 
