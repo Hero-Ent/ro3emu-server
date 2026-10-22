@@ -250,7 +250,10 @@ public static class SkillMechanics
         if (e.TryGetProperty("anchor", out var anchor))
             at = anchor.GetString() switch
             {
-                "caster" => Anchor.Caster, "origin" => Anchor.Origin, "target" => Anchor.Target, "point" => Anchor.Point,
+                "caster" => Anchor.Caster,
+                "origin" => Anchor.Origin,
+                "target" => Anchor.Target,
+                "point" => Anchor.Point,
                 var other => throw new InvalidDataException($"{file}: skill {group} anchor '{other}'"),
             };
         float? circle = null; (float, float)? rect = null; (float, float)? fan = null;

@@ -144,8 +144,10 @@ public sealed class SkillGrowthTests : IAsyncLifetime
             await Next(novice, SkillService.SkillDataSync, DBSkillDataIncrement.Parser);
             // Slot 9 of the Hero Saga PC bar is socket 8; socket 9 is past the bar.
             await novice.SendGameAsync(SkillService.SkillLoad, new SkillLoadReq
-                { OpType = SkillLoadOperation.SkillLoadOpLoad, IsManual = true, SocketNum = SkillService.BarSlots - 1,
-                    Info = new SkillData { SkillId = 10000, SkillLevel = 1 } });
+            {
+                OpType = SkillLoadOperation.SkillLoadOpLoad, IsManual = true, SocketNum = SkillService.BarSlots - 1,
+                Info = new SkillData { SkillId = 10000, SkillLevel = 1 }
+            });
             Assert.Equal(0, (await Next(novice, SkillService.SkillLoad, SkillLoadResp.Parser)).Result);
         }
 

@@ -318,7 +318,8 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
             await ReplyAsync(s, val == 0
                 ? "Bônus de EXP desativado (0x). Taxa padrão normal 1x restaurada."
                 : $"Bônus de EXP configurado com sucesso para {val}x (+{val}x a mais de exp).");
-        }),
+        }
+        ),
         ["rate"] = ("[multiplier]", async (s, a) =>
         {
             var expBonus = character.ExpBonus;
@@ -333,7 +334,8 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
                 expBonus.SetMultiplier(val);
                 await ReplyAsync(s, $"Bônus de EXP configurado para {val}x.");
             }
-        }),
+        }
+        ),
         ["points"] = ("<n>", (s, a) => Op(s, OpAddAttrPnt, a)),
         ["job"] = ("<jobId>", (s, a) => Op(s, OpSetJob, a)),
         ["clearbag"] = ("", (s, a) => Op(s, OpClearPack, a)),

@@ -344,177 +344,177 @@ public sealed partial class CombatService
         bool casterCondition = mechanic?.BranchIf is { CasterBuffGroup: int needGroup } && HasBuffGroup(s, needGroup);
         try
         {
-        foreach (var target in targets)
-        {
-            if (!CanApplyMoreEffects()) break; // a previous target's awaited callback may have invalidated the caster
-            if (target.Dead || target.Hp <= 0) continue; // another awaited cast may already own this death source
-            processed.Add(target);
-            if (damage)
+            foreach (var target in targets)
             {
-                var defender = new Fighter(0, 0, target.Template.Flee, 0, target.Template.Level, target.Template.Element)
-                { Def = target.Template.Def, Mdef = target.Template.Mdef, Flee = target.Template.Flee };
-                // A bonus branch against named races/elements (Soul Strike +50% vs Undead, Magnus vs Undead/Demon).
-                int targetBranch = mechanic is { } bm && (bm.BonusRaces.Contains(target.Template.Race) || bm.BonusElements.Contains(target.Template.Element))
-                    ? bm.BonusBranch : branch;
-                // A conditional branch: the target's HP low enough (Sonic Blow) or a caster buff (Steal from Hiding).
-                if (mechanic?.BranchIf is { } cond && (casterCondition
-                        || cond.TargetHpBelowBp > 0 && target.Hp * 10000 <= target.Template.MaxHp * cond.TargetHpBelowBp))
-                    targetBranch = cond.Branch;
-                var (amount, result) = Damage(attacker, defender, row, targetBranch);
-                if (amount > 0)
+                if (!CanApplyMoreEffects()) break; // a previous target's awaited callback may have invalidated the caster
+                if (target.Dead || target.Hp <= 0) continue; // another awaited cast may already own this death source
+                processed.Add(target);
+                if (damage)
                 {
-                    foreach (var modifier in DamageAdjusters) amount = Math.Max(0, modifier(s, target, row, result, amount));
-                    foreach (var extra in ExtraHitDamage) amount += Math.Max(0, extra(s, target, row, amount));
-                    // Double Attack: once per swing, an extra hit lands with the first one, shown as its own normal number.
-                    if (field == null && impact is not { First: false } && DoubleAttackRolls(s, row) is { } second)
+                    var defender = new Fighter(0, 0, target.Template.Flee, 0, target.Template.Level, target.Template.Element)
+                    { Def = target.Template.Def, Mdef = target.Template.Mdef, Flee = target.Template.Flee };
+                    // A bonus branch against named races/elements (Soul Strike +50% vs Undead, Magnus vs Undead/Demon).
+                    int targetBranch = mechanic is { } bm && (bm.BonusRaces.Contains(target.Template.Race) || bm.BonusElements.Contains(target.Template.Element))
+                        ? bm.BonusBranch : branch;
+                    // A conditional branch: the target's HP low enough (Sonic Blow) or a caster buff (Steal from Hiding).
+                    if (mechanic?.BranchIf is { } cond && (casterCondition
+                            || cond.TargetHpBelowBp > 0 && target.Hp * 10000 <= target.Template.MaxHp * cond.TargetHpBelowBp))
+                        targetBranch = cond.Branch;
+                    var (amount, result) = Damage(attacker, defender, row, targetBranch);
+                    if (amount > 0)
                     {
-                        var (extraAmount, extraResult) = Damage(attacker, defender, second);
-                        if (extraAmount > 0) { amount += extraAmount; doubles.Add((target, extraAmount, extraResult)); }
+                        foreach (var modifier in DamageAdjusters) amount = Math.Max(0, modifier(s, target, row, result, amount));
+                        foreach (var extra in ExtraHitDamage) amount += Math.Max(0, extra(s, target, row, amount));
+                        // Double Attack: once per swing, an extra hit lands with the first one, shown as its own normal number.
+                        if (field == null && impact is not { First: false } && DoubleAttackRolls(s, row) is { } second)
+                        {
+                            var (extraAmount, extraResult) = Damage(attacker, defender, second);
+                            if (extraAmount > 0) { amount += extraAmount; doubles.Add((target, extraAmount, extraResult)); }
+                        }
                     }
+                    long beforeHp = target.Hp;
+                    target.Hp = Math.Max(0, beforeHp - amount);
+                    long effective = beforeHp - target.Hp;
+                    if (target.Hp == 0) killed.Add(target); // reserve before awaited damage callbacks
+                    await SettleMonsterHitAsync(s, target, beforeHp, amount);
+                    if (CanApplyMoreEffects())
+                        foreach (var handler in DealtAsync)
+                        {
+                            if (!CanApplyMoreEffects()) break;
+                            _dealingIndependent = action.Independent;
+                            await handler(s, target, row, amount);
+                        }
+                    _dealingIndependent = false;
+                    // The hit is already committed; an unchanged (even cancelled) lease
+                    // still owns its damage callback, while a replacement lease does not.
+                    if (effective > 0 && CurrentKillRecipient())
+                        foreach (var handler in MonsterDamageApplied)
+                        {
+                            if (!CurrentKillRecipient()) break;
+                            try { await handler(s, target, effective); }
+                            catch (Exception ex) { log.LogError(ex, "Monster damage callback failed for {Uid}", target.Uid); }
+                        }
+                    long extraShown = doubles.Where(d => d.Target == target).Sum(d => d.Amount);
+                    hit.Dsts.Add(new DamageInfo { DstID = target.Uid, Damage = amount - extraShown, HitResult = result, DstElement = target.Template.Element, IsDead = target.Hp == 0 && extraShown == 0 });
                 }
-                long beforeHp = target.Hp;
-                target.Hp = Math.Max(0, beforeHp - amount);
-                long effective = beforeHp - target.Hp;
-                if (target.Hp == 0) killed.Add(target); // reserve before awaited damage callbacks
-                await SettleMonsterHitAsync(s, target, beforeHp, amount);
                 if (CanApplyMoreEffects())
-                    foreach (var handler in DealtAsync)
-                    {
-                        if (!CanApplyMoreEffects()) break;
-                        _dealingIndependent = action.Independent;
-                        await handler(s, target, row, amount);
-                    }
-                _dealingIndependent = false;
-                // The hit is already committed; an unchanged (even cancelled) lease
-                // still owns its damage callback, while a replacement lease does not.
-                if (effective > 0 && CurrentKillRecipient())
-                    foreach (var handler in MonsterDamageApplied)
-                    {
-                        if (!CurrentKillRecipient()) break;
-                        try { await handler(s, target, effective); }
-                        catch (Exception ex) { log.LogError(ex, "Monster damage callback failed for {Uid}", target.Uid); }
-                    }
-                long extraShown = doubles.Where(d => d.Target == target).Sum(d => d.Amount);
-                hit.Dsts.Add(new DamageInfo { DstID = target.Uid, Damage = amount - extraShown, HitResult = result, DstElement = target.Template.Element, IsDead = target.Hp == 0 && extraShown == 0 });
+                    foreach (var tuple in Tuples(row, "_kBuff2"))
+                        if (CanApplyMoreEffects() && RollHostileBuff(tuple, s, null, null, target, out int id, out int duration))
+                            await buffs.ShowOnUnitAsync(target, id, duration, castingRole.Id);
+                // Statuses a description names that the row's _kBuff2 lacks (Pile Bunker's 0.5 s Stun).
+                if (mechanic != null && CanApplyMoreEffects())
+                    foreach (var (buff, chance, ms) in mechanic.TargetBuffs)
+                        if (CanApplyMoreEffects() && Rolls.Proc(10000) < chance) await buffs.ShowOnUnitAsync(target, buff, ms, castingRole.Id);
+                if (CanApplyMoreEffects() && script is ("Provoke" or "Taunt")) monsters.Engage(target, s);
+                if (CanApplyMoreEffects() && !target.Dead && target.Hp > 0) await DisplaceTargetAsync(s, action, target, mechanic?.Knockback ?? field?.Knockback ?? 0, mechanic?.Pull ?? 0, center, field?.Pos);
             }
-            if (CanApplyMoreEffects())
-                foreach (var tuple in Tuples(row, "_kBuff2"))
-                    if (CanApplyMoreEffects() && RollHostileBuff(tuple, s, null, null, target, out int id, out int duration))
-                        await buffs.ShowOnUnitAsync(target, id, duration, castingRole.Id);
-            // Statuses a description names that the row's _kBuff2 lacks (Pile Bunker's 0.5 s Stun).
-            if (mechanic != null && CanApplyMoreEffects())
-                foreach (var (buff, chance, ms) in mechanic.TargetBuffs)
-                    if (CanApplyMoreEffects() && Rolls.Proc(10000) < chance) await buffs.ShowOnUnitAsync(target, buff, ms, castingRole.Id);
-            if (CanApplyMoreEffects() && script is ("Provoke" or "Taunt")) monsters.Engage(target, s);
-            if (CanApplyMoreEffects() && !target.Dead && target.Hp > 0) await DisplaceTargetAsync(s, action, target, mechanic?.Knockback ?? field?.Knockback ?? 0, mechanic?.Pull ?? 0, center, field?.Pos);
-        }
-        // Buff1 is self for hostile selectors, but actual friend recipients for ally selectors (Detoxify, Blessing).
-        foreach (var recipient in friendly ? allies : new List<GameSession> { s })
-        {
-            if (!CanApplyMoreEffects()) break;
-            if (field == null && impact?.SelfEffects != false)
+            // Buff1 is self for hostile selectors, but actual friend recipients for ally selectors (Detoxify, Blessing).
+            foreach (var recipient in friendly ? allies : new List<GameSession> { s })
             {
-                foreach (var tuple in Tuples(row, "_kBuff1"))
+                if (!CanApplyMoreEffects()) break;
+                if (field == null && impact?.SelfEffects != false)
                 {
-                    if (!CanApplyMoreEffects() || !RollBuff(tuple, out int id, out int duration)) continue;
-                    if (mechanic?.AtStacks is { } gate && recipient == s && gate.Grants.Contains(id)) continue; // held for the counter
-                    await buffs.AddAsync(recipient, id, duration, castingRole.Id);
-                }
-                if (mechanic?.AtStacks is { } stack && recipient == s && CanApplyMoreEffects()
-                    && s.Buffs.FirstOrDefault(b => b.ConfigId == stack.Counter) is { } counter && counter.PileCount >= stack.At)
-                {
-                    await buffs.RemoveAsync(s, counter);
                     foreach (var tuple in Tuples(row, "_kBuff1"))
-                        if (tuple.GetArrayLength() >= 3 && (int)(GameData.Number(tuple[0]) ?? 0) is var grant && stack.Grants.Contains(grant))
-                            await buffs.SetPileCountAsync(s, grant, (int)(GameData.Number(tuple[2]) ?? 0), castingRole.Id, stack.Piles);
+                    {
+                        if (!CanApplyMoreEffects() || !RollBuff(tuple, out int id, out int duration)) continue;
+                        if (mechanic?.AtStacks is { } gate && recipient == s && gate.Grants.Contains(id)) continue; // held for the counter
+                        await buffs.AddAsync(recipient, id, duration, castingRole.Id);
+                    }
+                    if (mechanic?.AtStacks is { } stack && recipient == s && CanApplyMoreEffects()
+                        && s.Buffs.FirstOrDefault(b => b.ConfigId == stack.Counter) is { } counter && counter.PileCount >= stack.At)
+                    {
+                        await buffs.RemoveAsync(s, counter);
+                        foreach (var tuple in Tuples(row, "_kBuff1"))
+                            if (tuple.GetArrayLength() >= 3 && (int)(GameData.Number(tuple[0]) ?? 0) is var grant && stack.Grants.Contains(grant))
+                                await buffs.SetPileCountAsync(s, grant, (int)(GameData.Number(tuple[2]) ?? 0), castingRole.Id, stack.Piles);
+                    }
+                }
+                if (friendly && damage)
+                {
+                    double multiplier = Numbers(row, "_kDamageParam1").FirstOrDefault() * StatScale(row, id => stats[id], s.Progress!.Level), flat = Numbers(row, "_kDamageParam2").FirstOrDefault();
+                    // Heal's friendly branch is P1[0]/P2[0]; its enemy branch is [1] (description + select race mask).
+                    long amount = (long)Math.Max(0, Math.Round(stats[104] * multiplier / 10000 + flat));
+                    foreach (var modifier in ExtraHeal) amount = modifier(s, amount);
+                    var before = character.Stats(recipient);
+                    long actual = Math.Min(amount, Math.Max(0, before[101] - before[2000]));
+                    await character.SetHpSpAsync(recipient, before[2000] + amount, null);
+                    hit.Dsts.Add(new DamageInfo { DstID = recipient.Role!.Id, Damage = actual, DamageType = DamageType.Heal, DstElement = 1 });
+                    foreach (var handler in Healed) handler(s, actual);
+                    foreach (var handler in HealedAsync) await handler(s, actual);
+                }
+                // Healing Skills (14014) and Cleanse (11406) both use the script "Cleanse": "Removes [Silence] and [Blind]".
+                // A mechanic "cleanse" names the BuffConfig _iBuffID groups itself (Antidote: Poisoned 9030).
+                if (mechanic?.Cleanse is { Count: > 0 } || script is "Detoxify" or "HealingSkills" or "Cleanse")
+                {
+                    // (inferred) cleanse exact described groups rather than removing every beneficial/hostile status.
+                    IReadOnlyList<int> groups = mechanic?.Cleanse is { Count: > 0 } named ? named : script == "Detoxify" ? [9030] : [9023, 9025];
+                    foreach (var buff in recipient.Buffs.Where(b => data.Row("BuffConfig", b.ConfigId) is { } br && groups.Contains((int)GameData.Int(br, "_iBuffID"))).ToArray())
+                        await buffs.RemoveAsync(recipient, buff);
                 }
             }
-            if (friendly && damage)
+            if (hit.Dsts.Count > 0)
             {
-                double multiplier = Numbers(row, "_kDamageParam1").FirstOrDefault() * StatScale(row, id => stats[id], s.Progress!.Level), flat = Numbers(row, "_kDamageParam2").FirstOrDefault();
-                // Heal's friendly branch is P1[0]/P2[0]; its enemy branch is [1] (description + select race mask).
-                long amount = (long)Math.Max(0, Math.Round(stats[104] * multiplier / 10000 + flat));
-                foreach (var modifier in ExtraHeal) amount = modifier(s, amount);
-                var before = character.Stats(recipient);
-                long actual = Math.Min(amount, Math.Max(0, before[101] - before[2000]));
-                await character.SetHpSpAsync(recipient, before[2000] + amount, null);
-                hit.Dsts.Add(new DamageInfo { DstID = recipient.Role!.Id, Damage = actual, DamageType = DamageType.Heal, DstElement = 1 });
-                foreach (var handler in Healed) handler(s, actual);
-                foreach (var handler in HealedAsync) await handler(s, actual);
-            }
-            // Healing Skills (14014) and Cleanse (11406) both use the script "Cleanse": "Removes [Silence] and [Blind]".
-            // A mechanic "cleanse" names the BuffConfig _iBuffID groups itself (Antidote: Poisoned 9030).
-            if (mechanic?.Cleanse is { Count: > 0 } || script is "Detoxify" or "HealingSkills" or "Cleanse")
-            {
-                // (inferred) cleanse exact described groups rather than removing every beneficial/hostile status.
-                IReadOnlyList<int> groups = mechanic?.Cleanse is { Count: > 0 } named ? named : script == "Detoxify" ? [9030] : [9023, 9025];
-                foreach (var buff in recipient.Buffs.Where(b => data.Row("BuffConfig", b.ConfigId) is { } br && groups.Contains((int)GameData.Int(br, "_iBuffID"))).ToArray())
-                    await buffs.RemoveAsync(recipient, buff);
-            }
-        }
-        if (hit.Dsts.Count > 0)
-        {
-            foreach (var result in hit.Dsts)
-            {
-                if (!CurrentCaster()) break;
-                await RecordDamageStatisticAsync(s, new DamageStatistics
+                foreach (var result in hit.Dsts)
                 {
-                    DamageSourceId = hit.SrcID, DamageTargetId = result.DstID, DamageValue = result.Damage,
-                    DamageBeShield = result.SheildDamage, DamageType = result.DamageType, HitResult = result.HitResult, SkillId = hit.SkillId,
-                });
-            }
-            if (CurrentCaster() && hit.Dsts.Any(d => d.HitResult != DamageHitResult.Miss)) await buffs.RecoverEnergyOnHitAsync(s, row);
-            var sourceViewers = CurrentCaster() ? world.Viewers(s).Append(s) : Enumerable.Empty<GameSession>();
-            foreach (var viewer in processed.SelectMany(t => t.Viewers).Concat(sourceViewers).Distinct()) await viewer.SendGameAsync(SkillHit, hit);
-            if (doubles.Count > 0)
-            {
-                // The Double Attack hit: the same swing's message again, its own number in the basic attack's font.
-                var twice = hit.Clone();
-                twice.Dsts.Clear();
-                twice.Split = 1;
-                foreach (var (target, extraAmount, extraResult) in doubles)
-                    twice.Dsts.Add(new DamageInfo { DstID = target.Uid, Damage = extraAmount, HitResult = extraResult, DstElement = target.Template.Element, IsDead = target.Hp == 0 });
-                foreach (var viewer in processed.SelectMany(t => t.Viewers).Concat(sourceViewers).Distinct()) await viewer.SendGameAsync(SkillHit, twice);
-            }
-            if (CurrentCaster() && field?.Trap == true)
-                await ToPlayerAndViewersAsync(s, TrapDamage, new TrapDamageNtf { SkillConfigId = action.Request.SkillId, DamageValue = hit.Dsts.Sum(d => d.Damage), Pos = center.Clone() });
-        }
-        foreach (var target in processed)
-        {
-            if (!damage) continue;
-            if (target.Hp == 0 && !target.DeathDurable) continue; // another cast is still committing that death
-            await world.ToUnitViewersAsync(target, AoiAttrChange, MonsterService.Hp(target));
-            await FightingAsync(target);
-            if (target.Hp > 0 && CurrentCaster()) monsters.Engage(target, s);
-        }
-        if (processed.Count > 0 && CurrentCaster()) await FightingAsync(s);
-        if (casterCondition && mechanic?.BranchIf is { Consume: true, CasterBuffGroup: int spent } && processed.Count > 0 && CurrentCaster())
-            foreach (var buff in s.Buffs.Where(b => data.Row("BuffConfig", b.ConfigId) is { } br && GameData.Int(br, "_iBuffID") == spent).ToArray())
-                await buffs.RemoveAsync(s, buff);
-        if (field != null) field.LastHits = damage ? processed.Count : 0;
-        // "You then lose N% of your Max HP. This HP loss cannot be fatal." (Energy Release), once per cast.
-        if (mechanic is { SelfHpLossPercent: > 0 } && impact is not { First: false } && CurrentCaster())
-        {
-            var self = character.Stats(s);
-            long loss = self[101] * mechanic.SelfHpLossPercent / 100;
-            await character.SetHpSpAsync(s, Math.Max(1, self[2000] - loss), null);
-        }
-        foreach (var target in killed.Where(target => target.Hp == 0 && target.DeathDurable))
-        {
-            log.LogInformation("{Name} killed {Monster} ({Npc})", castingRole.Name, target.Uid, target.Template.NpcId);
-            await monsters.KillAsync(target);
-            foreach (var other in sessions.All().Where(o => o.Attack?.Target == target))
-            {
-                other.Attack = null;
-                await other.SendGameAsync(SkillEnd, new SkillEndNotify
+                    if (!CurrentCaster()) break;
+                    await RecordDamageStatisticAsync(s, new DamageStatistics
+                    {
+                        DamageSourceId = hit.SrcID, DamageTargetId = result.DstID, DamageValue = result.Damage,
+                        DamageBeShield = result.SheildDamage, DamageType = result.DamageType, HitResult = result.HitResult, SkillId = hit.SkillId,
+                    });
+                }
+                if (CurrentCaster() && hit.Dsts.Any(d => d.HitResult != DamageHitResult.Miss)) await buffs.RecoverEnergyOnHitAsync(s, row);
+                var sourceViewers = CurrentCaster() ? world.Viewers(s).Append(s) : Enumerable.Empty<GameSession>();
+                foreach (var viewer in processed.SelectMany(t => t.Viewers).Concat(sourceViewers).Distinct()) await viewer.SendGameAsync(SkillHit, hit);
+                if (doubles.Count > 0)
                 {
-                    SrcID = other.Role!.Id, SessionId = action.Id, Type = SkillEndNotify.Types.SkillEndType.Interrupted,
-                    InterruptedInfo = new SkillInterruptedInfo { Type = SkillInterruptedInfo.Types.SkillInterruptType.LockerInvalid },
-                });
+                    // The Double Attack hit: the same swing's message again, its own number in the basic attack's font.
+                    var twice = hit.Clone();
+                    twice.Dsts.Clear();
+                    twice.Split = 1;
+                    foreach (var (target, extraAmount, extraResult) in doubles)
+                        twice.Dsts.Add(new DamageInfo { DstID = target.Uid, Damage = extraAmount, HitResult = extraResult, DstElement = target.Template.Element, IsDead = target.Hp == 0 });
+                    foreach (var viewer in processed.SelectMany(t => t.Viewers).Concat(sourceViewers).Distinct()) await viewer.SendGameAsync(SkillHit, twice);
+                }
+                if (CurrentCaster() && field?.Trap == true)
+                    await ToPlayerAndViewersAsync(s, TrapDamage, new TrapDamageNtf { SkillConfigId = action.Request.SkillId, DamageValue = hit.Dsts.Sum(d => d.Damage), Pos = center.Clone() });
             }
-            await PublishDurableKillAsync(s, target, CurrentKillRecipient);
-            await FinalizeLethalPublicationAsync(target);
-        }
+            foreach (var target in processed)
+            {
+                if (!damage) continue;
+                if (target.Hp == 0 && !target.DeathDurable) continue; // another cast is still committing that death
+                await world.ToUnitViewersAsync(target, AoiAttrChange, MonsterService.Hp(target));
+                await FightingAsync(target);
+                if (target.Hp > 0 && CurrentCaster()) monsters.Engage(target, s);
+            }
+            if (processed.Count > 0 && CurrentCaster()) await FightingAsync(s);
+            if (casterCondition && mechanic?.BranchIf is { Consume: true, CasterBuffGroup: int spent } && processed.Count > 0 && CurrentCaster())
+                foreach (var buff in s.Buffs.Where(b => data.Row("BuffConfig", b.ConfigId) is { } br && GameData.Int(br, "_iBuffID") == spent).ToArray())
+                    await buffs.RemoveAsync(s, buff);
+            if (field != null) field.LastHits = damage ? processed.Count : 0;
+            // "You then lose N% of your Max HP. This HP loss cannot be fatal." (Energy Release), once per cast.
+            if (mechanic is { SelfHpLossPercent: > 0 } && impact is not { First: false } && CurrentCaster())
+            {
+                var self = character.Stats(s);
+                long loss = self[101] * mechanic.SelfHpLossPercent / 100;
+                await character.SetHpSpAsync(s, Math.Max(1, self[2000] - loss), null);
+            }
+            foreach (var target in killed.Where(target => target.Hp == 0 && target.DeathDurable))
+            {
+                log.LogInformation("{Name} killed {Monster} ({Npc})", castingRole.Name, target.Uid, target.Template.NpcId);
+                await monsters.KillAsync(target);
+                foreach (var other in sessions.All().Where(o => o.Attack?.Target == target))
+                {
+                    other.Attack = null;
+                    await other.SendGameAsync(SkillEnd, new SkillEndNotify
+                    {
+                        SrcID = other.Role!.Id, SessionId = action.Id, Type = SkillEndNotify.Types.SkillEndType.Interrupted,
+                        InterruptedInfo = new SkillInterruptedInfo { Type = SkillInterruptedInfo.Types.SkillInterruptType.LockerInvalid },
+                    });
+                }
+                await PublishDurableKillAsync(s, target, CurrentKillRecipient);
+                await FinalizeLethalPublicationAsync(target);
+            }
         }
         finally
         {

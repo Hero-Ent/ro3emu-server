@@ -133,7 +133,10 @@ public sealed partial class CombatService
     private async Task CastTriggeredAsync(GameSession caster, int rowId, MonsterUnit? target, Vec3 point, bool extra = false)
     {
         if (caster.Role == null || data.Row("SkillConfig", rowId) is not { } row) return;
-        await StartCastAsync(caster, row, new CastSkillReq { SkillId = rowId, TargetId = target?.Uid ?? 0, TargetPos = point.Clone(), Face = caster.Face,
-            IsExtraSkill = extra }, ++_sessionIds, independent: true);
+        await StartCastAsync(caster, row, new CastSkillReq
+        {
+            SkillId = rowId, TargetId = target?.Uid ?? 0, TargetPos = point.Clone(), Face = caster.Face,
+            IsExtraSkill = extra
+        }, ++_sessionIds, independent: true);
     }
 }

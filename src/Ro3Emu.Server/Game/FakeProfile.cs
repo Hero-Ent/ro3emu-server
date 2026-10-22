@@ -52,13 +52,26 @@ public sealed record FakeProfile(int Index, int Sex, int Hair, int Job, int Base
     /// <summary>Transcendent (rank 4) job of a second job's line; Sage, Bard, Dancer, Monk and Rogue have none.</summary>
     private static int? HighJob(int second) => second switch
     {
-        1200 => 1300, 1210 => 1310, 2200 => 2300, 3200 => 3300, 4200 => 4300, 5200 => 5300, 6200 => 6300, _ => null,
+        1200 => 1300,
+        1210 => 1310,
+        2200 => 2300,
+        3200 => 3300,
+        4200 => 4300,
+        5200 => 5300,
+        6200 => 6300,
+        _ => null,
     };
 
     /// <summary>Third job (rank 5) of a transcendent one: Rune Knight, Royal Guard, Warlock, Ranger, Archbishop...</summary>
     private static int ThirdJob(int high) => high switch
     {
-        1300 => 1400, 1310 => 1410, 2300 => 2400, 3300 => 3400, 4300 => 4400, 5300 => 5400, _ => 6400,
+        1300 => 1400,
+        1310 => 1410,
+        2300 => 2400,
+        3300 => 3400,
+        4300 => 4400,
+        5300 => 5400,
+        _ => 6400,
     };
 
     /// <summary>Field maps by the level they suit (verified spawn tables; see docs/guide/fake-players.md).</summary>
