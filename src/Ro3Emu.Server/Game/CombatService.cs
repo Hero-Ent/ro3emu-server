@@ -3,6 +3,7 @@ using Google.Protobuf;
 using Romsg;
 using Ro3Emu.Server.Accounts;
 using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 using Ro3Emu.Server.Maps;
 
 namespace Ro3Emu.Server.Game;
@@ -21,7 +22,7 @@ public sealed class AttackLoop
 /// Combat: lock (31029), casts (31102) with the server-driven auto-attack loop, swings (31100) and
 /// hits at the template's hit moment (31101), HP through 31048 / 31008, the fight stance bit, monster attacks on players,
 /// player death (31049 state) and revive (31013), regeneration. The damage formula is reconstructed from the operand
-/// names and constants the client carries (§3.6): everything there is marked inferred.
+/// names and constants the client carries (Â§3.6): everything there is marked inferred.
 /// </summary>
 public sealed partial class CombatService : IGameTicker
 {
@@ -238,6 +239,14 @@ public sealed partial class CombatService : IGameTicker
 
     // Totem passives need the row and final target before the existing post-hit event loses that context.
     public List<Func<GameSession, JsonElement, Task>> CastLanded { get; } = new();
+    /// <summary>After a player's own cast applied its effects, with the monsters it processed and its published hit (each
+    /// target's result, the allies it healed) (TalentProcs).</summary>
+    internal List<Func<GameSession, ActiveSkillCast, IReadOnlyList<MonsterUnit>, SkillHitInfo, Task>> CastResolved { get; } = [];
+    /// <summary>The row a cast deals its damage with once its monster targets are chosen ("For every enemy hit by [Hammer
+    /// Fall], ... increases"), by their count (TalentProcs).</summary>
+    internal Func<GameSession, JsonElement, int, JsonElement>? TargetCountRow { get; set; }
+    /// <summary>May the caster's skill put this _kBuff1 buff on the recipient (TalentProcs: talent-gated buffs).</summary>
+    internal Func<GameSession, GameSession, int, bool>? SkillBuffAllowed { get; set; }
     public List<Func<GameSession, MonsterUnit, JsonElement, DamageHitResult, long, long>> DamageAdjusters { get; } = new();
     public List<Func<GameSession, MonsterUnit, JsonElement, long, long>> ExtraHitDamage { get; } = new();
     public List<Func<GameSession, MonsterUnit, JsonElement, long, Task>> DealtAsync { get; } = new();
@@ -254,7 +263,8 @@ public sealed partial class CombatService : IGameTicker
     public Func<GameSession, GameSession, JsonElement, Task<bool>>? ReviveItemSkill { get; set; }
 
     public CombatService(World world, MonsterService monsters, CharacterService character, SkillService skills, SceneService scene, BuffService buffs,
-        WorldData worldData, SessionRegistry sessions, GameData data, GameLoop loop, ILogger<CombatService> log, PetService pets)
+        WorldData worldData, SessionRegistry sessions, GameData data, GameLoop loop, ILogger<CombatService> log, PetService pets,
+        SeasonTalentService talents)
     {
         this._world = world;
         this._monsters = monsters;
@@ -279,6 +289,7 @@ public sealed partial class CombatService : IGameTicker
         skills.Learned.Add(RefreshSkillParametersAsync);
         skills.Learned.Add(character.RefreshStatsAsync);
         buffs.Changed.Add(RefreshSkillParametersAsync);
+        talents.EffectsChanged.Add(RefreshSkillParametersAsync);
         scene.Loaded.Add(RefreshSkillParametersAsync);
         scene.Leaving.Add(ClearSceneSkillProtocolAsync);
         skills.QueueEligibility = CanQueueSkill;
@@ -373,7 +384,7 @@ public sealed partial class CombatService : IGameTicker
     /// hit effect every m_fDisplayInterval (LC_DamageHelper.ProcessJumpWorldTask / ProcessDamageWord: dmg // split,
     /// remainder on the first words); SkillFixTimeBulletNotify.split emits that many projectiles, one every
     /// m_fBulletHatchInterval (LC_BulletEmit_Mgr.Update, m_iSplitIdx up to m_iSplit). The damage itself stays the row's
-    /// total: the bolt descriptions say "共计" (a total of) MATK * ${2}% + ${3}. Unset or 0 = one segment.
+    /// total: the bolt descriptions say "å…±è®¡" (a total of) MATK * ${2}% + ${3}. Unset or 0 = one segment.
     /// </summary>
     internal static int HitSplit(JsonElement row, int branch = 0)
     {
@@ -682,11 +693,11 @@ public sealed partial class CombatService : IGameTicker
     /// <summary>
     /// The skill ratio multiplier a player's attributes add through _kDamageParamExtra (inferred from the descriptions):
     /// <list type="bullet">
-    /// <item>[bp, 115, 10000(, cap)]: "(«1»+ASPD*«0.5»%)" (Rolling Cutter [50, 115, 10000, 500]) / "For every «1»% ASPD,
-    /// this DMG increases by «0.3»%, up to @{1}% ASPD" (Blood Cross, cap 500 = the "Character ASPD (Max: 500%)"
+    /// <item>[bp, 115, 10000(, cap)]: "(Â«1Â»+ASPD*Â«0.5Â»%)" (Rolling Cutter [50, 115, 10000, 500]) / "For every Â«1Â»% ASPD,
+    /// this DMG increases by Â«0.3Â»%, up to @{1}% ASPD" (Blood Cross, cap 500 = the "Character ASPD (Max: 500%)"
     /// limit). 115 is the character ASPD in percent (100 = base).</item>
-    /// <item>[1, bp, attr, ...] with attr 0-6: "Each Base Level increases ... by «0.1»%" (attr 0, Heal [1, 10, 0, 1]) and
-    /// "Luck/Vitality/DEX Resonance «0.1»%" (attr 6 LUK, 3 VIT, 5 DEX: [1, 10, 6, 1, 100]); read as bp per point of the
+    /// <item>[1, bp, attr, ...] with attr 0-6: "Each Base Level increases ... by Â«0.1Â»%" (attr 0, Heal [1, 10, 0, 1]) and
+    /// "Luck/Vitality/DEX Resonance Â«0.1Â»%" (attr 6 LUK, 3 VIT, 5 DEX: [1, 10, 6, 1, 100]); read as bp per point of the
     /// base level or attribute (the meaning of the trailing values is unknown and ignored).</item>
     /// </list>
     /// </summary>
@@ -739,9 +750,9 @@ public sealed partial class CombatService : IGameTicker
         double p1 = ratios.Length > branch ? ratios[branch] : 10000, p2 = flats.Length > branch ? flats[branch] : 0;
         if (a.Stats is { } sheet) p1 *= StatScale(skill, id => sheet[id], a.Level);
         double dmg = (magic || a.Stats != null && SkillMechanics.For(skill) is { AtkFromMatk: true } ? a.Matk : a.Atk) * p1 / 10000 + p2;
-        // "Physical ATK*«50»%+Magic ATK*«50»%+«60»" (Soul Destroyer): the mechanic adds the MATK share to the same hit.
+        // "Physical ATK*Â«50Â»%+Magic ATK*Â«50Â»%+Â«60Â»" (Soul Destroyer): the mechanic adds the MATK share to the same hit.
         if (a.Stats != null && SkillMechanics.For(skill) is { MatkPercent: > 0 } mixed) dmg += a.Matk * mixed.MatkPercent / 100.0;
-        // Defense: def / (def + ParDef 20 × the defender's level), the shape of the client's damage-reduction tooltip.
+        // Defense: def / (def + ParDef 20 Ã— the defender's level), the shape of the client's damage-reduction tooltip.
         double def = magic ? b.Mdef : b.Def;
         dmg *= 1 - def / (def + 20.0 * Math.Max(1, b.Level));
         // Element: EleConfig row = defender element, column = attacker element (/10000), clamped [0.1, 10].
@@ -1039,7 +1050,7 @@ public sealed partial class CombatService : IGameTicker
         }
     }
 
-    /// <summary>HP/SP regeneration every 5 s out of combat: FinalReHp = ReHP + MaxHP × per_rehp (117/118, inferred).</summary>
+    /// <summary>HP/SP regeneration every 5 s out of combat: FinalReHp = ReHP + MaxHP Ã— per_rehp (117/118, inferred).</summary>
     private async Task RegenAsync(GameSession s)
     {
         if (s.Role == null || s.Progress == null || s.Attachment?.Cancelled == true) return;

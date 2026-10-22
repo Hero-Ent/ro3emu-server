@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Romsg;
 using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 using Ro3Emu.Server.Maps;
 
 namespace Ro3Emu.Server.Game;
@@ -70,7 +71,7 @@ public sealed partial class CombatService
             if (Script(row) == "Resurrection")
             {
                 var target = FindPlayer(s, action.Request.TargetId, dead: true);
-                if (target == null || target.SceneLoading || _buffs.HasForbidden(target, 16)
+                if (target == null || target.SceneLoading || _buffs.HasForbidden(target, ForbiddenState.Revive)
                     || s.WorldState.ResurrectionCastId != action.Id
                     || Distance(s.Position, target.Position) > Range(row) + 1.5f) return;
                 s.WorldState.ResurrectionCastId = 0;
@@ -82,7 +83,17 @@ public sealed partial class CombatService
                 else if (ReviveOffer != null) await ReviveOffer(s, target, row);
                 return;
             }
-            if (await CreateSkillObjectAsync(s, action)) return;
+            if (await CreateSkillObjectAsync(s, action))
+            {
+                // A field resolves its effects later; "After using [Meteor Storm] ..." talent procs centre on its target point.
+                if (!action.Request.IsExtraSkill)
+                    foreach (var handler in CastResolved)
+                    {
+                        if (!CurrentCastMap(s, action)) break;
+                        await handler(s, action, [], new SkillHitInfo());
+                    }
+                return;
+            }
             if (!CurrentCastMap(s, action)) return;
             // SkillConfig._bMovement is enum_SkillLockMoveType (may the caster walk while casting), not a displacement.
             await MoveCasterAsync(s, action);
@@ -209,7 +220,8 @@ public sealed partial class CombatService
             .OrderBy(m => Distance(center, m.Pos)).ThenBy(m => m.Uid).Take(max).ToList();
     }
 
-    private async Task ApplyEffectsAsync(GameSession s, ActiveSkillCast action, Vec3 center, SkillObject? field = null, Impact? impact = null)
+    private async Task ApplyEffectsAsync(GameSession s, ActiveSkillCast action, Vec3 center, SkillObject? field = null, Impact? impact = null,
+        IReadOnlyList<MonsterUnit>? chosenTargets = null, IReadOnlyList<GameSession>? chosenAllies = null)
     {
         if (s.Dead || s.Role?.Id != action.OwnerId || s.WorldScene != action.WorldScene || s.SceneLoading
             || s.SceneGeneration != action.SceneGeneration || field?.Removing == true
@@ -234,7 +246,8 @@ public sealed partial class CombatService
         int split = impact?.Split ?? HitSplit(row, branch);
         var targets = impact?.Forced is { } forced
             ? (forced.Hp > 0 && !forced.Dead && CanHitMonster(s, forced) ? [forced] : new List<MonsterUnit>())
-            : SelectEnemies(s, action, center, field?.Trap == true ? field.Radius : null, field: field != null, maxOverride: field?.MaxTargets);
+            : chosenTargets?.Where(m => m.Hp > 0 && CanHitMonster(s, m)).ToList()
+                ?? SelectEnemies(s, action, center, field?.Trap == true ? field.Radius : null, field: field != null, maxOverride: field?.MaxTargets);
         var playerTargets = impact?.Forced != null ? [] : EffectPlayerTargets(s, action, center);
         var alreadySlowed = GuardianPreviouslySlowed(row, targets, playerTargets);
         if (playerTargets.Length > 0)
@@ -324,11 +337,13 @@ public sealed partial class CombatService
                 if (!CanApplyMoreEffects()) return;
             }
         }
-        bool friendly = Relation(row, true, true) || Relation(row, true);
+        // Allies a caller chose (a talent heal's proc row has no selector template) make the cast friendly.
+        bool friendly = chosenAllies != null || Relation(row, true, true) || Relation(row, true);
         var allies = new List<GameSession>();
         if (friendly)
         {
-            if (GameData.Int(row, "_iRelease") == 1)
+            if (chosenAllies != null) allies.AddRange(chosenAllies.Where(p => !p.Dead && p.WorldScene == s.WorldScene));
+            else if (GameData.Int(row, "_iRelease") == 1)
             {
                 var ally = action.Request.TargetId == s.Role.Id ? s : FindPlayer(s, action.Request.TargetId);
                 if (ally != null && Relation(row, true, ally == s)) allies.Add(ally);
@@ -355,8 +370,10 @@ public sealed partial class CombatService
         var killed = new List<MonsterUnit>();
         var doubles = new List<(MonsterUnit Target, long Amount, DamageHitResult Result)>();
         var processed = new List<MonsterUnit>();
+        if (TargetCountRow != null && targets.Count > 0) row = TargetCountRow(s, row, targets.Count);
         bool damage = impact?.NoDamage != true && (Numbers(row, "_kDamageParam1").Any(v => v > 0) || Numbers(row, "_kDamageParam2").Any(v => v > 0));
-        var mechanic = field == null ? SkillMechanics.For(row) : null;
+        // The mechanic is the cast's own skill row, before any talent's target-count row replaces it.
+        var mechanic = field == null ? SkillMechanics.For(action.Row) : null;
         bool casterCondition = mechanic?.BranchIf is { CasterBuffGroup: int needGroup } && HasBuffGroup(s, needGroup);
         try
         {
@@ -374,7 +391,8 @@ public sealed partial class CombatService
                     if (mechanic?.BranchIf is { } cond && (casterCondition
                             || cond.TargetHpBelowBp > 0 && target.Hp * 10000 <= target.Template.MaxHp * cond.TargetHpBelowBp))
                         targetBranch = cond.Branch;
-                    var (amount, result) = MonsterHitDamage(s, attacker, target, row, script, targetBranch);
+                    var (amount, result) = MonsterHitDamage(s, attacker, target, row, script,
+                        targetBranch != branch || impact?.Branch != null ? targetBranch : null);
                     // Hero Saga's Double Attack, disabled: the upstream passive rule replaces it (decision D1, 2026-10-22).
                     if (LegacyDoubleAttack && amount > 0 && field == null && impact is not { First: false } && DoubleAttackRolls(s, row) is { } second)
                     {
@@ -431,6 +449,7 @@ public sealed partial class CombatService
                     {
                         if (!CanApplyMoreEffects() || !RollBuff(tuple, out int id, out int duration)) continue;
                         if (mechanic?.AtStacks is { } gate && recipient == s && gate.Grants.Contains(id)) continue; // held for the counter
+                        if (SkillBuffAllowed?.Invoke(s, recipient, id) == false) continue; // a talent-named buff without its talent
                         await _buffs.AddAsync(recipient, id, duration, castingRole.Id);
                     }
                     if (mechanic?.AtStacks is { } stack && recipient == s && CanApplyMoreEffects()
@@ -542,7 +561,104 @@ public sealed partial class CombatService
                 await FinalizeLethalPublicationAsync(target);
             }
         }
+        // A player's own cast: not a field, not an extra cast such as a talent proc, so procs never chain. Hero Saga: a
+        // multi-hit cast (SkillMechanics hits/everyMs, spins, bounces) resolves once, on its first damage moment, and a
+        // server follow-up (Independent, CastTriggeredAsync) is an extra cast too (inferred: one proc roll per cast).
+        if (field == null && !action.Request.IsExtraSkill && !action.Independent && impact is not { First: false })
+            foreach (var handler in CastResolved)
+            {
+                if (!CanApplyMoreEffects()) break;
+                await handler(s, action, processed, hit);
+            }
     }
+
+    /// <summary>
+    /// An extra cast of a SkillConfig row on monsters the caller chose, through the ordinary effect path (damage, kills,
+    /// statistics, 31101). It is an extra skill: it pays nothing, starts no cooldown and triggers no CastResolved.
+    /// </summary>
+    internal Task CastExtraAsync(GameSession s, JsonElement row, IReadOnlyList<MonsterUnit> targets)
+    {
+        if (s.Role == null || targets.Count == 0) return Task.CompletedTask;
+        var target = targets[0];
+        var action = new ActiveSkillCast
+        {
+            Id = ++_sessionIds, OwnerId = s.Role.Id, WorldScene = s.WorldScene, SceneGeneration = s.SceneGeneration,
+            Attachment = s.Attachment, Row = ExtraRow(s, row),
+            Request = new CastSkillReq
+            {
+                SkillId = (int)new SkillConfig(row).Id, TargetId = target.Uid, TargetPos = target.Pos.Clone(), Face = s.Face,
+                IsExtraSkill = true,
+            },
+            Origin = s.Position.Clone(), StartMs = Now, ChantMs = 0, ActionMs = 1,
+        };
+        return ApplyEffectsAsync(s, action, target.Pos.Clone(), chosenTargets: targets);
+    }
+
+    /// <summary>An extra cast of a friendly SkillConfig row (a heal) on the allies the caller chose; like
+    /// <see cref="CastExtraAsync"/> it pays nothing and triggers no CastResolved.</summary>
+    internal Task CastExtraOnAlliesAsync(GameSession s, JsonElement row, IReadOnlyList<GameSession> allies)
+    {
+        if (s.Role == null || allies.Count == 0) return Task.CompletedTask;
+        var action = new ActiveSkillCast
+        {
+            Id = ++_sessionIds, OwnerId = s.Role.Id, WorldScene = s.WorldScene, SceneGeneration = s.SceneGeneration,
+            Attachment = s.Attachment, Row = ExtraRow(s, row),
+            Request = new CastSkillReq
+            {
+                SkillId = (int)new SkillConfig(row).Id, TargetId = allies[0].Role!.Id, TargetPos = allies[0].Position.Clone(),
+                Face = s.Face, IsExtraSkill = true,
+            },
+            Origin = s.Position.Clone(), StartMs = Now, ChantMs = 0, ActionMs = 1,
+        };
+        return ApplyEffectsAsync(s, action, allies[0].Position.Clone(), chosenTargets: [], chosenAllies: allies);
+    }
+
+    /// <summary>A ground zone of an NPC that applies <paramref name="row"/> every interval within the row's area at
+    /// <paramref name="center"/> (TalentProcs: Ember Zone). Like an extra cast it triggers no CastResolved.</summary>
+    internal async Task CreateZoneAsync(GameSession s, JsonElement row, int npc, Vec3 center, int intervalMs, int durationMs)
+    {
+        if (s.Role == null || _data.Row("NPCConfig", npc) is not { } npcRow) return;
+        var action = new ActiveSkillCast
+        {
+            Id = ++_sessionIds, OwnerId = s.Role.Id, WorldScene = s.WorldScene, SceneGeneration = s.SceneGeneration,
+            Attachment = s.Attachment, Row = ExtraRow(s, row),
+            Request = new CastSkillReq { SkillId = (int)new SkillConfig(row).Id, TargetPos = center.Clone(), Face = s.Face, IsExtraSkill = true },
+            Origin = s.Position.Clone(), StartMs = Now, ChantMs = 0, ActionMs = 1,
+        };
+        var unit = new SkillObject
+        {
+            Uid = ++_skillObjectIds, SceneEntry = s.SceneEntry, InstanceId = s.InstanceId, RuntimeMap = s.RuntimeMap,
+            OwnerSession = s, OwnerId = s.Role.Id, NpcId = npc, EntityType = (int)new NPCConfig(npcRow).NPCType, Cast = action,
+            X = center.X, Y = center.Y, Z = center.Z, Face = s.Face, ExpiresMs = Now + durationMs,
+            IntervalMs = Math.Max(50, intervalMs), NextTickMs = Now + intervalMs,
+            Radius = (new SkillConfig(row).Range is [var range, ..] ? range : 150) / 100f,
+        };
+        s.SkillObjects.Add(unit);
+        await _world.AddUnitAsync(unit);
+    }
+
+    /// <summary>
+    /// An extra cast's row with the session's live modifiers. Not the per-id cached SkillParameterRules.Effective: a
+    /// described hit (SkillConfig.AsDescribedHit) keeps its trigger's id, and that cache would return the trigger's row.
+    /// </summary>
+    internal JsonElement ExtraRow(GameSession s, JsonElement row) => SkillParameterRules.Effective(row,
+        SkillParameterRules.Active(s, _data), [.. new SkillConfig(row).SkillCategory.Select(tag => (int)tag)]);
+
+    /// <summary>Living players of this caster's scene within a radius of a point, nearest first (talent heals; every player
+    /// counts as an ally, as a friendly area cast's selection does outside events).</summary>
+    internal List<GameSession> AlliesNear(GameSession s, Vec3 center, float radius) =>
+    [
+        .. _world.PlayersIn(s.WorldScene).Where(p => !p.Dead && p.Role != null && Distance(p.Position, center) <= radius + 0.1f)
+            .OrderBy(p => Distance(p.Position, center)).ThenBy(p => p.Role!.Id),
+    ];
+
+    /// <summary>Living monsters this caster may hit within a radius of a point, nearest first.</summary>
+    internal List<MonsterUnit> MonstersNear(GameSession s, Vec3 center, float radius) =>
+    [
+        .. _world.Map(s.WorldScene).Units.OfType<MonsterUnit>()
+            .Where(m => m.Hp > 0 && CanHitMonster(s, m) && Distance(center, m.Pos) <= radius + 0.1f)
+            .OrderBy(m => Distance(center, m.Pos)).ThenBy(m => m.Uid),
+    ];
 
     private bool RollBuff(JsonElement tuple, out int id, out int duration)
     {
@@ -900,8 +1016,9 @@ public sealed partial class CombatService
     private (long Amount, DamageHitResult Result) MonsterHitDamage(GameSession s, Fighter attacker, MonsterUnit target,
         JsonElement row, string script, int? branch = null)
     {
-        var (amount, result) = Damage(attacker, MonsterFighter(target), row, branch ?? (script == "Heal" ? 1 : 0),
-            GuardianPetRules.CriticalChance(row), GuardianPetRules.CriticalAtHp(row, target.Hp, target.Template.MaxHp));
+        var (amount, result) = Damage(attacker, MonsterFighter(target), row, branch ?? (script == "Heal" ? 1 : SonicBlowBranch(s, target, row)),
+            GuardianPetRules.CriticalChance(row) + SkillParameterRules.CritChance(s, _data, row),
+            GuardianPetRules.CriticalAtHp(row, target.Hp, target.Template.MaxHp));
         if (row.TryGetProperty("_ro3GuardianFixedHit", out var fixedValue))
             return (GuardianPetRules.DirectDamage(row, fixedValue.GetInt64()), DamageHitResult.Normal);
         amount = GuardianPetRules.DirectDamage(row, amount);

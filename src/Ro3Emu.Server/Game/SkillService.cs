@@ -3,6 +3,7 @@ using Romsg;
 using Google.Protobuf;
 using Ro3Emu.Server.Accounts;
 using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 
 namespace Ro3Emu.Server.Game;
 
@@ -98,7 +99,7 @@ public sealed class SkillService
     /// <summary>Learnable skill groups of a career chain (SkillTreeConfig rows _iX1.._iX7) with the career that teaches them.</summary>
     internal IReadOnlyList<(int Group, int Career)> Tree(int career) => _trees.GetOrAdd(career, BuildTree);
 
-    private bool InTree(int career, int group) => _treeGroups.GetOrAdd(career, c => Tree(c).Select(t => t.Group).ToHashSet()).Contains(group);
+    internal bool InTree(int career, int group) => _treeGroups.GetOrAdd(career, c => Tree(c).Select(t => t.Group).ToHashSet()).Contains(group);
 
     private List<(int Group, int Career)> BuildTree(int career)
     {
@@ -427,8 +428,8 @@ public sealed class SkillService
         {
             state.SkillWheel.WhellSkills.Clear();
             for (int slot = 1; slot <= Math.Min(BarSlots, selected.ManualLoadSkill.Count); slot++)
-                if (selected.ManualLoadSkill[slot - 1] is { SkillId: > 0 } skill
-                    && RealId(skill.SkillId, skill.SkillLevel) is var id and > 0)
+                if (selected.ManualLoadSkill[slot - 1] is { SkillId: > 0 } skill && BarGroup(session.Progress!, skill.SkillId) is var group and > 0
+                    && RealId(group, group == skill.SkillId ? skill.SkillLevel : Level(session.Progress!, group)) is var id and > 0)
                     state.SkillWheel.WhellSkills[WheelKey(slot)] = new SkillWheelSlot { SkillConfigId = id, Enable = true };
         }
         foreach (var (_, skill) in selected.SkillQueue.OrderBy(kv => kv.Key))
@@ -445,28 +446,40 @@ public sealed class SkillService
     {
         if (p.SkillBar.Count > 0)
         {
-            foreach (var (slot, group) in p.SkillBar.OrderBy(s => s.Key))
-                if (Level(p, group) > 0) yield return (slot, group);
+            foreach (var (slot, saved) in p.SkillBar.OrderBy(s => s.Key))
+                if (BarGroup(p, saved) is var group and > 0 && Level(p, group) > 0) yield return (slot, group);
             yield break;
         }
         int next = 1;
-        // The PC bar renders whellSkills, not atkSkillId. At level 1 a Novice has no other
-        // active skill, so expose the already learned normal attack in a clickable slot.
-        if (p.Career == 1000 && _data.Row("SkillConfig", NormalAttack(p.Career)) is { } attack)
-        {
-            int group = (int)GameData.Int(attack, "_iSkillID");
-            if (group > 0 && Level(p, group) > 0 && IsActive(group)) yield return (next++, group);
-        }
+        // The PC bar renders whellSkills, not atkSkillId, and the client attacks a selected target by
+        // itself only with eSelectTargetNormalAttack set, so expose the career's learned normal attack
+        // in a clickable slot (inferred, as for a Novice, who has no other active skill at level 1).
+        if (CareerNormalGroup(p.Career) is var attack and > 0 && Level(p, attack) > 0 && IsActive(attack)) yield return (next++, attack);
         foreach (var (group, _) in Tree(p.Career))
         {
             if (next > DefaultBarSlots) break;
-            if (Level(p, group) > 0 && IsActive(group) && !IsNormalGroup(p, group)) yield return (next++, group);
+            if (Level(p, group) > 0 && IsActive(group) && !IsChainNormalGroup(p, group)) yield return (next++, group);
         }
     }
+
+    /// <summary>
+    /// The group a bar slot shows. A normal attack on the bar is the career's own: the tree and a saved bar still hold
+    /// the earlier careers' (the Novice's 10000), and shown, the client cast the Novice's 1000001 instead of the career's
+    /// (1300001 for an Archer). Without its own (a Mage's 1200001 has no SkillConfig row) the slot is empty (0).
+    /// </summary>
+    private int BarGroup(RoleProgress p, int group) => IsChainNormalGroup(p, group) ? CareerNormalGroup(p.Career) : group;
 
     /// <summary>Active skills can go on the bar: SkillConfig._iBasicType 1 (passives such as Sword Mastery have 0).</summary>
     private bool IsActive(int group) =>
         RealId(group, 1) is var id and > 0 && _data.Row("SkillConfig", id) is { } row && GameData.Int(row, "_iBasicType") == 1;
+
+    /// <summary>The skill group of a career's normal attack (JobConfig._kSkillNormalID).</summary>
+    private int CareerNormalGroup(int career) =>
+        _data.Row("SkillConfig", NormalAttack(career)) is { } row ? (int)new SkillConfig(row).SkillId : 0;
+
+    /// <summary>The normal attack of the career or of one before it (the Novice's 10000 for every career).</summary>
+    private bool IsChainNormalGroup(RoleProgress p, int group) =>
+        group > 0 && CareerChain(p.Career).Any(career => CareerNormalGroup(career) == group);
 
     private bool IsNormalGroup(RoleProgress p, int group) =>
         _data.Row("SkillConfig", NormalAttack(p.Career)) is { } row && GameData.Int(row, "_iSkillID") == group;
@@ -716,7 +729,6 @@ public sealed class SkillService
         {
             int learned = Level(p, group);
             if (group <= 0 || learned <= 0 || !IsActive(group)
-                || (IsNormalGroup(p, group) && p.Career != 1000)
                 || req.Info!.SkillLevel < 1 || req.Info.SkillLevel > learned
                 || op == 3 && (target >= loadList.Count || loadList[target].SkillId != req.ReplaceInfo?.SkillId))
                 code = ErrorCodes.SkillNotLearned;

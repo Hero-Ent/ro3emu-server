@@ -116,7 +116,7 @@ public sealed partial class CombatService
         && Rolls.Proc(10000) < DoubleAttackChanceBp(level)
             ? _data.Row("SkillConfig", DoubleAttackRow) : null;
 
-    private const int DoubleAttackGroup = 15002, DoubleAttackRow = 1511501, DaggerSubType = 1;
+    private const int DoubleAttackRow = 1511501, DaggerSubType = 1; // DoubleAttackGroup (15002): CombatService.Passives
     private Dictionary<int, int>? _doubleAttackBp;
 
     private int DoubleAttackChanceBp(int level) => (_doubleAttackBp ??= _data.Table("BuffConfig").Values

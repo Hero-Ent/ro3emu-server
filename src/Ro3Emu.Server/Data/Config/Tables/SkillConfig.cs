@@ -63,6 +63,37 @@ public readonly partial record struct SkillConfig(JsonElement Row)
     [ConfigField("_kPreSkillRequired")] public partial long[][] PreSkillRequired { get; }
     [ConfigField("_kRange")] public partial long[] Range { get; }
     [ConfigField("_kScriptLogic")] public partial string ScriptLogic { get; }
+    [ConfigField("_kShowDmg")] public partial long[] ShowDmg { get; }
     [ConfigField("_kSkillCategory")] public partial long[] SkillCategory { get; }
     [ConfigField("_kSpSkillParam")] public partial long[] SpSkillParam { get; }
+
+    /// <summary>
+    /// This row as a hit whose damage only a description gives (talent procs): PATK * ratio (basis points) + flat, of an
+    /// element and a target cap (0 keeps the row's). It keeps the row's id, release and show, but drops its group, tags,
+    /// script, buffs and shown hit count, so no skill modifier, script effect or buff of the original applies to it.
+    /// </summary>
+    public JsonElement AsDescribedHit(long ratio, long flat, long element, long targetMax = 0)
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse(Row.GetRawText())!.AsObject();
+        node["_kDamageParam1"] = new System.Text.Json.Nodes.JsonArray(ratio);
+        node["_kDamageParam2"] = new System.Text.Json.Nodes.JsonArray(flat);
+        if (element > 0) node["_iEleType"] = element;
+        if (targetMax > 0) node["_iTargetMax"] = targetMax;
+        node["_iSkillID"] = 0;
+        node["_kSkillCategory"] = new System.Text.Json.Nodes.JsonArray();
+        node["_kScriptLogic"] = "";
+        node["_kBuff1"] = new System.Text.Json.Nodes.JsonArray();
+        node["_kBuff2"] = new System.Text.Json.Nodes.JsonArray();
+        node["_kShowDmg"] = new System.Text.Json.Nodes.JsonArray();
+        return JsonSerializer.SerializeToElement(node);
+    }
+
+    /// <summary>This row with other damage ratios (basis points) and flat damage, everything else kept.</summary>
+    public JsonElement WithDamage(long[] ratios, long[] flats)
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse(Row.GetRawText())!.AsObject();
+        node["_kDamageParam1"] = new System.Text.Json.Nodes.JsonArray([.. ratios.Select(v => (System.Text.Json.Nodes.JsonNode)v)]);
+        node["_kDamageParam2"] = new System.Text.Json.Nodes.JsonArray([.. flats.Select(v => (System.Text.Json.Nodes.JsonNode)v)]);
+        return JsonSerializer.SerializeToElement(node);
+    }
 }
