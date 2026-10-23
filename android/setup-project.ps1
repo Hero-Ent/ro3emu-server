@@ -7,7 +7,7 @@ param(
   [string]$Client = (Join-Path (Split-Path $PSScriptRoot -Parent) 'Client\Ragnarok3'),
   [string]$Pem = (Join-Path (Split-Path $PSScriptRoot -Parent) 'Client\RO3Emu\data\gate_rsa_public.pem'),
   [string]$Project = (Join-Path $PSScriptRoot 'Ro3Android'),
-  [string]$Unity = 'E:\Editors\2022.3.62f3\Editor\Unity.exe',
+  [string]$Unity = 'C:\Dev\Unity\Editors\2022.3.62f3\Editor\Unity.exe',
   # AssetRipper export of the PC player (see README): its assets go into the project and its DLL GUIDs into our metas.
   [string]$Export = (Join-Path $PSScriptRoot 'build\arexport\ExportedProject')
 )

@@ -1,0 +1,10 @@
+<Project>
+
+  <!-- The repository manages package versions centrally (Directory.Packages.props at the root). The Android port's
+       tools are single-file scripts (dotnet run tools\*.cs) that pin their packages themselves (#:package Name@Version),
+       which central management refuses: this file, being nearer, takes the root one's place for everything in android\. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+</Project>

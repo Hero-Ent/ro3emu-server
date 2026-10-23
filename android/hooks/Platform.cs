@@ -10,7 +10,24 @@ namespace Ro3Android.Hooks
     /// </summary>
     public static class Platform
     {
-        private static bool? _pcUi;
+        private static bool? _pcUi, _luaLog;
+
+        /// <summary>
+        /// GS_Debug.ShowLog (android\tools\AndroidPatch.cs redirects its getter here), fixed to true in the reconstructed
+        /// client. Lua's Debug.Log/LogWarning/LogFormat check it and then build a debug.traceback for every line: in a
+        /// fight that is hundreds a second, 70-200 ms of every frame on a phone. Off unless the app's data folder has an
+        /// empty file named lua-log.
+        /// </summary>
+        public static bool LuaLog()
+        {
+            if (_luaLog == null)
+            {
+                try { _luaLog = File.Exists(Path.Combine(Application.persistentDataPath, "lua-log")); }
+                catch { _luaLog = false; }
+                Debug.Log($"[Ro3Android] Lua log: {(_luaLog.Value ? "on" : "off")}");
+            }
+            return _luaLog.Value;
+        }
 
         public static bool UnityPc()
         {

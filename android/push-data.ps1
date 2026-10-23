@@ -4,7 +4,7 @@
 # connection (wireless debugging drops when the phone sleeps), so rerunning resumes where it stopped.
 param(
   [string]$Client = (Join-Path (Split-Path $PSScriptRoot -Parent) 'Client\Ragnarok3'),
-  [string]$Unity = 'E:\Editors\2022.3.62f3\Editor\Unity.exe',
+  [string]$Unity = 'C:\Dev\Unity\Editors\2022.3.62f3\Editor\Unity.exe',
   [string]$Package = 'com.ro3emu.client',
   [switch]$SmallOnly
 )

@@ -2,12 +2,14 @@
 # Unity log goes to android\out\build.log; -Install also installs it on the phone connected over adb.
 # Gradle's and the Package Manager's caches (several GB) go to -Cache instead of the user profile on C:.
 param(
-  [string]$Unity = 'E:\Editors\2022.3.62f3\Editor\Unity.exe',
+  [string]$Unity = 'C:\Dev\Unity\Editors\2022.3.62f3\Editor\Unity.exe',
   [string]$Project = (Join-Path $PSScriptRoot 'Ro3Android'),
-  [string]$Cache = 'E:\Unity\cache',
+  [string]$Cache = 'C:\Dev\Unity\cache',
   [switch]$Install,
   # Only C# changed since the last full build (shell scripts, hooks, game DLLs): Unity skips scenes and assets.
-  [switch]$ScriptsOnly
+  [switch]$ScriptsOnly,
+  # A release player: no "Development Build" mark (screenshots, players). Switching between the two needs a full build.
+  [switch]$Release
 )
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $Unity)) { throw "Unity 2022.3.62f3 not found at $Unity (install it with Android Build Support, or pass -Unity)" }
@@ -21,6 +23,7 @@ $log = Join-Path $out 'build.log'
 $unityArgs = @('-batchmode', '-nographics', '-quit', '-buildTarget', 'Android',
   '-projectPath', "`"$Project`"", '-executeMethod', 'Ro3Android.Editor.BuildAndroid.Build', '-logFile', "`"$log`"")
 if ($ScriptsOnly) { $unityArgs += '-ro3ScriptsOnly' }
+if ($Release) { $unityArgs += '-ro3Release' }
 $p = Start-Process -FilePath $Unity -Wait -PassThru -NoNewWindow -ArgumentList $unityArgs
 Select-String -Path $log -Pattern '\[Ro3Android\]|error CS|Il2Cpp.*(error|failed)|BuildFailedException' | Select-Object -Last 40 | ForEach-Object { $_.Line }
 if ($p.ExitCode) { throw "Unity build failed (exit $($p.ExitCode)); see $log" }

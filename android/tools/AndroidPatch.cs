@@ -36,6 +36,8 @@ var shaderFind = hooks.MainModule.GetType("Ro3Android.Hooks.Shaders").Methods.Si
 var materialCreate = hooks.MainModule.GetType("Ro3Android.Hooks.Materials").Methods.Single(m => m.Name == "Create");
 var materialCopy = hooks.MainModule.GetType("Ro3Android.Hooks.Materials").Methods.Single(m => m.Name == "Copy");
 var unityPc = hooks.MainModule.GetType("Ro3Android.Hooks.Platform").Methods.Single(m => m.Name == "UnityPc");
+var luaLog = hooks.MainModule.GetType("Ro3Android.Hooks.Platform").Methods.Single(m => m.Name == "LuaLog");
+var fixLoaded = hooks.MainModule.GetType("Ro3Android.Hooks.Materials").Methods.Single(m => m.Name == "FixLoaded");
 
 // The resolver keeps every DLL it opens locked, so the rewritten ones are kept in memory and written at the end.
 var resolver = new DefaultAssemblyResolver();
@@ -46,7 +48,7 @@ foreach (var file in Directory.GetFiles(managed, "*.dll").OrderBy(f => f))
     var name = Path.GetFileName(file);
     if (skip.IsMatch(name)) continue;
     using var asm = AssemblyDefinition.ReadAssembly(new MemoryStream(File.ReadAllBytes(file)), new ReaderParameters { AssemblyResolver = resolver });
-    MethodReference target = null;
+    MethodReference? target = null;
     int redirected = 0, dead = 0, stubbed = 0, inits = 0, bundleLoads = 0, windowsCalls = 0, shaderFinds = 0, platformChecks = 0, materials = 0;
     foreach (var type in asm.MainModule.GetTypes())
         foreach (var method in type.Methods)
@@ -82,6 +84,14 @@ foreach (var file in Directory.GetFiles(managed, "*.dll").OrderBy(f => f))
                 method.Body.Instructions[0].Operand = asm.MainModule.ImportReference(unityPc);
                 platformChecks++;
             }
+            // GS_Debug.ShowLog (a constant true here) makes Lua log every step with a traceback: ask Hooks.Platform.
+            if (type.FullName == "HappyEngine.GS_Debug" && type.Properties.Any(p => p.Name == "ShowLog" && p.GetMethod == method)
+                && method.Body.Instructions.Count == 2 && method.Body.Instructions[0].OpCode == OpCodes.Ldc_I4_1)
+            {
+                method.Body.Instructions[0].OpCode = OpCodes.Call;
+                method.Body.Instructions[0].Operand = asm.MainModule.ImportReference(luaLog);
+                platformChecks++;
+            }
             // The reconstructed client loads Lua from StreamingAssets/Recovery except on Android, where it waits for a
             // bootstrap (Recovery/recovery-bootstrap.json) the client does not ship: take the PC path. The terrain's
             // lightmap header picks astc_* data on Android, which only mobile builds ship: take the PC data too.
@@ -95,6 +105,18 @@ foreach (var file in Directory.GetFiles(managed, "*.dll").OrderBy(f => f))
                         inst.Operand = 2;               // RuntimePlatform.WindowsPlayer
                         platformChecks++;
                     }
+            // Every asset HappyEngine's resource loader hands out passes AssetElement.DoLoadCompleted (Asset set, callbacks
+            // not run yet): Hooks.Materials.FixLoaded(this.Asset) first, so no material is drawn with a PC-only shader.
+            if (type.FullName == "HappyEngine.Runtime.NewRuntimeSystem.AssetElement" && method.Name == "DoLoadCompleted")
+            {
+                var getAsset = type.Properties.Single(p => p.Name == "Asset").GetMethod;
+                var il = method.Body.GetILProcessor();
+                var first = method.Body.Instructions[0];
+                il.InsertBefore(first, il.Create(OpCodes.Ldarg_0));
+                il.InsertBefore(first, il.Create(OpCodes.Call, getAsset));
+                il.InsertBefore(first, il.Create(OpCodes.Call, asm.MainModule.ImportReference(fixLoaded)));
+                materials++;
+            }
             // The scenery builds its materials from PC shaders and sets their textures right after, which a shader
             // without programs for this GPU drops: new Material(Shader) -> Hooks.Materials.Create (stand-in first).
             if (type.Namespace.StartsWith("HappyEngine.CustomScene"))

@@ -25,10 +25,12 @@ namespace Ro3Android.Editor
                 EnsureBootScene();
                 var output = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "out", "ro3emu.apk"));
                 Directory.CreateDirectory(Path.GetDirectoryName(output));
-                // Development: logcat gets the full managed stack traces while the port is young. -ro3ScriptsOnly
+                // Development: logcat gets the full managed stack traces while the port is young; -ro3Release
+                // (build-apk.ps1 -Release) drops it (no "Development Build" mark on screen, a little faster). -ro3ScriptsOnly
                 // (build-apk.ps1 -ScriptsOnly) reuses the previous build's scenes and assets and only recompiles code.
-                var options = BuildOptions.Development;
-                if (Array.IndexOf(Environment.GetCommandLineArgs(), "-ro3ScriptsOnly") >= 0) options |= BuildOptions.BuildScriptsOnly;
+                var args = Environment.GetCommandLineArgs();
+                var options = Array.IndexOf(args, "-ro3Release") >= 0 ? BuildOptions.None : BuildOptions.Development;
+                if (Array.IndexOf(args, "-ro3ScriptsOnly") >= 0) options |= BuildOptions.BuildScriptsOnly;
                 var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
                 {
                     scenes = new[] { BootScene },

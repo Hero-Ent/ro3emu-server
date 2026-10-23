@@ -22,9 +22,9 @@ namespace Ro3Android.Hooks
             // SoftMask's variants of a shader ("Soft Mask/<name>") fall back to the port of the plain one.
             if (name != null && name.StartsWith("Soft Mask/") && Ours().TryGetValue(name.Substring("Soft Mask/".Length), out own)) return own;
             var shader = Shader.Find(name);
-            // An unsupported shader is still a shader: Unity skips its draws. Only a missing one (the game would get
-            // null and throw) becomes the fallback.
-            if (shader != null) return shader;
+            // A shader this GPU cannot run would draw magenta in the material the caller builds from it: hand out the
+            // shell's stand-in right away (Materials.Remap, null for shaders that run or must stay as they are).
+            if (shader != null) return Materials.Remap?.Invoke(shader) ?? shader;
             if (Missing.Add(name ?? "")) Debug.LogWarning($"[Ro3Android] shader missing, using the fallback: {name}");
             if (_fallback == null) _fallback = Shader.Find("Hidden/Ro3Android/Fallback");
             return _fallback;

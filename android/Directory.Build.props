@@ -1,0 +1,14 @@
+<Project>
+
+  <!-- The repository's quality gates (Directory.Build.props at the root) are for the server and its tools. The Android
+       port's code is compiled against Unity's old mscorlib (hooks) or runs as single-file scripts (tools), in the style
+       of the Unity code around it: it keeps the root settings (warnings are errors) without the analyzer and code-style
+       rules. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <AnalysisLevel>none</AnalysisLevel>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+</Project>

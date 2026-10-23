@@ -22,7 +22,7 @@ canal `android_google`). O port:
 
 | # | Marco | Pronto quando | Status |
 |---|-------|---------------|--------|
-| M0 | Ferramentas | Unity 2022.3.62f3 + Android Build Support (SDK/NDK/JDK) instalados | ok (`E:\Editors`) |
+| M0 | Ferramentas | Unity 2022.3.62f3 + Android Build Support (SDK/NDK/JDK) instalados | ok (`C:\Dev\Unity\Editors`) |
 | M1 | Casca IL2CPP | `build-apk.ps1` gera um APK que abre e loga no logcat os assemblies do jogo carregados | **ok** (Galaxy S24, Vulkan) |
 | M2 | Libs nativas | `libfsni.so`, `libxlua.so` ARM64; o resto em stubs | **ok** (decoder Lua validado nos 13.488 chunks; Wwise, Tencent, AVPro… em stub) |
 | M3 | Boot do jogo | `Ro3Startup` roda e carrega o prefab do launcher do VFS | **ok** (GameMain, managers, Lua `Launch`) |
@@ -92,12 +92,16 @@ canal `android_google`). O port:
 | `CrashSight64`, `httpdnsplugin`, `NetworkDiagnosis`, `windowsplugin` | telemetria e info do aparelho | stub |
 | `lib_burst_generated` | Burst | não precisa: sem Burst o código roda gerenciado |
 
-## Instalação no E:
+## Instalação (SSD, `C:\Dev`)
 
-- Unity Hub → Preferences → **Installs**: *Installs location* `E:\Editors` e *Downloads location*
-  `E:\Downloads` (o `build-apk.ps1` procura `E:\Editors\2022.3.62f3`; outro lugar → `-Unity`), **antes** de instalar a 2022.3.62f3 (o SDK, o NDK e o JDK do Android ficam dentro da pasta do editor).
-- `build-apk.ps1` aponta os caches do Gradle e do Package Manager pra `E:\Unity\cache`. Pra valer também quando
-  você abrir o editor na mão: `setx GRADLE_USER_HOME E:\Unity\cache\gradle` e `setx UPM_CACHE_ROOT E:\Unity\cache\upm`.
+O projeto e as ferramentas ficam no SSD desde 22/10/2026 (o HD de 1 TB com D: e E: está com falha prevista pela SMART);
+só a VFS do jogo continua no D:, por junction (o build não a lê, ela já está no celular).
+
+- Editor: `C:\Dev\Unity\Editors\2022.3.62f3` (copiado com o SDK, o NDK e o JDK do Android, que ficam dentro da pasta do
+  editor). Todos os scripts usam esse caminho por padrão; outro lugar → `-Unity`. No Unity Hub, *Installs* → *Locate*
+  aponta pra ele se quiser abrir o editor pelo Hub.
+- `build-apk.ps1` aponta os caches do Gradle e do Package Manager pra `C:\Dev\Unity\cache`. Pra valer também quando
+  você abrir o editor na mão: `setx GRADLE_USER_HOME C:\Dev\Unity\cache\gradle` e `setx UPM_CACHE_ROOT C:\Dev\Unity\cache\upm`.
 
 ## Uso
 

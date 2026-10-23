@@ -6,7 +6,7 @@ param(
   [string]$Device,
   [int]$Seconds = 60,
   [switch]$NoInstall,
-  [string]$Unity = 'E:\Editors\2022.3.62f3\Editor\Unity.exe'
+  [string]$Unity = 'C:\Dev\Unity\Editors\2022.3.62f3\Editor\Unity.exe'
 )
 $ErrorActionPreference = 'Continue'
 $adb = Join-Path (Split-Path $Unity) 'Data\PlaybackEngines\AndroidPlayer\SDK\platform-tools\adb.exe'

@@ -19,7 +19,6 @@ namespace Ro3Android
         private readonly HashSet<string> _pcOnly = new HashSet<string>();
         private readonly HashSet<string> _reported = new HashSet<string>();
         private readonly HashSet<string> _errorMaterials = new HashSet<string>();
-        private readonly HashSet<int> _errorUsers = new HashSet<int>();
         private Shader _fallback, _fallback3D, _invisible;
         private float _next;
 
@@ -44,9 +43,13 @@ namespace Ro3Android
                     if (line.Trim().Length > 0) _pcOnly.Add(line.Trim());
             Debug.Log($"[Ro3Android] {_ours.Count} replacement shaders available, {_pcOnly.Count} PC-only shader names");
             // The scenery's materials are built from PC shaders and textured right away: hand them the stand-in first.
-            var remap = Type.GetType("Ro3Android.Hooks.Materials, Ro3Android.Hooks")?.GetField("Remap");
+            var hooks = Type.GetType("Ro3Android.Hooks.Materials, Ro3Android.Hooks");
+            var remap = hooks?.GetField("Remap");
             remap?.SetValue(null, (Func<Shader, Shader>)Replacement);
-            Debug.Log($"[Ro3Android] scenery material hook {(remap != null ? "set" : "missing")}");
+            // ...and every material or prefab the game's resource loader hands out, before its first frame.
+            var fix = hooks?.GetField("Fix");
+            fix?.SetValue(null, (Action<Material>)Fix);
+            Debug.Log($"[Ro3Android] material hooks: remap {(remap != null ? "set" : "missing")}, fix {(fix != null ? "set" : "missing")}");
         }
 
         // The shader a new material should get instead of the game's (null: keep the game's).
@@ -101,35 +104,6 @@ namespace Ro3Android
             }
         }
 
-        private static readonly Type Graphic = Type.GetType("UnityEngine.UI.Graphic, UnityEngine.UI");
-
-        // The UI graphics (and renderers) that draw with a material, as hierarchy paths.
-        private static string UsersOf(Material material)
-        {
-            var users = new List<string>();
-            if (Graphic != null)
-                foreach (var o in FindObjectsOfType(Graphic))
-                {
-                    var m = Graphic.GetProperty("material")?.GetValue(o) as Material;
-                    var mr = Graphic.GetProperty("materialForRendering")?.GetValue(o) as Material;
-                    if (m != material && mr != material) continue;
-                    var tex = Graphic.GetProperty("mainTexture")?.GetValue(o) as Texture;
-                    users.Add($"{o.GetType().Name} {PathOf(((Component)o).transform)} tex={(tex ? tex.name : "none")}");
-                }
-            foreach (var r in FindObjectsOfType<Renderer>())
-                if (Array.IndexOf(r.sharedMaterials, material) >= 0) users.Add($"{r.GetType().Name} {PathOf(r.transform)}");
-            return users.Count == 0 ? "nothing active" : string.Join(" | ", users);
-        }
-
-        private static string PathOf(Transform t)
-        {
-            var path = t.name;
-            for (var p = t.parent; p != null && path.Length < 200; p = p.parent) path = p.name + "/" + path;
-            return path;
-        }
-
-        private float _lastSlowLog;
-
         private void Update()
         {
             if (Time.realtimeSinceStartup < _next) return;
@@ -137,48 +111,42 @@ namespace Ro3Android
             DisablePostProcessing();
             var watch = System.Diagnostics.Stopwatch.StartNew();
             var materials = Resources.FindObjectsOfTypeAll<Material>();
-            foreach (var material in materials)
+            foreach (var material in materials) Fix(material);
+            if (watch.ElapsedMilliseconds > 10)
             {
-                var shader = material.shader;
-                if (shader == null || shader == _fallback || shader == _fallback3D || shader == _invisible) continue;
-                var name = shader.name;
-                bool own = _ours.TryGetValue(name, out var replacement)
-                    || (name.StartsWith("Soft Mask/") && _ours.TryGetValue(name.Substring("Soft Mask/".Length), out replacement));
-                if (own && shader == replacement) continue;
-                if (!own && shader.isSupported && !_pcOnly.Contains(name) && name != "Hidden/InternalErrorShader") continue;
-                // Blits and post effects draw a full-screen triangle with no vertex attributes: the fallback (position,
-                // UV, colour) makes an invalid pipeline there, which crashes the Vulkan driver. Those stay as they are.
-                bool fallbackOk = !own && !IsFullScreen(name);
-                var kind = Classify(name);
-                if (own) material.shader = replacement;
-                else if (fallbackOk)
-                {
-                    int queue = material.renderQueue;
-                    material.shader = kind == Kind.Invisible ? _invisible : kind == Kind.Opaque ? _fallback3D : _fallback;
-                    if (kind == Kind.Ui && queue < 2450) queue = 3000;     // the default an unsupported shader reports
-                    material.renderQueue = queue;
-                }
-                // Which assets lost their shader (drawn magenta, then as a plain quad): the next port to make.
-                if (name == "Hidden/InternalErrorShader" && _errorMaterials.Add(material.GetInstanceID().ToString()) && _errorMaterials.Count <= 20)
-                    Debug.Log($"[Ro3Android] error-shader material '{material.name}' tex={(material.mainTexture ? material.mainTexture.name : "none")} queue={material.renderQueue} used by {UsersOf(material)}");
-                if (_reported.Add(name)) Debug.Log($"[Ro3Android] shader {name} -> {(own ? "port build" : fallbackOk ? kind.ToString() + " stand-in" : "left unsupported (full-screen)")}");
-            }
-            // The target portrait draws with a nameless material whose shader failed to load: find who uses such ones.
-            if (Graphic != null && Time.frameCount % 2 == 0)
-                foreach (var o in FindObjectsOfType(Graphic))
-                {
-                    var mr = Graphic.GetProperty("materialForRendering")?.GetValue(o) as Material;
-                    var m = Graphic.GetProperty("material")?.GetValue(o) as Material;
-                    if ((mr == null || mr.name.Length > 0) && (m == null || m.name.Length > 0)) continue;
-                    if (!_errorUsers.Add(o.GetInstanceID())) continue;
-                    var tex = Graphic.GetProperty("mainTexture")?.GetValue(o) as Texture;
-                    Debug.Log($"[Ro3Android] nameless-material graphic {o.GetType().Name} {PathOf(((Component)o).transform)} tex={(tex ? tex.name : "none")} shader={(mr ? mr.shader.name : "?")} base={(m ? m.shader.name : "?")}");
-                }
-            if (watch.ElapsedMilliseconds > 15 && Time.realtimeSinceStartup - _lastSlowLog > 10)
-            {
-                _lastSlowLog = Time.realtimeSinceStartup;
                 Debug.Log($"[Ro3Android] shader scan {watch.ElapsedMilliseconds} ms over {materials.Length} materials");
             }
+        }
+
+        // Gives one material a shader this GPU runs. Called by the once-a-second scan (scene objects, anything missed) and,
+        // through Ro3Android.Hooks.Materials.Fix, as soon as the game's resource loader hands out a material or a prefab:
+        // before its first frame, which an unsupported shader would draw magenta.
+        private void Fix(Material material)
+        {
+            if (material == null) return;
+            var shader = material.shader;
+            if (shader == null || shader == _fallback || shader == _fallback3D || shader == _invisible) return;
+            var name = shader.name;
+            bool own = _ours.TryGetValue(name, out var replacement)
+                || (name.StartsWith("Soft Mask/") && _ours.TryGetValue(name.Substring("Soft Mask/".Length), out replacement));
+            if (own && shader == replacement) return;
+            if (!own && shader.isSupported && !_pcOnly.Contains(name) && name != "Hidden/InternalErrorShader") return;
+            // Blits and post effects draw a full-screen triangle with no vertex attributes: the fallback (position,
+            // UV, colour) makes an invalid pipeline there, which crashes the Vulkan driver. Those stay as they are.
+            bool fallbackOk = !own && !IsFullScreen(name);
+            var kind = Classify(name);
+            if (own) material.shader = replacement;
+            else if (fallbackOk)
+            {
+                int queue = material.renderQueue;
+                material.shader = kind == Kind.Invisible ? _invisible : kind == Kind.Opaque ? _fallback3D : _fallback;
+                if (kind == Kind.Ui && queue < 2450) queue = 3000;     // the default an unsupported shader reports
+                material.renderQueue = queue;
+            }
+            // Which assets lost their shader (drawn magenta, then as a plain quad): the next port to make.
+            if (name == "Hidden/InternalErrorShader" && _errorMaterials.Add(material.GetInstanceID().ToString()) && _errorMaterials.Count <= 20)
+                Debug.Log($"[Ro3Android] error-shader material '{material.name}' tex={(material.mainTexture ? material.mainTexture.name : "none")} queue={material.renderQueue}");
+            if (_reported.Add(name)) Debug.Log($"[Ro3Android] shader {name} -> {(own ? "port build" : fallbackOk ? kind.ToString() + " stand-in" : "left unsupported (full-screen)")}");
         }
     }
 }

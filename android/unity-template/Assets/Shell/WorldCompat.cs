@@ -80,34 +80,43 @@ namespace Ro3Android
             }
         }
 
-        // Diagnostics: UI images that show a render texture (the target portrait comes up magenta) and the cameras that
-        // render into one, each logged once with what draws it.
-        private static readonly Type RawImage = Type.GetType("UnityEngine.UI.RawImage, UnityEngine.UI");
-        private readonly System.Collections.Generic.HashSet<int> _seenTargets = new System.Collections.Generic.HashSet<int>();
-
-        private void LogRenderTextures()
+        // The game's mobile quality profile renders small: the screen at 2080x960 (stretched to the display) and the 3D
+        // at a 0.58 render scale (about 1200x560, blurry under a sharp UI). The phones the port targets have the GPU
+        // headroom for native resolution (about 8 ms a frame at 0.58): keep both at full size.
+        private void ForceFullResolution()
         {
-            if (RawImage != null)
-                foreach (var o in FindObjectsOfType(RawImage))
-                {
-                    var tex = RawImage.GetProperty("texture")?.GetValue(o) as Texture;
-                    var mat = RawImage.GetProperty("material")?.GetValue(o) as Material;
-                    if (!(tex is RenderTexture) || !_seenTargets.Add(o.GetInstanceID())) continue;
-                    var t = ((Component)o).transform;
-                    var path = t.name;
-                    for (var p = t.parent; p != null && path.Length < 160; p = p.parent) path = p.name + "/" + path;
-                    Debug.Log($"[Ro3Android] RawImage '{path}' rt={tex.name} {tex.width}x{tex.height} mat={(mat ? mat.name + " / " + mat.shader.name : "none")}");
-                }
-            foreach (var cam in Camera.allCameras)
+            int width = Display.main.systemWidth, height = Display.main.systemHeight;
+            if (width > 0 && height > 0 && (Screen.width != width || Screen.height != height))
             {
-                if (cam.targetTexture == null || !_seenTargets.Add(cam.GetInstanceID())) continue;
-                var data = CameraData != null ? cam.GetComponent(CameraData) : null;
-                var renderer = data != null ? CameraData.GetProperty("scriptableRenderer")?.GetValue(data) : null;
-                Debug.Log($"[Ro3Android] camera '{cam.name}' -> rt={cam.targetTexture.name} {cam.targetTexture.width}x{cam.targetTexture.height} clear={cam.clearFlags} bg={cam.backgroundColor} mask=0x{cam.cullingMask:X} renderer={renderer?.GetType().Name} post={(data != null && RenderPostValue(data))}");
+                Debug.Log($"[Ro3Android] screen {Screen.width}x{Screen.height} -> {width}x{height}");
+                Screen.SetResolution(width, height, Screen.fullScreenMode);
+            }
+            var pipeline = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline;
+            var scale = pipeline?.GetType().GetProperty("renderScale");
+            if (scale != null && scale.CanWrite && (float)scale.GetValue(pipeline) < 1f)
+            {
+                Debug.Log($"[Ro3Android] render scale {scale.GetValue(pipeline)} -> 1");
+                scale.SetValue(pipeline, 1f);
             }
         }
 
-        private static bool RenderPostValue(Component data) => (bool)(CameraData.GetProperty("renderPostProcessing")?.GetValue(data) ?? false);
+        // Diagnostics: what the picture is rendered at (the world looks low resolution), logged whenever it changes.
+        private string _lastResolution;
+
+        private void LogResolution()
+        {
+            var pipeline = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline;
+            var scale = pipeline?.GetType().GetProperty("renderScale")?.GetValue(pipeline);
+            var filter = pipeline?.GetType().GetProperty("upscalingFilter")?.GetValue(pipeline);
+            var cam = Camera.main;
+            var text = $"native {Display.main.systemWidth}x{Display.main.systemHeight}, screen {Screen.width}x{Screen.height}, "
+                + $"current {Screen.currentResolution.width}x{Screen.currentResolution.height}, renderScale {scale}, filter {filter}, "
+                + $"camera {(cam ? $"{cam.pixelWidth}x{cam.pixelHeight} rt={(cam.targetTexture ? cam.targetTexture.name : "none")}" : "none")}, "
+                + $"quality {QualitySettings.GetQualityLevel()} msaa {QualitySettings.antiAliasing}, pipeline {pipeline?.name}";
+            if (text == _lastResolution) return;
+            _lastResolution = text;
+            Debug.Log($"[Ro3Android] resolution: {text}");
+        }
 
         // RoleShadowManager (the round shadows under characters) keeps Camera.main from its Awake, which here runs before
         // the game camera exists: it then throws in every LateUpdate (a NullReferenceException a frame, logged). Hand it
@@ -115,9 +124,51 @@ namespace Ro3Android
         private static readonly Type RoleShadows = Type.GetType("RoleShadowManager, Render");
         private static readonly FieldInfo RoleShadowCamera = RoleShadows?.GetField("m_kMainCamera", BindingFlags.NonPublic | BindingFlags.Instance);
 
+        // Diagnostics for the target portrait (a dark red disc): cameras that render into a texture, enabled or not (a
+        // portrait camera renders on demand), and UI graphics that show a render texture; each logged once.
+        private static readonly Type UiGraphic = Type.GetType("UnityEngine.UI.Graphic, UnityEngine.UI");
+        private readonly System.Collections.Generic.HashSet<int> _seenPortraitObjects = new System.Collections.Generic.HashSet<int>();
+        private float _nextPortraitCheck;
+
+        private void LogPortraitSources()
+        {
+            if (Time.realtimeSinceStartup < _nextPortraitCheck) return;
+            _nextPortraitCheck = Time.realtimeSinceStartup + 5;
+            foreach (var cam in Resources.FindObjectsOfTypeAll<Camera>())
+            {
+                if (cam.targetTexture == null || !cam.gameObject.scene.IsValid() || !_seenPortraitObjects.Add(cam.GetInstanceID())) continue;
+                Debug.Log($"[Ro3Android] rt camera '{PathOf(cam.transform)}' enabled={cam.enabled} active={cam.gameObject.activeInHierarchy} rt={cam.targetTexture.name} {cam.targetTexture.width}x{cam.targetTexture.height} clear={cam.clearFlags} bg={cam.backgroundColor} mask=0x{cam.cullingMask:X}");
+            }
+            if (UiGraphic == null) return;
+            var mainTexture = UiGraphic.GetProperty("mainTexture");
+            foreach (var g in FindObjectsOfType(UiGraphic))
+            {
+                var path = PathOf(((Component)g).transform);
+                if (!path.Contains("TargetAvatarInfo") || !_seenPortraitObjects.Add(g.GetInstanceID())) continue;
+                var tex = mainTexture?.GetValue(g) as Texture;
+                var mat = UiGraphic.GetProperty("materialForRendering")?.GetValue(g) as Material;
+                var baseMat = UiGraphic.GetProperty("material")?.GetValue(g) as Material;
+                var sprite = g.GetType().GetProperty("sprite")?.GetValue(g) as Sprite;
+                var color = UiGraphic.GetProperty("color")?.GetValue(g);
+                Debug.Log($"[Ro3Android] portrait graphic {g.GetType().Name} '{path}' sprite={(sprite ? sprite.name : "none")} tex={(tex ? $"{tex.name} {tex.width}x{tex.height}" : "none")} color={color} "
+                    + $"mat={(mat ? $"'{mat.name}' {mat.shader.name}" : "?")} base={(baseMat ? $"'{baseMat.name}' {baseMat.shader.name}" : "?")} kw=[{(mat ? string.Join(",", mat.shaderKeywords) : "")}]");
+            }
+        }
+
+        private static string PathOf(Transform t)
+        {
+            var path = t.name;
+            for (var p = t.parent; p != null && path.Length < 200; p = p.parent) path = p.name + "/" + path;
+            return path;
+        }
+
+        private float _nextRoleShadowCheck;
+
         private void FixRoleShadowCamera()
         {
-            if (RoleShadowCamera == null || Camera.main == null) return;
+            // FindObjectsOfType walks every object: once every 15 s is enough to catch a new manager after a scene change.
+            if (RoleShadowCamera == null || Camera.main == null || Time.realtimeSinceStartup < _nextRoleShadowCheck) return;
+            _nextRoleShadowCheck = Time.realtimeSinceStartup + 15;
             foreach (var manager in FindObjectsOfType(RoleShadows))
                 if ((RoleShadowCamera.GetValue(manager) as Camera) == null)
                 {
@@ -142,26 +193,66 @@ namespace Ro3Android
         // Once a second: the game may reset the mode, and cameras come and go with the scenes.
         private int _gcCount;
 
+        // Where a long frame went: the engine's profiler markers for the previous frame (development builds), the
+        // five biggest in milliseconds.
+        private static readonly string[] MarkerNames =
+        {
+            "PlayerLoop", "Update.ScriptRunBehaviourUpdate", "PreLateUpdate.ScriptRunBehaviourLateUpdate",
+            "FixedUpdate.ScriptRunBehaviourFixedUpdate", "Update.ScriptRunDelayedDynamicFrameRate", "PostLateUpdate.FinishFrameRendering",
+            "Gfx.WaitForPresentOnGfxThread", "Gfx.WaitForRenderThread", "Gfx.WaitForGfxCommandsFromMainThread", "Gfx.PresentFrame",
+            "WaitForTargetFPS", "Shader.CreateGPUProgram", "CreateGPUProgram", "GC.Collect", "Loading.ReadObject", "Loading.AwakeFromLoad",
+            "Instantiate", "AssetBundle.LoadAsset", "Application.Integrate Assets in Background", "Physics.Processing",
+            "Canvas.SendWillRenderCanvases", "UGUI.Rendering.UpdateBatches", "RenderPipelineManager.DoRenderLoop_Internal()",
+            "Inl_UniversalRenderPipeline.RenderSingleCameraInternal: Main Camera", "Camera.Render",
+        };
+        private Unity.Profiling.ProfilerRecorder[] _markers;
+
+        private string Markers()
+        {
+            if (_markers == null) return "";
+            var top = new System.Collections.Generic.List<(string Name, double Ms)>();
+            for (int i = 0; i < _markers.Length; i++)
+                if (_markers[i].Valid && _markers[i].LastValue > 0) top.Add((MarkerNames[i], _markers[i].LastValue / 1e6));
+            top.Sort((a, b) => b.Ms.CompareTo(a.Ms));
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < top.Count && i < 6; i++) sb.Append($" | {top[i].Name} {top[i].Ms:0.0}");
+            return sb.ToString();
+        }
+
+        private void OnEnable()
+        {
+            _markers = new Unity.Profiling.ProfilerRecorder[MarkerNames.Length];
+            for (int i = 0; i < MarkerNames.Length; i++)
+                _markers[i] = Unity.Profiling.ProfilerRecorder.StartNew(Unity.Profiling.ProfilerCategory.Internal, MarkerNames[i]);
+        }
+
+        private void OnDisable()
+        {
+            if (_markers != null) foreach (var m in _markers) m.Dispose();
+        }
+
         private void Update()
         {
             // Hitch log: frames over 80 ms, with the garbage collections since the previous frame.
             int gc = System.GC.CollectionCount(0);
-            FrameTimingManager.CaptureFrameTimings();
             if (Time.unscaledDeltaTime > 0.08f && Time.realtimeSinceStartup > 30)
-            {
-                var timing = new FrameTiming[1];
-                string split = FrameTimingManager.GetLatestTimings(1, timing) > 0
-                    ? $" main {timing[0].cpuMainThreadFrameTime:0} render {timing[0].cpuRenderThreadFrameTime:0} gpu {timing[0].gpuFrameTime:0}"
-                    : "";
-                Debug.Log($"[Ro3Android] hitch {Time.unscaledDeltaTime * 1000:0} ms at {Time.realtimeSinceStartup:0.0}s (GC {gc - _gcCount}){split}");
-            }
+                Debug.Log($"[Ro3Android] hitch {Time.unscaledDeltaTime * 1000:0} ms at {Time.realtimeSinceStartup:0.0}s (GC {gc - _gcCount}){Markers()}");
             _gcCount = gc;
             if (Time.realtimeSinceStartup < _next) return;
             _next = Time.realtimeSinceStartup + 1f;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            Periodic();
+            if (watch.ElapsedMilliseconds > 10) Debug.Log($"[Ro3Android] world compat tick {watch.ElapsedMilliseconds} ms");
+        }
+
+        private void Periodic()
+        {
             if (_facade != null && _compatible != null && !(bool)_compatible.GetValue(_facade)) _compatible.SetValue(_facade, true);
             if (!_assetsLogged) LogSubsceneAssets();
             ForceTopQuality();
             FixRoleShadowCamera();
+            ForceFullResolution();
+            LogResolution();
             // The game's mobile settings cap the frame rate at 30 (Lua QS_RenderLevel_FPS); the phones the port targets
             // keep 60.
             if (Application.targetFrameRate < 60)

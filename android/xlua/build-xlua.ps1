@@ -5,7 +5,7 @@
 #   - luaopen_cmsgpack / luaopen_cmsgpack_safe are linked in, and the Lua allocation-profiling hooks are no-ops.
 # Sources are cloned into android\build\third_party (gitignored); the result goes to android\build\native-prebuilt,
 # where setup-project.ps1 picks it up.
-param([string]$Unity = 'E:\Editors\2022.3.62f3\Editor\Unity.exe')
+param([string]$Unity = 'C:\Dev\Unity\Editors\2022.3.62f3\Editor\Unity.exe')
 $ErrorActionPreference = 'Stop'
 $android = Split-Path $PSScriptRoot -Parent
 $third = Join-Path $android 'build\third_party'
