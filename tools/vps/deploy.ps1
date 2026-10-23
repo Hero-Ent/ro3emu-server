@@ -4,8 +4,8 @@
 
 .DESCRIPTION
   Compila o servidor aqui (linux-x64, framework-dependent, como o da VPS), envia o pacote por SSH e roda
-  tools/vps/install.sh, que para o servico, guarda o servidor anterior em bin/Release.prev, instala o novo e
-  sobe o servico systemd "ro3emu" (reinicia sozinho se cair e sobrevive ao fim da sessao SSH).
+  tools/vps/install.sh, que desliga o servidor (sv desligar), guarda o anterior em bin/Release.prev, instala o novo
+  e liga de novo pelo menu sv (sv ligar). Compilar na VPS pede ~4,5 GB de RAM e ela tem 4 GB.
   Precisa da chave %USERPROFILE%\.ssh\herosaga_vps. Faca "git pull" na VPS antes, se quiser o codigo-fonte la.
 
 .EXAMPLE
@@ -32,10 +32,10 @@ if ($LASTEXITCODE -ne 0) { throw 'falha ao empacotar' }
 
 Write-Host '[2/3] Enviando para a VPS...'
 $ssh = @('-i', $Key, '-o', 'BatchMode=yes')
-& scp @ssh $pkg (Join-Path $PSScriptRoot 'install.sh') (Join-Path $PSScriptRoot 'ro3emu.service') "${HostName}:/tmp/"
+& scp @ssh $pkg (Join-Path $PSScriptRoot 'install.sh') "${HostName}:/tmp/"
 if ($LASTEXITCODE -ne 0) { throw 'falha no envio' }
 
 Write-Host '[3/3] Instalando e iniciando...'
-& ssh @ssh $HostName "sed -i 's/\r$//' /tmp/install.sh /tmp/ro3emu.service && bash /tmp/install.sh /tmp/ro3emu-server-linux.tar.gz"
+& ssh @ssh $HostName "sed -i 's/\r$//' /tmp/install.sh && bash /tmp/install.sh /tmp/ro3emu-server-linux.tar.gz"
 if ($LASTEXITCODE -ne 0) { throw 'falha na instalacao' }
-Write-Host 'PRONTO. Log: ssh na VPS e "tail -f /opt/ro3emu-server/logs/ro3emu.log"; status: "systemctl status ro3emu".'
+Write-Host 'PRONTO. Na VPS: sv status, sv ver (tela do servidor), sv verlog.'
