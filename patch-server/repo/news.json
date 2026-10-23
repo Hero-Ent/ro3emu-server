@@ -1,6 +1,13 @@
 {
   "items": [
     {
+      "tag": "PATCH 1.1.1",
+      "color": "green",
+      "title": "Patch Notes v1.1.1 - Talentos, Pets Guardiões e Chefes",
+      "text": "• Talentos de profissão agora funcionam: efeitos especiais, chances de ativar golpes extras e bônus nos buffs de todas as linhas (ex.: Swift Sword reduz a recarga do Bowling Bash; Guard Enhance fortalece o Parry).\n• Ajuste: Crazy Uproar, Maximize Power e Maximum Over Thrust só concedem os bônus de talento (FOR/VIT/SOR) com o talento escolhido.\n• Passivas da árvore revisadas: cada passiva usa o próprio efeito, maestrias de arma só valem com a arma equipada e novos efeitos passam a funcionar (Double Holy Light, Enchant Blade, Energy Coat, Soul Drain e outros).\n• Novas passivas: Union (Templário), Sonic Blow mais forte em alvos com pouca vida e com o talento Supersonic Blow, Arcane Mastery e Psychokinetic Astral Body (Arcano).\n• Montarias: os bônus da montaria valem enquanto você está montado; Riding e Dragon Training aumentam a velocidade de movimento.\n• Pets de combate: habilidades guardiãs funcionando (habilidade principal no slot do pet e efeitos reativos).\n• Chefes (MVPs e chefes de masmorra e de história) agora resistem a atordoamento, congelamento, petrificação e outros controles, como no jogo original. Controle Elemental (Arcano) pune o chefe que resiste.\n• Todos os monstros recebem os buffs de nascimento configurados.\n• Ao mudar de classe, o ataque normal da nova classe vai para o 1º slot da barra.\n• Auto ataque corrigido: não para mais depois de um golpe ao clicar em monstros distantes, e o Sicário com adaga não fica mais preso na postura de ataque.\n• Barras de atalho: o Auto Pot e o Auto Attack não ficam mais embaixo dos slots 7 a 9 para quem tinha mudado o layout.\n• Segurança e estabilidade: login mais protegido e várias correções internas do servidor.\n• Atualizador 1.1.1.",
+      "date": "2026-10-22"
+    },
+    {
       "tag": "PATCH 1.1.0",
       "color": "green",
       "title": "Patch Notes v1.1.0 - Barras de Atalho Expandidas",

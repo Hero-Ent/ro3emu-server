@@ -204,7 +204,7 @@ Abra **uma janela para cada** (deixe todas abertas enquanto joga):
 | Baixa de | `https://patch.herosaga.com.br/` | `http://localhost:8790/` (servidor de patches local) |
 | Canal | `live` | `test` |
 | Cliente aponta para | `http://45.130.137.89:5380` (VPS) | `http://127.0.0.1:5380` (seu PC) |
-| Versão | `1.1.0` | `1.1.0-local` |
+| Versão | `1.1.1` | `1.1.1-local` |
 | Configuração | `Launcher-Dist\launcher.json` | `Launcher-Local\launcher.json` |
 
 - O **exe é o mesmo** nos dois; só muda o `launcher.json` ao lado. O `PUBLICAR_ATUALIZACAO.cmd` copia o exe novo e
@@ -284,7 +284,7 @@ O que ele faz, sozinho:
 2. **Escolhe a versão**: cliente e launcher têm sempre **o mesmo número** e são publicados juntos (sobe o último
    número da maior das duas: `1.1.0 → 1.1.1`).
 3. **Compila** o que precisa.
-4. **Publica o cliente** duas vezes no `patch-server/repo`: produção (`live`, `1.1.0`) e local (`test`, `1.1.0-local`).
+4. **Publica o cliente** duas vezes no `patch-server/repo`: produção (`live`, `1.1.1`) e local (`test`, `1.1.1-local`).
    Os arquivos pesados são iguais e lidos uma vez só (cache em `patch-server/.publish-cache.json.zst`).
 5. **Publica o launcher** nos dois canais, atualiza a versão no `Ro3Emu.Launcher.csproj`, copia o exe para
    `Launcher-Dist`, `Launcher-Local`, raiz e `patch-server/repo/HeroLauncher.exe` (link de download).
@@ -369,7 +369,7 @@ Depois de publicar/enviar, faça commit para a equipe ficar sincronizada:
 
 ```powershell
 git add patch-server/release-state.json patch-server/repo/channels patch-server/repo/manifests src/Ro3Emu.Launcher/Ro3Emu.Launcher.csproj
-git commit -m "release: cliente 1.1.0, launcher 1.1.0"
+git commit -m "release: cliente 1.1.1, launcher 1.1.1"
 git push
 ```
 
@@ -404,7 +404,7 @@ sozinho; mude à mão (`-Versao` / `-VersaoLauncher`) só para os casos abaixo.
 | Marco grande (lançamento oficial, nova temporada) | Sobe **MAIOR** | `-Versao 2.0.0` |
 
 - **Nunca reaproveite um número.** Uma versão publicada é imutável (o script recusa).
-- A versão local é sempre **a mesma da produção + `-local`** (`1.1.0` / `1.1.0-local`). Versões `-dev.<data>` são
+- A versão local é sempre **a mesma da produção + `-local`** (`1.1.1` / `1.1.1-local`). Versões `-dev.<data>` são
   testes pessoais (`-SoLocal`) e nunca vão para produção.
 
 ### Launcher (`HeroLauncher.exe`)
