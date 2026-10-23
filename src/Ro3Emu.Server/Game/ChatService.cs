@@ -111,7 +111,7 @@ public sealed partial class ChatService
             var push = new NotifyNewTextChatMessage { Msg = message };
             foreach (var to in recipients)
             {
-                try { await DownAsync(to, Cmd.NotifyNewText, push); }
+                try { await PushLineAsync(to, push); }
                 catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException or ObjectDisposedException) { }
             }
         }
@@ -144,8 +144,8 @@ public sealed partial class ChatService
         });
 
     /// <summary>
-    /// Join, then replay the group's recent lines as ordinary pushes (the client's history request must stay empty:
-    /// a non-empty text list without an audio list breaks its Lua).
+    /// Join, then replay the group's recent lines this connection has not received yet as ordinary pushes (the client's
+    /// history request must stay empty: a non-empty text list without an audio list breaks its Lua).
     /// </summary>
     public async Task JoinAsync(GameSession session, JoinChatChannelReq req)
     {
@@ -157,13 +157,14 @@ public sealed partial class ChatService
         Join(session, req.GroupId);
         await session.SendGameAsync(JoinChannel, new JoinChatChannelRsp { Result = 0, Req = req });
         List<TextChatMessage> recent;
-        lock (_sync) recent = _recent.TryGetValue(HistoryKey(req.GroupId, session), out var lines) ? lines.ToList() : new();
+        lock (_sync) recent = _recent.TryGetValue(HistoryKey(req.GroupId, session), out var lines)
+            ? lines.Where(line => !Delivered(session, line)).ToList() : new();
         long runtime = session.WorldScene, generation = session.SceneGeneration;
         foreach (var line in recent)
         {
             if (MapChannel(req.GroupId) && (session.SceneLoading || session.Handoff != null
                 || session.WorldScene != runtime || session.SceneGeneration != generation)) break;
-            await DownAsync(session, Cmd.NotifyNewText, new NotifyNewTextChatMessage { Msg = line });
+            await PushLineAsync(session, new NotifyNewTextChatMessage { Msg = line });
         }
     }
 
@@ -201,7 +202,11 @@ public sealed partial class ChatService
             foreach (var key in _recent.Keys.Where(k => k.Runtime == map.WorldScene).ToArray()) _recent.Remove(key);
             foreach (string group in new[] { $"4_{map.WorldScene}", $"@TGS#_4_{map.WorldScene}" })
                 if (_groups.Remove(group, out var members))
-                    foreach (var member in members) member.ChatGroups.Remove(group);
+                    foreach (var member in members)
+                    {
+                        member.ChatGroups.Remove(group);
+                        member.ChatDelivered.Remove((group, map.WorldScene));
+                    }
         }
         return Task.CompletedTask;
     }
@@ -350,7 +355,7 @@ public sealed partial class ChatService
             // Sends yield; neither a moved recipient nor a superseded sender may leak an old line's push.
             if (local && (sender.SceneGeneration != generation || sender.Handoff != null
                 || to.SceneLoading || to.Handoff != null || to.WorldScene != runtime)) continue;
-            try { await DownAsync(to, Cmd.NotifyNewText, push); }
+            try { await PushLineAsync(to, push); }
             catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException or ObjectDisposedException) { }
         }
     }
@@ -394,7 +399,7 @@ public sealed partial class ChatService
             };
             Remember(message);
             foreach (var target in recipients)
-                try { await DownAsync(target, Cmd.NotifyNewText, new NotifyNewTextChatMessage { Msg = message }); }
+                try { await PushLineAsync(target, new NotifyNewTextChatMessage { Msg = message }); }
                 catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException or ObjectDisposedException) { }
         }
     }
@@ -421,7 +426,7 @@ public sealed partial class ChatService
         };
         Remember(message);
         foreach (var to in recipients.Where(r => GuildAllowed(r, group)))
-            try { await DownAsync(to, Cmd.NotifyNewText, new NotifyNewTextChatMessage { Msg = message }); }
+            try { await PushLineAsync(to, new NotifyNewTextChatMessage { Msg = message }); }
             catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException or ObjectDisposedException) { }
     }
 
@@ -443,6 +448,33 @@ public sealed partial class ChatService
             session.ChatGroups.Remove(group);
         }
     }
+
+    /// <summary>
+    /// Push a chat line and note it as delivered on this connection. The client re-sends 77002 for its channels after
+    /// every scene change (portal, teleport) and character switch but keeps the lines already in its chat panel, so the
+    /// join replay must skip them or each re-join adds another copy (inferred: observed client behavior).
+    /// </summary>
+    private Task PushLineAsync(GameSession to, NotifyNewTextChatMessage push)
+    {
+        MarkDelivered(to, push.Msg);
+        return DownAsync(to, Cmd.NotifyNewText, push);
+    }
+
+    /// <summary>Message ids only grow (<see cref="_nextMessageId"/>), so the highest id per history key is enough.</summary>
+    private void MarkDelivered(GameSession to, TextChatMessage line)
+    {
+        if (!long.TryParse(line.MessageId, out long id)) return;
+        lock (_sync)
+        {
+            var key = HistoryKey(line.ReceiveId, to);
+            if (!to.ChatDelivered.TryGetValue(key, out long last) || id > last) to.ChatDelivered[key] = id;
+        }
+    }
+
+    /// <summary>Caller holds <see cref="_sync"/>.</summary>
+    private static bool Delivered(GameSession to, TextChatMessage line) =>
+        long.TryParse(line.MessageId, out long id)
+        && to.ChatDelivered.TryGetValue(HistoryKey(line.ReceiveId, to), out long last) && id <= last;
 
     private Task DownAsync(GameSession session, Cmd cmd, IMessage body) => DownRawAsync(session, (uint)cmd, 0, body.ToByteArray());
 

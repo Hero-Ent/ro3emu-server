@@ -488,6 +488,12 @@ public sealed class GameSession(PhonestChannel channel, TrafficLog traffic)
     /// <summary>Chat groups this player joined (guarded by ChatService's lock).</summary>
     public HashSet<string> ChatGroups { get; } = new();
 
+    /// <summary>
+    /// Highest chat message id pushed per history key (group, runtime scene) on this connection, kept across scene changes
+    /// and character switches like the client's chat panel (guarded by ChatService's lock).
+    /// </summary>
+    public Dictionary<(string Group, long Runtime), long> ChatDelivered { get; } = [];
+
     private bool CanPresent() => Owners?.AllowsPresentation(this) != false
         && (Owners?.Current?.CanPresent(this) ?? true);
 

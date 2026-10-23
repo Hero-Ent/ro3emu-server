@@ -133,6 +133,22 @@ public sealed class MultiplayerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RejoinDoesNotReplayLinesAlreadyDelivered()
+    {
+        // The client re-joins its channels after every portal, teleport and character switch and keeps its chat panel.
+        await using var alice = await InWorld("Alice");
+        await using var bob = await InWorld("Bob");
+        foreach (var bot in new[] { alice, bob }) await bot.JoinChatAsync("4_1");
+        await bob.SendChatAsync("4_1", 2, "once", channelIndex: 4);
+        Assert.Equal("once", (await alice.NextChatLineAsync()).Content);
+
+        await alice.JoinChatAsync("4_1");
+        await alice.JoinChatAsync("4_1");
+        await bob.SendChatAsync("4_1", 2, "next", channelIndex: 4);
+        Assert.Equal("next", (await alice.NextChatLineAsync()).Content);
+    }
+
+    [Fact]
     public async Task SecondLoginKicksTheFirstSession()
     {
         await using var first = await InWorld("Dup");
