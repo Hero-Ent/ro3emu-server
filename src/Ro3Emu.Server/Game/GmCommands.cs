@@ -292,6 +292,7 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
         ["finditem"] = ("<name>", FindItem),
         ["item"] = ("<id|name> [count]", Item),
         ["mail"] = ("<title> [item count]", Mail),
+        ["anuncio"] = ("<texto> (mensagem no topo da tela de todos os jogadores online)", Announce),
         ["enviar"] = ("<personagem> <id|nome do item> [quantidade] (correio do sistema, também offline; 3 = cash)", Send),
         ["delitem"] = ("<id> [count]", (s, a) => Op(s, OpRemoveItem, a)),
         ["zeny"] = ("<amount>", Zeny),
@@ -498,6 +499,19 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
         string mailId = await services.GetRequiredService<MailService>().SendRawAsync(role.Id, "Hero Saga",
             $"Enviado pela equipe Hero Saga: {count}x {itemName}.", [new MailService.Attachment((int)entry, count)], sender: "Hero Saga");
         await ReplyAsync(s, $"Enviado {count}x {itemName} para {role.Name} pelo correio ({mailId}).");
+    }
+
+    /// <summary>Hero Saga: "!anuncio Manutenção em 10 minutos" shows the text as the broadcast marquee (83270) to every
+    /// player in the world; fake players are skipped.</summary>
+    private async Task Announce(GameSession s, string[] args)
+    {
+        if (args.Length == 0) throw new ArgumentException("<texto>");
+        string text = string.Join(' ', args);
+        var fakes = services.GetService<FakePlayerService>();
+        var targets = sessions.All().Where(o => o.Role != null && fakes?.IsFake(o.Account) != true).ToList();
+        foreach (var target in targets) await ReplyAsync(target, text);
+        if (!targets.Contains(s)) await ReplyAsync(s, text);
+        await ReplyAsync(s, $"Anúncio enviado para {targets.Count} jogador(es).");
     }
 
     private Task Zeny(GameSession s, string[] args)

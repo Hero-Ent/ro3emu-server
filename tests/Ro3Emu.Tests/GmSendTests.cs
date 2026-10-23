@@ -12,6 +12,20 @@ public sealed class GmSendTests : GmSendTestsBase
     // A currency (1 Zeny here) to an offline character: the player claims it after logging in.
     [Fact]
     public Task GmSendsACurrencyToAnOfflineCharacterByMail() => SendAndClaim(1, 500);
+
+    // Hero Saga's "!anuncio": the text reaches every player in the world as the broadcast marquee.
+    [Fact]
+    public async Task GmAnnouncementReachesEveryPlayer()
+    {
+        var (bob, _) = await InWorld("Bob");
+        await using var player = bob;
+        var (alice, _) = await InWorld("Alice");
+        await using var gm = alice;
+        using var client = new HttpClient();
+        (await client.PostAsync($"{http}/ro3emu/gm?account=alice", new StringContent("!anuncio Teste global"))).EnsureSuccessStatusCode();
+        await Reply(alice, "jogador");
+        await Reply(bob, "Teste global");
+    }
 }
 
 /// <summary>The same on the live data: cash is item 3.</summary>
@@ -49,7 +63,7 @@ public abstract class GmSendTestsBase : MailTestsHost
         Assert.Equal(before + count, session.Progress!.Currency.GetValueOrDefault(item));
     }
 
-    private static async Task Reply(Ro3Emu.Bot.BotClient bot, string text)
+    protected static async Task Reply(Ro3Emu.Bot.BotClient bot, string text)
     {
         try
         {
