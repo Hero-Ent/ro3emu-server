@@ -100,8 +100,8 @@ public sealed partial class GuildService
         await PushPeach(g!);
         string initiator = g!.Members[g.ImpeachOwner].Name, master = MasterName(g);
         long hours = ImpeachHours;
-        await ImpeachMailAsync([g.ImpeachOwner], ImpeachMail(5), $"guild-impeach:{g.Id}:{g.ImpeachEndMs}:start", hours, (long)g.ImpeachNeed);
-        await ImpeachMailAsync(g.Members.Keys.Where(r => r != g.ImpeachOwner), ImpeachMail(6), $"guild-impeach:{g.Id}:{g.ImpeachEndMs}:call",
+        await GuildMailAsync([g.ImpeachOwner], ImpeachMail(5), $"guild-impeach:{g.Id}:{g.ImpeachEndMs}:start", hours, (long)g.ImpeachNeed);
+        await GuildMailAsync(g.Members.Keys.Where(r => r != g.ImpeachOwner), ImpeachMail(6), $"guild-impeach:{g.Id}:{g.ImpeachEndMs}:call",
             initiator, master, hours, (long)g.ImpeachNeed, initiator);
     }
 
@@ -121,7 +121,7 @@ public sealed partial class GuildService
         await SaveGuildAsync(g);
         await s.SendGameAsync(Peach, new GuildPeachResp { Result = 0, IsCancle = true });
         await PushPeach(g);
-        await ImpeachMailAsync(g.Members.Keys, ImpeachMail(2), $"guild-impeach:{g.Id}:{end}:cancel", initiator, master);
+        await GuildMailAsync(g.Members.Keys, ImpeachMail(2), $"guild-impeach:{g.Id}:{end}:cancel", initiator, master);
     }
 
     private async Task PeachApplyCoreAsync(GameSession s)
@@ -172,9 +172,9 @@ public sealed partial class GuildService
             await RefreshMembers(g);
             await PushMember(g, owner, GuildMemberInfoChangeNtf.Types.ChangeType.Update);
             await PushMember(g, master, GuildMemberInfoChangeNtf.Types.ChangeType.Update);
-            await ImpeachMailAsync(g.Members.Keys, ImpeachMail(1), $"guild-impeach:{g.Id}:{end}:success", owner.Name, masterName);
+            await GuildMailAsync(g.Members.Keys, ImpeachMail(1), $"guild-impeach:{g.Id}:{end}:success", owner.Name, masterName);
         }
-        else await ImpeachMailAsync(g.Members.Keys, ImpeachMail(4), $"guild-impeach:{g.Id}:{end}:fail", owner.Name);
+        else await GuildMailAsync(g.Members.Keys, ImpeachMail(4), $"guild-impeach:{g.Id}:{end}:fail", owner.Name);
     }
 
     private void EndImpeach(GuildStore.State g)
@@ -198,7 +198,7 @@ public sealed partial class GuildService
             return async () =>
             {
                 await PushPeach(g);
-                await ImpeachMailAsync(g.Members.Keys, ImpeachMail(3), $"guild-impeach:{g.Id}:{end}:left", owner.Name, master);
+                await GuildMailAsync(g.Members.Keys, ImpeachMail(3), $"guild-impeach:{g.Id}:{end}:left", owner.Name, master);
             };
         }
         return g.ImpeachResponders.RemoveAll(r => leaving.Any(m => m.RoleId == r)) > 0 ? () => PushPeach(g) : null;
@@ -209,7 +209,7 @@ public sealed partial class GuildService
     /// <summary>GuildMail01..06 (MailConfig 1001-1006).</summary>
     private int ImpeachMail(int n) => (int)Setting($"GuildMail0{n}", 1000 + n)[0];
 
-    private async Task ImpeachMailAsync(IEnumerable<long> recipients, int template, string key, params object[] args)
+    private async Task GuildMailAsync(IEnumerable<long> recipients, int template, string key, params object[] args)
     {
         var to = recipients.Where(r => roles.Get(r) != null).Distinct().ToArray();
         if (to.Length == 0 || data.Row("MailConfig", template) == null) return;

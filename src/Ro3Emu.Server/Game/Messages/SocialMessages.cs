@@ -278,6 +278,30 @@ public sealed class SocialMessages(ChatService chat, TeamService teams, EmblemSe
         {
             await guilds.EliteSaveAsync(session, QuickJoinEliteGroupReq.Parser.ParseFrom(body.Span));
         });
+        routes.Map(GuildService.MergePull, "guilds", async (session, msgId, body) =>
+        {
+            await guilds.MergePullAsync(session);
+        });
+        routes.Map(GuildService.MergeRecommend, "guilds", async (session, msgId, body) =>
+        {
+            await guilds.MergeRecommendAsync(session);
+        });
+        routes.Map(GuildService.MergeDetail, "guilds", async (session, msgId, body) =>
+        {
+            await guilds.MergeDetailAsync(session, MergeGuildDetailDataReq.Parser.ParseFrom(body.Span));
+        });
+        routes.Map(GuildService.MergeMembers, "guilds", async (session, msgId, body) =>
+        {
+            await guilds.MergeMembersAsync(session, SaveMergeMemberReq.Parser.ParseFrom(body.Span));
+        });
+        routes.Map(GuildService.MergeOpe, "guilds", async (session, msgId, body) =>
+        {
+            await guilds.MergeOpeAsync(session, MergeGuildOpeReq.Parser.ParseFrom(body.Span));
+        });
+        routes.Map(GuildService.MergeAsk, "guilds", async (session, msgId, body) =>
+        {
+            await guilds.MergeAskAsync(session, InviteMergeGuildReq.Parser.ParseFrom(body.Span));
+        });
         routes.Map(GuildService.Peach, "guilds", async (session, msgId, body) =>
         {
             await guilds.PeachAsync(session, GuildPeachReq.Parser.ParseFrom(body.Span));

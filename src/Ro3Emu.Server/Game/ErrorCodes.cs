@@ -234,6 +234,12 @@ public static class ErrorCodes
     // in progress, not in progress.
     public const int ImpeachCooldown = 472, ImpeachNoGrounds = 473, ImpeachRequirements = 474, ImpeachSelf = 475;
     public const int ImpeachCancelState = 476, ImpeachRepeat = 477, ImpeachInProgress = 478, ImpeachNotInProgress = 479;
+    // Merging guilds (ErrorCodeConfig 10050-10078): expired, the other's received invitations full, ours sent full, too
+    // many members, invited already, bad announcement, no invitation, impeachment here / there, no merge possible,
+    // cooldown here / there.
+    public const int MergeExpired = 10050, MergeTheirInvitesFull = 10051, MergeOurInvitesFull = 10052, MergeTooMany = 10053;
+    public const int MergeRepeat = 10055, MergeAnnounce = 10056, MergeNoInvite = 10057, MergeOurImpeach = 10060;
+    public const int MergeImpossible = 10061, MergeOurCooldown = 10063, MergeTheirImpeach = 10075, MergeTheirCooldown = 10078;
     public const int GuildFundsShort = 484, GuildContributeShort = 10040, GuildBuildBusy = 485, GuildHallLow = 486, GuildBuildMax = 487;
     // Guild voice channels (ErrorCodeConfig 97001-97032, Localization_en): not in a guild, invalid channel, on the
     // channel's block list, already / not in the channel, not leader nor GuildVoice right, the leader cannot be kicked,
