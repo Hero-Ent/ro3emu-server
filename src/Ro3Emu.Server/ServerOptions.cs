@@ -100,6 +100,12 @@ public sealed class ServerOptions
     /// </summary>
     public int GmMinGroupId { get; set; } = 10;
 
+    /// <summary>
+    /// Development aid: immortal training dummies on public maps, "&lt;sceneEntry&gt; &lt;x&gt; &lt;z&gt;" each
+    /// (FieldDummyService). Empty by default; appsettings.Development.json places one at Prontera South Gate.
+    /// </summary>
+    public string[] FieldDummies { get; set; } = [];
+
     /// <summary>Fake players for the GM command !fakeplayer (FakePlayerService, docs/guide/fake-players.md).</summary>
     public FakePlayerOptions FakePlayers { get; set; } = new();
 

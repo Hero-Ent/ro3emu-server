@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Code loaded into the Android port: android\tools\AndroidPatch.cs points the game's calls at it, and
+    setup-project.ps1 installs the output next to the game's DLLs. Compiled against the PC client's managed DLLs,
+    like src\Ro3Emu.ClientHooks.
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ClientManaged Condition="'$(ClientManaged)' == ''">$(MSBuildThisFileDirectory)..\..\Client\Ragnarok3\ro3_Data\Managed</ClientManaged>
+    <NoWarn>$(NoWarn);MSB3277;CS1701;CS1702</NoWarn>
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+    <NoStdLib>true</NoStdLib>
+    <NoCompilerStandardLib>true</NoCompilerStandardLib>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="mscorlib"><HintPath>$(ClientManaged)\mscorlib.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="netstandard" Condition="Exists('$(ClientManaged)\netstandard.dll')"><HintPath>$(ClientManaged)\netstandard.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System"><HintPath>$(ClientManaged)\System.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System.Core"><HintPath>$(ClientManaged)\System.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(ClientManaged)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.AssetBundleModule"><HintPath>$(ClientManaged)\UnityEngine.AssetBundleModule.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+</Project>
