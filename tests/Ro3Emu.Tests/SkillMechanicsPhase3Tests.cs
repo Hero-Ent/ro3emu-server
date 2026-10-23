@@ -98,8 +98,10 @@ public sealed partial class SkillCombatTests
         });
         await Task.Delay(2500); // the first cast's action time (a press before it ends would be held)
         await alice.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1631301, TargetId = target.Uid });
-        Assert.Equal(0, (await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser)).Result);
-        await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.Dsts.Count > 0);
+        var second = await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser, r => r.SessionId != 0 || r.Result != 0);
+        Assert.Equal(0, second.Result);
+        // Its own hit: Vulcan Arm is followed by the auto normal attack, whose swings also hit the target.
+        await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.SessionId == second.SessionId && h.Dsts.Count > 0);
         await Task.Delay(200);
         var loaded = await BuffsOf(s);
         Assert.DoesNotContain(loaded, b => b.ConfigId == 1631301);

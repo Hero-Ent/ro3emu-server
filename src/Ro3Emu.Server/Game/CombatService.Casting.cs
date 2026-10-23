@@ -149,7 +149,8 @@ public sealed partial class CombatService
             {
                 Target = target, SkillId = loopSkill,
                 NextSwingMs = Now + SkillMs(s, row.Value) + ChantMs(s, row.Value) + 1,
-                StartX = s.Position.X, StartZ = s.Position.Z
+                StartX = s.Position.X, StartZ = s.Position.Z,
+                StartedWalking = s.Walking, StartedMs = Now, WalkFromUtc = s.LastWalkUtc,
             };
         }
         else s.Attack = null;
@@ -238,6 +239,9 @@ public sealed partial class CombatService
     // only when its direction changes (in-game 22.10: straight legs of 0.86 s and 0.9 s), so the time is not capped
     // below the 5 s SceneService.AcceptWalkAsync allows.
     internal const double MaxWalkSlackSeconds = 5;
+    // How long after an auto attack started on the move its first stop still counts as its start (inferred: the client
+    // stops right after the cast; upstream allows 300 ms for a cast's).
+    private const long AttackStopGraceMs = 500;
     private static double WalkedSeconds(DateTime since) => Math.Clamp((DateTime.UtcNow - since).TotalSeconds, 0, MaxWalkSlackSeconds);
     private static float WalkSlack(GameSession s) => !s.Walking ? 0 : (float)(s.Speed / 100.0 * WalkedSeconds(s.LastWalkUtc));
 
@@ -736,7 +740,21 @@ public sealed partial class CombatService
     {
         if (_eventAttacks.TryGetValue(s, out var eventAttack)
             && MonsterService.Distance(eventAttack.StartX, eventAttack.StartZ, s.Position.X, s.Position.Z) > 1.5f) _eventAttacks.Remove(s);
-        if (s.Attack is { } a && MonsterService.Distance(a.StartX, a.StartZ, s.Position.X, s.Position.Z) > 0.1f) s.Attack = null;
+        if (s.Attack is { } a && MonsterService.Distance(a.StartX, a.StartZ, s.Position.X, s.Position.Z) > 0.1f)
+        {
+            // A left click on a monster out of range: the client casts the normal attack on reaching range and stops a
+            // moment later a little further on (in-game 22.10, any class). That stop is where the attack started, within
+            // the distance the walk can have covered; ending the loop there left one swing per click. Upstream treats a
+            // cast's first stop the same way (ca040898).
+            if (a.StartedWalking && !s.Walking && Now - a.StartedMs <= AttackStopGraceMs
+                && MonsterService.Distance(a.StartX, a.StartZ, s.Position.X, s.Position.Z) <= s.Speed / 100.0 * WalkedSeconds(a.WalkFromUtc) + 0.5)
+            {
+                a.StartX = s.Position.X;
+                a.StartZ = s.Position.Z;
+                a.StartedWalking = false;
+            }
+            else s.Attack = null;
+        }
         // A walk never interrupts a cast here (verified in the client): moving when a skill starts plays it on the move
         // (LC_Skill_RunTimeContext skillBlockMove / PlayMoveCacheAnimName), and the client interrupts by movement itself
         // only once the template's m_fInterruptTime_move has passed (canInterruptedByMove -> SkillInterruptServer),

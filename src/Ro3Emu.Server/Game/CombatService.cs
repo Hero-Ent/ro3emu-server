@@ -14,8 +14,14 @@ public sealed class AttackLoop
     public required MonsterUnit Target { get; init; }
     public required int SkillId { get; init; }
     public long NextSwingMs { get; set; }
-    public float StartX { get; init; }
-    public float StartZ { get; init; }
+    public float StartX { get; set; }
+    public float StartZ { get; set; }
+    /// <summary>Started while the player still walked (a click on a monster out of range): the stop right after it is
+    /// where it started.</summary>
+    public bool StartedWalking { get; set; }
+    public long StartedMs { get; init; }
+    /// <summary>The player's last walk message when it started: the walk its stop can have covered starts there.</summary>
+    public DateTime WalkFromUtc { get; init; }
 }
 
 /// <summary>
