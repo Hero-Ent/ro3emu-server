@@ -292,6 +292,7 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
         ["finditem"] = ("<name>", FindItem),
         ["item"] = ("<id|name> [count]", Item),
         ["mail"] = ("<title> [item count]", Mail),
+        ["enviar"] = ("<personagem> <id|nome do item> [quantidade] (correio do sistema, também offline; 3 = cash)", Send),
         ["delitem"] = ("<id> [count]", (s, a) => Op(s, OpRemoveItem, a)),
         ["zeny"] = ("<amount>", Zeny),
         ["lvl"] = ("<base> [job]", (s, a) => Op(s, OpSetLevel, a)),
@@ -463,6 +464,40 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
         var mail = services.GetRequiredService<MailService>();
         string id = await mail.SendRawAsync(s.Role!.Id, title, title, goods);
         await ReplyAsync(s, $"Mail {id} delivered.");
+    }
+
+    /// <summary>
+    /// Hero Saga: "!enviar Fulano 3 500" gives another character an item (3 = cash, 1 = Zeny) as a system mail attachment,
+    /// so it reaches a role that is offline and is stored by the mail's own transaction. Every GM line is already logged
+    /// with the GM's name ("GM {Name}: {Line}").
+    /// </summary>
+    private async Task Send(GameSession s, string[] args)
+    {
+        if (args.Length < 2) throw new ArgumentException("<personagem> <id|nome do item> [quantidade]");
+        if (services.GetRequiredService<Accounts.RoleStore>().FindByName(args[0]) is not { } role)
+        {
+            await ReplyAsync(s, $"Personagem '{args[0]}' não encontrado.");
+            return;
+        }
+        var rest = args[1..];
+        bool counted = rest.Length > 1 && int.TryParse(rest[^1], out _);
+        int count = counted ? I(rest[^1]) : 1;
+        string itemText = string.Join(' ', counted ? rest[..^1] : rest);
+        long entry = long.TryParse(itemText, out long id) ? id : data.FindItems(itemText).FirstOrDefault().Id;
+        if (entry is <= 0 or > int.MaxValue || Data.Config.ItemConfig.Get(data, entry) is null)
+        {
+            await ReplyAsync(s, $"Item '{itemText}' não encontrado.");
+            return;
+        }
+        if (count <= 0)
+        {
+            await ReplyAsync(s, "A quantidade precisa ser maior que zero.");
+            return;
+        }
+        string itemName = data.ItemName(entry) is { Length: > 0 } named ? named : $"item {entry}";
+        string mailId = await services.GetRequiredService<MailService>().SendRawAsync(role.Id, "Hero Saga",
+            $"Enviado pela equipe Hero Saga: {count}x {itemName}.", [new MailService.Attachment((int)entry, count)], sender: "Hero Saga");
+        await ReplyAsync(s, $"Enviado {count}x {itemName} para {role.Name} pelo correio ({mailId}).");
     }
 
     private Task Zeny(GameSession s, string[] args)
