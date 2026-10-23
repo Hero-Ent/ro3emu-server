@@ -1,4 +1,4 @@
 {
-  "multiplier": 10000,
+  "multiplier": 25,
   "description": "Multiplicador de b\u00F4nus de EXP para o servidor Hero Saga (fase Beta). Exemplo: 0 = sem b\u00F4nus (1x normal), 1 = \u002B1x b\u00F4nus (2x total), 10 = \u002B10x b\u00F4nus (11x total), 50 = \u002B50x b\u00F4nus (51x total), 100 = \u002B100x b\u00F4nus (101x total)."
 }
