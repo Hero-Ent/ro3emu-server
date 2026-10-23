@@ -96,8 +96,7 @@ antes de enviar e commitar, confira e atualize:
 - `-SoLocal`: publica só o canal `test` com versão `X.Y.Z-dev.<data>` (não altera `release-state.json`). Não commitar
   o `channels/test.json` resultante.
 - `-SemCache`: relê o jogo inteiro (se desconfiar do cache).
-- `ATUALIZAR RO3EMUSERVER.cmd`: merge do upstream (aethai/ro3emu-server), recompila, copia o launcher para as duas
-  pastas e oferece rodar o PUBLICAR.
+- `ATUALIZAR RO3EMUSERVER.cmd`: só verifica o upstream (aethai/ro3emu-server); a integração é a skill `upstream-sync`.
 - Site (repositório separado `D:\ro3emu-site`): `iniciar-site.bat` → http://localhost:3000.
 - Arquivos `.cs`/`.md` do repo ficam em CRLF no disco (autocrlf); para editar com ferramentas de substituição exata,
   converta o arquivo para LF antes (o git normaliza, o diff não muda).

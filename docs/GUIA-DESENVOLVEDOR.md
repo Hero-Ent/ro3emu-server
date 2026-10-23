@@ -434,17 +434,19 @@ Use o padrão já usado no repositório: `feat: ...` (novidade), `fix: ...` (cor
 
 ## 14. Trazer correções do projeto original (upstream)
 
-Dois cliques em **`ATUALIZAR RO3EMUSERVER.cmd`**. Ele:
+O Hero Saga é um fork de ethai/ro3emu-server com histórico compartilhado. As novidades deles entram por **merge**,
+depois de revisadas e aprovadas — nunca automaticamente.
 
-1. Busca as correções novas do `aethai/ro3emu-server` e faz merge (guarda suas alterações locais antes);
-2. Recompila servidor, setup e launcher (o launcher vai para `Launcher-Dist` **e** `Launcher-Local`);
-3. Pergunta se quer **gerar a atualização** (chama o `PUBLICAR_ATUALIZACAO.cmd`, que só publica se algo mudou);
-4. Pergunta se quer enviar seus commits para o GitHub (`origin`).
+1. Dois cliques em **ATUALIZAR RO3EMUSERVER.cmd** (somente leitura): busca os commits novos, mostra a lista, simula
+   o merge (lista os arquivos que vão conflitar) e gera .upstream-sync\dossie.md. Não aplica nada.
+2. Peça ao agente **"analisa o upstream"**: ele escreve um relatório em português por grupo/PR (o que é, impacto no
+   Hero Saga, recomendação) e espera a sua aprovação.
+3. Aprovado, ele integra numa branch sync/upstream-AAAAMMDD (em etapas, resolvendo os conflitos sem perder as
+   customizações do Hero Saga), compila, roda os testes e só leva para a main com o seu ok.
 
-Se der conflito no merge, ele avisa: resolva os arquivos marcados no editor, depois `git add` + `git commit`.
+Roteiro completo: .agents/skills/upstream-sync/SKILL.md. Histórico, decisões e pendências: docs/UPSTREAM-SYNC.md.
 
 ---
-
 ## 15. Checklists rápidos
 
 ### Mudei algo no cliente (hooks/tradução) e quero mandar para os jogadores
