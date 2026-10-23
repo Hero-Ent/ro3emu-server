@@ -52,6 +52,10 @@ public sealed class ServerOptions
 
     public string ClusterName { get; set; } = "Hero Saga Ro3";
 
+    /// <summary>Hero Saga: how many database backups (data/backups) to keep. Each is the size of ro3emu.db, so a small
+    /// disk needs fewer than the upstream 20 (the VPS's 40 GB filled up with 2.6 GB copies).</summary>
+    public int BackupKeep { get; set; } = 20;
+
     /// <summary>The server (area) inside the cluster: the login screen shows the cluster name above it.</summary>
     public string AreaName { get; set; } = "Prontera";
 

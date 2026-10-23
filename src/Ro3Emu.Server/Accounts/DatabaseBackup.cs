@@ -5,7 +5,8 @@ using Microsoft.Extensions.Options;
 namespace Ro3Emu.Server.Accounts;
 
 /// <summary>
-/// Copies ro3emu.db to &lt;data&gt;/backups at startup and every 6 hours, keeping the newest 20 (C/D 19).
+/// Copies ro3emu.db to &lt;data&gt;/backups at startup and every 6 hours, keeping the newest 20 (C/D 19; Hero Saga:
+/// <see cref="ServerOptions.BackupKeep"/>).
 /// - **Cut:** one SQLite online backup step reads a single WAL snapshot, so a copy holds exactly the transactions
 ///   committed before it started, however fast the writer advances meanwhile.
 /// - **Atomic:** the copy is written as <c>.partial</c>, checked with <c>PRAGMA quick_check</c> and only then renamed
@@ -16,7 +17,6 @@ namespace Ro3Emu.Server.Accounts;
 public sealed class DatabaseBackup(IOptions<ServerOptions> options, AccountStore accounts, ILogger<DatabaseBackup> log, Diagnostics.ServerMetrics? metrics = null) : BackgroundService
 {
     internal const string Prefix = "ro3emu-", Extension = ".db", PartialExtension = ".partial", CorruptExtension = ".corrupt";
-    private const int Keep = 20;
     private static readonly TimeSpan Interval = TimeSpan.FromHours(6);
     private readonly object _backupGate = new();
     private string? _lastName;
@@ -65,6 +65,10 @@ public sealed class DatabaseBackup(IOptions<ServerOptions> options, AccountStore
     {
         var dir = Directory;
         System.IO.Directory.CreateDirectory(dir);
+        int keep = Math.Max(1, options.Value.BackupKeep);
+        // Hero Saga: room for the new copy first. On a nearly full disk the copy, as big as the database, did not fit
+        // while the oldest backup it would have replaced was still there.
+        foreach (var old in Completed(dir).Skip(keep - 1)) File.Delete(old);
         var target = Path.Combine(dir, NextName());
         var partial = target + PartialExtension;
         var started = Stopwatch.GetTimestamp();
@@ -89,7 +93,7 @@ public sealed class DatabaseBackup(IOptions<ServerOptions> options, AccountStore
         _lastBytes = new FileInfo(target).Length;
         _lastAt = DateTime.UtcNow;
         Interlocked.Increment(ref _backups);
-        foreach (var old in Completed(dir).Skip(Keep)) File.Delete(old);
+        foreach (var old in Completed(dir).Skip(keep)) File.Delete(old);
         log.LogInformation("Database backed up to {Target} ({Bytes} bytes, {Ms:F0} ms)", target, _lastBytes, _lastMs);
         return target;
     }

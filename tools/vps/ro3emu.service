@@ -1,0 +1,21 @@
+[Unit]
+Description=Hero Saga RO3Emu game server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ro3emu-server
+# start_server.sh (na VPS) tem os parametros de producao (PublicHost, DataDir, GM, OpenContent).
+ExecStart=/bin/bash /opt/ro3emu-server/start_server.sh
+Restart=on-failure
+RestartSec=10
+# O servidor fecha o loop e o banco ao receber SIGTERM (mesmo caminho do Ctrl+C).
+KillSignal=SIGTERM
+TimeoutStopSec=60
+LimitNOFILE=65535
+StandardOutput=append:/opt/ro3emu-server/logs/ro3emu.log
+StandardError=append:/opt/ro3emu-server/logs/ro3emu.log
+
+[Install]
+WantedBy=multi-user.target

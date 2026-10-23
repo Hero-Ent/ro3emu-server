@@ -590,7 +590,7 @@ public sealed partial class CombatService
     /// </summary>
     private long ExtraSession(GameSession s, JsonElement row) =>
         _resolving.Value is { } trigger && trigger.OwnerId == s.Role?.Id
-            && GameData.Int(trigger.Row, "_iID") == new SkillConfig(row).Id ? trigger.Id : ++_sessionIds;
+            && new SkillConfig(trigger.Row).Id == new SkillConfig(row).Id ? trigger.Id : ++_sessionIds;
 
     /// <summary>
     /// An extra cast of a SkillConfig row on monsters the caller chose, through the ordinary effect path (damage, kills,
