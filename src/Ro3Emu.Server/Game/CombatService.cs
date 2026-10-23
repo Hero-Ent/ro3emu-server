@@ -580,7 +580,7 @@ public sealed partial class CombatService : IGameTicker
 
     private async Task MonsterAttackAsync(MonsterUnit m, GameSession p)
     {
-        if (m.Dead || m.Hp <= 0 || _buffs.UnitForbidden(m, ForbiddenState.NormalAttack) || GuardianStealthed(p) || !_buffs.CanSeePosition(m, p.Position)) return;
+        if (m.Dead || m.Hp <= 0 || _buffs.UnitForbidden(m, ForbiddenState.NormalAttack) || Stealthed(p) || !_buffs.CanSeePosition(m, p.Position)) return;
         var targetRole = p.Role;
         if (targetRole == null) return;
         long targetScene = p.WorldScene;
@@ -599,12 +599,11 @@ public sealed partial class CombatService : IGameTicker
             && GameData.Int(swingRow, "_iSkillEffectLevel") > 0);
         ScheduleRuntime(m.WorldScene, TimeSpan.FromSeconds(m.Template.HitPointSeconds), async () =>
         {
-            if (m.Dead || m.Hp <= 0 || _buffs.UnitForbidden(m, ForbiddenState.NormalAttack) || GuardianStealthed(p) || p.Dead || p.Role == null || p.SceneLoading || p.WorldScene != m.WorldScene) return;
+            if (m.Dead || m.Hp <= 0 || _buffs.UnitForbidden(m, ForbiddenState.NormalAttack) || Stealthed(p) || p.Dead || p.Role == null || p.SceneLoading || p.WorldScene != m.WorldScene) return;
             if (!ReferenceEquals(p.Role, targetRole) || p.WorldScene != targetScene
                 || p.SceneGeneration != targetGeneration || !ReferenceEquals(p.Attachment, targetLease)
                 || targetLease?.Cancelled == true) return;
             if (MonsterService.Distance(m, p) > m.Template.AttackRange + 2f || !_buffs.CanSeePosition(m, p.Position)) return; // stepped away
-            if (MonsterService.Unseen(m, p)) return; // cloaked before the blow landed (inferred)
             var stats = _character.Stats(p);
             var attacker = MonsterFighter(m);
             var defender = new Fighter(0, 0, 0, 0, p.Progress!.Level, 1) { Def = stats[105], Mdef = stats[106], Flee = stats[110], ResCri = stats[112] };

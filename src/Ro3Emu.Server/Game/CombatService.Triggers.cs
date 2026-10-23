@@ -20,7 +20,6 @@ public sealed partial class CombatService
         _buffs.Expired.Add(BuffExpiredAsync);
         TakenAsync.Add(HitTakenTriggersAsync);
         DealtAsync.Add(DamageDealtTriggersAsync);
-        WireStealth();
     }
 
     private bool TriggerReady(long holder, SkillMechanics.BuffTrigger trigger)

@@ -77,6 +77,7 @@ namespace Ro3Emu.ClientHooks
                 LuaPatches.Tick();
                 PassChallenges.Tick();
                 PassButton.Tick();
+                TitleButton.Tick();
             }
             catch (Exception e)
             {
