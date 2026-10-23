@@ -18,7 +18,7 @@ public sealed partial class TerritoryWarsService
     public List<Action<long, long, bool>> SiegeSettled { get; } = new();
     /// <summary>After a committed territory battle settlement, per loaded participant: role and round (1 Stronghold,
     /// 2 and later Regional Capital). Listeners post their work.</summary>
-    public List<Action<long, int>> BattleSettled { get; } = new();
+    public List<Action<long, int>> BattleSettled { get; } = [];
 
     public sealed class SiegeRunState
     {
