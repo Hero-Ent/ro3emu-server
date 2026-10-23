@@ -53,7 +53,7 @@ namespace Ro3Emu.ClientHooks
         {
             _requestCallback = callback;
             _requestArray = array;
-            body = body ?? new byte[0];
+            body = body ?? Array.Empty<byte>();
             var frame = new byte[8 + body.Length];
             BitConverter.GetBytes(cmd).CopyTo(frame, 0);
             BitConverter.GetBytes(0).CopyTo(frame, 4);

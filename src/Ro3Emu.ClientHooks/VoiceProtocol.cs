@@ -67,7 +67,7 @@ namespace Ro3Emu.ClientHooks
         /// <summary>One frame around <paramref name="payload"/>.</summary>
         public static byte[] Frame(byte type, byte[] payload)
         {
-            payload = payload ?? new byte[0];
+            payload = payload ?? Array.Empty<byte>();
             if (payload.Length > MaxPayload) throw new ArgumentException("voice frame payload too long");
             var frame = new byte[HeaderSize + payload.Length];
             frame[0] = (byte)'V';

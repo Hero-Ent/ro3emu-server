@@ -18,13 +18,26 @@ namespace Ro3Emu.ClientHooks
         public const int FrameSamples = 320;
 
         /// <summary>Gains from the client's volume sliders (GME scale: 100 = unchanged); set from the main thread.</summary>
-        public static volatile float MicGain = 1f, SpeakerGain = 1f;
+        public static float MicGain { get => _micGain; set => _micGain = value; }
+
+        /// <summary>See <see cref="MicGain"/>.</summary>
+        public static float SpeakerGain { get => _speakerGain; set => _speakerGain = value; }
+
+        private static volatile float _micGain = 1f, _speakerGain = 1f;
 
         /// <summary>The game's Master volume (0..1, 0 when muted or minimized with "Mute When Minimized"; VoiceSettings).</summary>
-        public static volatile float OutputScale = 1f;
+        public static float OutputScale { get => _outputScale; set => _outputScale = value; }
+
+        private static volatile float _outputScale = 1f;
 
         /// <summary>Counters for the 10 s stats line (VoiceClient): a speaker's buffer ran dry while playing / overflowed.</summary>
-        public static int Underruns, Overflows;
+        private static int _underruns, _overflows;
+
+        /// <summary>Reads and resets the dry-buffer counter.</summary>
+        public static int TakeUnderruns() => Interlocked.Exchange(ref _underruns, 0);
+
+        /// <summary>Reads and resets the overflow counter.</summary>
+        public static int TakeOverflows() => Interlocked.Exchange(ref _overflows, 0);
 
         /// <summary>The longest a capture or playback thread sleeps without a buffer-done signal (a lost signal costs at most this).</summary>
         private const int WakeMs = 10;
@@ -135,7 +148,7 @@ namespace Ro3Emu.ClientHooks
                         _speakers[id] = speaker = new Speaker();
                     }
                     speaker.Frames.Enqueue(pcm);
-                    while (speaker.Frames.Count > MaxFrames) { speaker.Frames.Dequeue(); Interlocked.Increment(ref Overflows); }
+                    while (speaker.Frames.Count > MaxFrames) { speaker.Frames.Dequeue(); Interlocked.Increment(ref _overflows); }
                 }
             }
 
@@ -160,7 +173,7 @@ namespace Ro3Emu.ClientHooks
                     {
                         if (!speaker.Playing && speaker.Frames.Count >= StartFrames) speaker.Playing = true;
                         if (!speaker.Playing) continue;
-                        if (speaker.Frames.Count == 0) { speaker.Playing = false; Interlocked.Increment(ref Underruns); continue; } // ran dry: buffer again
+                        if (speaker.Frames.Count == 0) { speaker.Playing = false; Interlocked.Increment(ref _underruns); continue; } // ran dry: buffer again
                         var frame = speaker.Frames.Dequeue();
                         for (int i = 0; i < FrameSamples; i++) _sum[i] += frame[i];
                     }
@@ -206,7 +219,8 @@ namespace Ro3Emu.ClientHooks
                 capture._running = true;
                 capture._thread = new Thread(capture.Run) { IsBackground = true, Name = "Ro3Emu voice capture" };
                 capture._thread.Start();
-                Winmm.waveInStart(capture._device);
+                int started = Winmm.waveInStart(capture._device);
+                if (started != 0) Debug.LogWarning("[Ro3Emu.Voice] microphone start refused (" + started + ")");
                 Debug.Log("[Ro3Emu.Voice] microphone on");
                 return capture;
             }
@@ -216,7 +230,7 @@ namespace Ro3Emu.ClientHooks
                 var bytes = new byte[FrameSamples * 2];
                 while (_running)
                 {
-                    Winmm.WaitForSingleObject(_done, WakeMs);
+                    _ = Winmm.WaitForSingleObject(_done, WakeMs); // a timeout is the normal wake-up
                     for (int i = 0; i < Buffers && _running; i++)
                     {
                         var header = _buffers.Header(i);
@@ -233,7 +247,8 @@ namespace Ro3Emu.ClientHooks
                                 catch (Exception e) { Debug.LogWarning("[Ro3Emu.Voice] capture: " + e.Message); }
                         }
                         WaveBuffers.ClearDone(header);
-                        if (_running) Winmm.waveInAddBuffer(_device, header, WaveBuffers.HeaderSize);
+                        int queued = _running ? Winmm.waveInAddBuffer(_device, header, WaveBuffers.HeaderSize) : 0;
+                        if (queued != 0) Debug.LogWarning("[Ro3Emu.Voice] microphone buffer refused (" + queued + ")");
                     }
                 }
                 Release(); // on this thread: the main thread never waits for the device
@@ -249,10 +264,11 @@ namespace Ro3Emu.ClientHooks
 
             private void Release()
             {
-                Winmm.waveInStop(_device);
-                Winmm.waveInReset(_device); // returns every queued buffer
-                for (int i = 0; i < Buffers; i++) Winmm.waveInUnprepareHeader(_device, _buffers.Header(i), WaveBuffers.HeaderSize);
-                Winmm.waveInClose(_device);
+                // Best effort: the device is going away, a failure here has nothing left to undo.
+                _ = Winmm.waveInStop(_device);
+                _ = Winmm.waveInReset(_device); // returns every queued buffer
+                for (int i = 0; i < Buffers; i++) _ = Winmm.waveInUnprepareHeader(_device, _buffers.Header(i), WaveBuffers.HeaderSize);
+                _ = Winmm.waveInClose(_device);
                 _buffers.Free();
                 Winmm.CloseHandle(_done);
                 Debug.Log("[Ro3Emu.Voice] microphone off");
@@ -304,7 +320,7 @@ namespace Ro3Emu.ClientHooks
                 for (int i = 0; i < Buffers; i++) Write(i, pcm, bytes); // silence to start the queue
                 while (_running)
                 {
-                    Winmm.WaitForSingleObject(_done, WakeMs);
+                    _ = Winmm.WaitForSingleObject(_done, WakeMs); // a timeout is the normal wake-up
                     for (int i = 0; i < Buffers && _running; i++)
                     {
                         if (!WaveBuffers.IsDone(_buffers.Header(i))) continue;
@@ -324,7 +340,8 @@ namespace Ro3Emu.ClientHooks
                 }
                 Marshal.Copy(bytes, 0, _buffers.Data(index), bytes.Length);
                 WaveBuffers.ClearDone(_buffers.Header(index));
-                Winmm.waveOutWrite(_device, _buffers.Header(index), WaveBuffers.HeaderSize);
+                int queued = Winmm.waveOutWrite(_device, _buffers.Header(index), WaveBuffers.HeaderSize);
+                if (queued != 0) Debug.LogWarning("[Ro3Emu.Voice] playback buffer refused (" + queued + ")");
             }
 
             /// <summary>Stops playback; the playback thread then frees the device. Never blocks the caller.</summary>
@@ -336,9 +353,10 @@ namespace Ro3Emu.ClientHooks
 
             private void Release()
             {
-                Winmm.waveOutReset(_device);
-                for (int i = 0; i < Buffers; i++) Winmm.waveOutUnprepareHeader(_device, _buffers.Header(i), WaveBuffers.HeaderSize);
-                Winmm.waveOutClose(_device);
+                // Best effort: the device is going away, a failure here has nothing left to undo.
+                _ = Winmm.waveOutReset(_device);
+                for (int i = 0; i < Buffers; i++) _ = Winmm.waveOutUnprepareHeader(_device, _buffers.Header(i), WaveBuffers.HeaderSize);
+                _ = Winmm.waveOutClose(_device);
                 _buffers.Free();
                 Winmm.CloseHandle(_done);
                 Debug.Log("[Ro3Emu.Voice] playback off");
@@ -348,9 +366,9 @@ namespace Ro3Emu.ClientHooks
         /// <summary>WAVEHDRs and their data in unmanaged memory (the driver keeps the pointers while a buffer is queued).</summary>
         private sealed class WaveBuffers
         {
-            public static readonly int HeaderSize = Marshal.SizeOf(typeof(WaveHeader));
-            private static readonly int FlagsOffset = (int)Marshal.OffsetOf(typeof(WaveHeader), "Flags");
-            private static readonly int RecordedOffset = (int)Marshal.OffsetOf(typeof(WaveHeader), "BytesRecorded");
+            public static readonly int HeaderSize = Marshal.SizeOf<WaveHeader>();
+            private static readonly int FlagsOffset = (int)Marshal.OffsetOf<WaveHeader>("Flags");
+            private static readonly int RecordedOffset = (int)Marshal.OffsetOf<WaveHeader>("BytesRecorded");
             private const int Done = 0x1; // WHDR_DONE
 
             private readonly IntPtr[] _headers;

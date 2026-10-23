@@ -74,7 +74,7 @@ namespace Ro3Emu.ClientHooks
                 case "drag": Drag(new Vector2(float.Parse(p[1]), float.Parse(p[2])), new Vector2(float.Parse(p[3]), float.Parse(p[4]))); break;
                 case "mousedrag": MouseDrag(new Vector2(float.Parse(p[1]), float.Parse(p[2])), new Vector2(float.Parse(p[3]), float.Parse(p[4]))); break;
                 case "simdrag": SimDrag(new Vector2(float.Parse(p[1]), float.Parse(p[2])), new Vector2(float.Parse(p[3]), float.Parse(p[4]))); break;
-                case "key": PressKey((Key)Enum.Parse(typeof(Key), p[1], true)); break;
+                case "key": PressKey(Enum.Parse<Key>(p[1], true)); break;
                 case "dump": DumpByName(p[1], p.Length > 2 ? int.Parse(p[2]) : 3); break;
                 case "find": Find(p[1]); break;
                 case "actions": Actions(p.Length > 1 ? p[1] : ""); break;

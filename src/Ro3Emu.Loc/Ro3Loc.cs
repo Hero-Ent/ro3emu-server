@@ -139,7 +139,7 @@ namespace Ro3Emu.Loc
                 if (EnglishOverrides.TryGetValue(text, out var replaced)) return replaced;
                 foreach (var kvp in EnglishOverrides)
                 {
-                    if (kvp.Key.Length > 3 && text.IndexOf(kvp.Key, StringComparison.Ordinal) >= 0)
+                    if (kvp.Key.Length > 3 && text.Contains(kvp.Key, StringComparison.Ordinal))
                     {
                         text = text.Replace(kvp.Key, kvp.Value);
                     }
@@ -187,7 +187,7 @@ namespace Ro3Emu.Loc
         {
             string norm = Normalize(text);
             if (!ReferenceEquals(norm, text) && _map.TryGetValue(norm, out var en)) return en;
-            if (text.IndexOf('<') >= 0 || text.IndexOf('\n') >= 0) return Segments(text);
+            if (text.Contains('<') || text.Contains('\n')) return Segments(text);
             return MatchTemplate(text) ?? CjkRuns(text);
         }
 
@@ -319,7 +319,7 @@ namespace Ro3Emu.Loc
                 while ((line = reader.ReadLine()) != null)
                 {
                     int tab = line.IndexOf('\t');
-                    if (tab <= 0 || line[0] == '#' || !long.TryParse(line.Substring(0, tab), out long sid)) continue;
+                    if (tab <= 0 || line[0] == '#' || !long.TryParse(line.AsSpan(0, tab), out long sid)) continue;
                     _sids[sid] = Unescape(line.Substring(tab + 1));
                 }
             }

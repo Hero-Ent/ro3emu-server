@@ -95,7 +95,7 @@ namespace Ro3Emu.ClientHooks
         private static void RequestTicket(string why)
         {
             _ticketAskedAt = Clock.ElapsedMilliseconds;
-            SingletonMonoBehaviour<NW_CBBNetworkManager>.Instance.Obf_jBd(VoiceProtocol.TicketRequestMsgId, new byte[0]);
+            SingletonMonoBehaviour<NW_CBBNetworkManager>.Instance.Obf_jBd(VoiceProtocol.TicketRequestMsgId, Array.Empty<byte>());
             Debug.Log("[Ro3Emu.Voice] " + why + ": ticket requested");
         }
 
@@ -362,7 +362,7 @@ namespace Ro3Emu.ClientHooks
             _lastStats = Clock.ElapsedMilliseconds;
             int captured = Interlocked.Exchange(ref _captured, 0), peak = Interlocked.Exchange(ref _peak, 0);
             int dropped = Interlocked.Exchange(ref _linkDropped, 0), heard = Interlocked.Exchange(ref _heard, 0);
-            int dry = Interlocked.Exchange(ref VoiceAudio.Underruns, 0), over = Interlocked.Exchange(ref VoiceAudio.Overflows, 0);
+            int dry = VoiceAudio.TakeUnderruns(), over = VoiceAudio.TakeOverflows();
             if (captured == 0 && heard == 0 && dry == 0) return;
             Debug.Log("[Ro3Emu.Voice] stats 10s: mic " + captured + " frames (peak " + peak + ", auto gain x"
                 + VoiceAudio.Agc.Gain.ToString("0.0", CultureInfo.InvariantCulture) + "), not sent " + dropped + ", heard " + heard
