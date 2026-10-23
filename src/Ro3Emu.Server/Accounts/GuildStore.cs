@@ -63,6 +63,13 @@ public sealed class GuildStore(AccountStore accounts)
         public long NextBroadEmailMs { get; set; }
         public int BroadEmailCount { get; set; }
         public long BroadEmailDay { get; set; }
+        /// <summary>The master's impeachment (32235/32236, GuildService.Impeach): its initiator (0 = none), deadline (unix
+        /// ms), responses needed, who responded (the initiator first), and when the next may start (unix ms).</summary>
+        public long ImpeachOwner { get; set; }
+        public long ImpeachEndMs { get; set; }
+        public int ImpeachNeed { get; set; }
+        public List<long> ImpeachResponders { get; set; } = new();
+        public long NextImpeachMs { get; set; }
         /// <summary>32228 journal rows (GuildEventData bytes) to append with this state's next save; not part of the state.</summary>
         internal List<byte[]> PendingEvents { get; } = new();
     }
