@@ -1,5 +1,12 @@
 # Documentation
 
+## Guides: playing
+
+- [Play on your own PC](guide/play.md): RO3Emu.exe, its commands, what it changes in the game folder
+- [Play with friends and host a server](guide/hosting.md): Windows and Linux hosting, ports, backups, hardware
+- [What works](features.md): every playable system
+- [For developers](development.md): running from source, layout, tests, releases, architecture
+
 ## Guides: running a server
 
 - [GM access](guide/gm-access.md): who may use GM commands (`Ro3Emu:GmAccounts`)
