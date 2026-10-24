@@ -26,6 +26,7 @@ show is playable from day one, without season or server-day gates ([details](gui
 - cards (collection stars, insert rules, Flash cards, card effects)
 - Soul Echo, pets and the hatchery, mounts, wardrobe, totems, job items
 - achievements, codex, Growth Classroom, Seven-Day Goal, profile card
+- titles, Paragon (Astral Level), the Starshatter ritual
 
 </td><td valign="top" width="50%">
 
@@ -39,6 +40,7 @@ show is playable from day one, without season or server-day gates ([details](gui
 **Guilds**
 - management, journal, recruitment, founding, guild home
 - bonfire party, caravan, black market, Ilmata challenge
+- group mail, call to arms, impeachment, merging two guilds
 - Guild League with elite rosters and capture rings
 - Territory Wars and the castle siege
 
@@ -50,6 +52,8 @@ show is playable from day one, without season or server-day gates ([details](gui
 - Monster Hunt, Rift Crisis, Survivor Battle, Wedding Crashers,
   Dragon Coffin Island, Mock Battle (40 vs 40), Hunting Challenge,
   timed events, daily activities, leaderboards
+- Survivor Battle careers, landing together, spectating, shops, encounters,
+  the emote wheel and weekly tasks
 
 </td></tr>
 </table>
@@ -59,9 +63,8 @@ show is playable from day one, without season or server-day gates ([details](gui
   (bubbles, bells, rhythm stages) are plain area attacks, and knockback does not move players yet.
 - **Mock Battle extras:** the arena's monsters and the 40-player team frame.
 - **War of Emperium extras:** commander tools, siege weapons and vehicles.
-- **Survivor Battle extras:** follow, spectate, shop, Kafra adventure.
-- **Guild extras:** merging, impeachment, group mail.
-- **Smaller missing pieces:** shop gifting, titles, Paragon (Astral Level), and some stages of the story dungeons
+- **Survivor Battle spectating at a distance:** a watched teammate far away on the island is not visible yet.
+- **Smaller missing pieces:** shop gifting, and some stages of the story dungeons
   that are still simplified.
 - **Tavern and guild voice:** only party voice is implemented.
 
