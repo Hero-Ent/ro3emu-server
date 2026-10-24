@@ -28,6 +28,7 @@ MAX_WORKERS = 40
 # Nunca enviados para producao (relativos a patch-server/repo).
 LOCAL_ONLY = [
     "channels/test.json",
+    "channels/android-test.json",
     "manifests/*-local.json.zst",
     "manifests/*-local.*.json.zst",
     "manifests/*-dev.*.json.zst",
@@ -43,6 +44,8 @@ def get_content_type(key):
         return "application/zstd"
     if key.endswith(".exe"):
         return "application/vnd.microsoft.portable-executable"
+    if key.endswith(".apk"):
+        return "application/vnd.android.package-archive"
     if key.endswith(".zip"):
         return "application/zip"
     return "application/octet-stream"

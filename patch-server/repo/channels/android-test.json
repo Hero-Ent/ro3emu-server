@@ -1,0 +1,8 @@
+{
+  "channel": "android-test",
+  "version": "1.1.1-android1-local",
+  "manifest": "manifests/1.1.1-android1-local.json.zst",
+  "manifestSha256": "7b8892048e016eb873e56f7485ceb9e9fdedad3fdb4fd5d4a38aabb4e1857f08",
+  "published": "2026-10-23T19:48:07.0632936+00:00",
+  "signature": "ML9SHtz05LyejXWAScL0ePdlpWVZ674a3OwB2UYohqOD81qUNTOWnCFKkN9kZL2hzjpxaN/QBzfFC0Oxke9\u002BszhWwOq1UZsFH/bU7F/tVCX4UZR7rxLJelFsbd/RguEZQBoiXg4KAE3rlHi2LPklhiQmAQpdza50napyB1bqFgqgOhEYhs3WjEjiXgmbox3uKbg6TB5xJ17wqH0b7dgFNTeMRudKtGTHmmOPPPfKd9T9ppbiXwPWgq0Su2xV\u002BeKcxusEw4d8oeB7LsEiqpmNefRjYtfp90DPKqswsyQWe6LCtNAkfIaq/Ua/\u002BLK6wxWdkhZcVsCF3ICIKCMTO4/GrBrzfBrjXgFOlUu93Me2M7qViKDWddxwQGQk9iHUqeqAbzAAYv0exEAscz31IxICo22yDDMGuDgjbjBetSFYZ7k/TMH/md7OU/cUV1y\u002BEDebZRa2E\u002BnpTgRr2Lw9mMD\u002BdBD0edHdseFj4mFYd21sVzjQzeyBDV73lA5AjHSxdKLg"
+}

@@ -1,0 +1,15 @@
+{
+  "channel": "android-live",
+  "version": "1.1.1-android2",
+  "manifest": "manifests/1.1.1-android2.json.zst",
+  "manifestSha256": "6ae7f439d37d7ce27e28bc95f4e6012960e23e71917a24ac7a69d3acf1173a01",
+  "published": "2026-10-24T03:21:46.7247786+00:00",
+  "apk": {
+    "version": "1.0.1",
+    "minVersion": "1.0.1",
+    "url": "apk/1.0.1/HeroSaga.apk",
+    "sha256": "b764c0b27b69ed2250d5c8e0cbdb1fcd407c565db332269ca3a05b86cd479cf2",
+    "size": 71595805
+  },
+  "signature": "kYzpe5yu3PrgFkzGDn9vXEQe\u002BcLYW7bHsG\u002BVy/tSstCyfgbi1XSoHEoc7MhKxIA5MB8IBBBB\u002B5aeo9JJphtS6obBm9LOEr2wABa1pP1zBlL2YiihSGYGg\u002B\u002BpFFP3Id\u002B/zXM2GpaEEdfLDm6NAyp0RkSJvlyQn1Liav9F7synTJ21yRz\u002B1OzqDc4VpTNsi0r9KSsvswIAySWdDxE9ZfRdZC6AuAILamPHeo6tM9Y38gZSXpf7\u002BqDm7ZtAq2SoftIpcSZLl9mbX4SGkXunEUJWlQnEcnFLfa0kP/c4GZpeGYJrBco3azctwEN6GVqiV9ybdsv\u002BExrcuukfiIeCg6KtCWH9Wc5EeAL5\u002Bgbe\u002Bz0I/kXAJez9vjnMyugeH/XkYdJDzUcoooc2IIIsWx6iWBdsECfzkkGlPF14lSCjHTuazOiJ80/9T413ZENCJxPe6l8SXc84UU8OBtKW2CU\u002BtShp1SYTrBL3PU3xTtW0OOroCm85wHrgsg2i5KqQ/CN1jdqB"
+}

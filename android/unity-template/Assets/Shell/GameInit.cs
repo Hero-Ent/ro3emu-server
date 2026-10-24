@@ -10,9 +10,19 @@ namespace Ro3Android
     /// </summary>
     public static class GameInit
     {
+        /// <summary>The game data lives outside the APK: the updater (android\updater, an Android-only plugin, hence the
+        /// reflection) brings it up to date first and then starts the game.</summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void Boot()
+        {
+            var updater = Type.GetType("Ro3Android.Updater.UpdateScreen, Ro3Android.Updater");
+            if (updater == null) { StartGame(); return; }
+            var screen = new GameObject("Updater").AddComponent(updater);
+            updater.GetField("OnReady").SetValue(screen, (Action)StartGame);
+        }
+
         /// <summary>level0: an EventSystem for the launcher's buttons and a GameObject carrying Ro3Startup, which loads
         /// the launcher prefab from the VFS.</summary>
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void StartGame()
         {
             var eventSystem = Type.GetType("UnityEngine.EventSystems.EventSystem, UnityEngine.UI");

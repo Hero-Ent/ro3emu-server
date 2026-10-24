@@ -23,6 +23,29 @@ namespace Ro3Android.Hooks
         private static readonly HashSet<string> Untouched = new HashSet<string>();
         private static string _cacheDir;
 
+        private static StreamWriter _trace;
+        private static bool _traceChecked;
+        private static readonly Stopwatch TraceClock = Stopwatch.StartNew();
+
+        /// <summary>With a file named vfs-trace in the app's data folder, every bundle load is appended to bundle-access.log
+        /// ("&lt;seconds&gt; bundle &lt;path&gt; &lt;offset&gt;"), next to libfsni's vfs-access.log: which data each part of the game
+        /// needs, for the updater's on-demand download.</summary>
+        private static void Trace(string path, ulong offset)
+        {
+            if (!_traceChecked)
+            {
+                _traceChecked = true;
+                try
+                {
+                    if (File.Exists(Path.Combine(Application.persistentDataPath, "vfs-trace")))
+                        _trace = new StreamWriter(new FileStream(Path.Combine(Application.persistentDataPath, "bundle-access.log"), FileMode.Append, FileAccess.Write, FileShare.ReadWrite)) { AutoFlush = true };
+                }
+                catch (IOException) { }
+            }
+            if (_trace == null) return;
+            lock (_trace) _trace.WriteLine($"{(long)TraceClock.Elapsed.TotalSeconds} bundle {path} {offset}");
+        }
+
         public static AssetBundle LoadFromFile(string path) => LoadFromFile(path, 0u, 0ul);
         public static AssetBundle LoadFromFile(string path, uint crc) => LoadFromFile(path, crc, 0ul);
 
@@ -45,6 +68,7 @@ namespace Ro3Android.Hooks
         /// bundle already targets Android or is not a UnityFS bundle (the engine then reports whatever is wrong).</summary>
         private static string Retargeted(string path, ulong offset)
         {
+            Trace(path, offset);
             string key = null;
             try
             {

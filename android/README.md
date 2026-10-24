@@ -128,3 +128,55 @@ a VPS. `127.0.0.1` no celular é o próprio celular.
 4. Suba o servidor escutando na rede, com o host que o celular alcança (e libere as portas no Firewall do Windows):
    `--Ro3Emu:PublicHost=192.168.1.100` no lugar do `127.0.0.1` do `RODAR_LOCAL.cmd`.
 5. Logs: `adb logcat -s Unity fsni` (tudo do port tem o prefixo `[Ro3Android]`).
+
+## Atualização automática (auto patcher)
+
+O APK (~100 MB) não leva os dados do jogo. Na primeira abertura, a tela de atualização (`updater\UpdateScreen.cs`) baixa
+o `StreamingAssets` (~11,4 GB comprimidos; 20 GB no aparelho, sem os vídeos) do mesmo repositório de patches do PC
+(`patch-server\repo`, no R2 em produção). Depois, a cada abertura, ela só lê o canal (1 KB) e baixa o que mudou.
+
+- **Formato**: o mesmo do launcher de PC (`src\Ro3Emu.Patcher`): canal → manifesto → chunks FastCDC/zstd por SHA-256.
+  O canal Android reaproveita os chunks do `ro3_Data/StreamingAssets` da versão de PC (nada é reenviado ao R2), soma o
+  `build\vfs-android` (bundles já convertidos) e deixa de fora `VFS/Videos` (não há player de vídeo no Android).
+- **Instalação arquivo por arquivo** (`updater\Installer.cs`): cada arquivo é montado em `.ro3patch/staging`, conferido
+  pelo SHA-256 e só então posto no lugar. Se o download cair ou o Android matar o app, o que já terminou fica, e a
+  próxima abertura continua de onde parou. O jogo só abre quando o estado (`.ro3patch/state.json`) diz "completo".
+  Chunks que já estão no aparelho (outras partes de um arquivo alterado) são copiados em vez de baixados.
+- **Celular**: confere o espaço livre antes de começar; pede confirmação antes de downloads grandes ou em dados móveis;
+  um serviço em primeiro plano (`unity-template\Assets\Plugins\Android\UpdateService.java`) mantém o download rodando
+  com a tela bloqueada, com o progresso na notificação; mostra velocidade e tempo restante; botão "Verificar todos os
+  arquivos" (reparo, que também apaga arquivos que nenhuma versão tem).
+- **Versão do app**: o canal diz qual APK o conteúdo precisa (`apk.minVersion`). Código C# novo (DLLs, hooks, shaders)
+  só chega por APK novo, já que o IL2CPP o compila dentro do `libil2cpp.so`. Lua, mapas e assets chegam pelo patcher.
+  APK mais velho que o mínimo: a tela pede pra baixar o novo (link do canal). Mais velho que o último: só avisa.
+- **Assinatura**: o canal é assinado (RSA-3072) com `android-signing-key.pem` (raiz do repositório, fora do git: **faça
+  backup**; sem ela, só um APK novo com outra chave). O APK leva a metade pública e recusa canal adulterado.
+- **Chave do APK**: todo APK publicado é assinado com `android-release.keystore` (senha em
+  `android-release.keystore.pass`; os dois na raiz, fora do git, criados uma vez por `new-keystore.ps1`). O Android só
+  aceita atualizar um app assinado pela mesma chave: sem ela, cada jogador teria que desinstalar e baixar os 20 GB de
+  novo. **Faça backup dos dois arquivos junto com o `android-signing-key.pem`.**
+- Sem `-PatchRepo` no `setup-project.ps1`, a tela não aparece e o app usa o que o `push-data.ps1` copiou.
+
+```powershell
+# teste na rede local: o celular baixa do PC (chunks que faltam aqui vêm da produção, só leitura, e ficam guardados)
+.\android\publish-android.ps1                                   # canal android-test, a partir do cliente -local
+.\android\serve-repo.ps1                                        # http://<IP do PC>:8790/ (libere a porta 8790 no Firewall)
+.\android\setup-project.ps1 -Server http://<IP>:5380 -PatchRepo http://<IP>:8790/ -PatchChannel android-test
+.\android\build-apk.ps1 -Version 1.0.0 -Install
+
+# produção (app novo: suba a versão a cada APK publicado; a 1.0.1 é a primeira com a chave definitiva)
+.\android\setup-project.ps1 -Server http://45.130.137.89:5380 -PatchRepo https://patch.herosaga.com.br/
+.\android\build-apk.ps1 -Release -Version 1.0.2                 # assinado com android-release.keystore
+.\android\publish-android.ps1 -Channel android-live -Apk -ApkVersion 1.0.2 [-ApkMin 1.0.2]
+.\ENVIAR_ATUALIZACAO.cmd --simular                              # ensaio: o que sobe (precisa do r2-credentials.txt)
+.\ENVIAR_ATUALIZACAO.cmd                                        # sobe chunks novos, manifesto, APK e, por último, os canais
+```
+
+- Os jogadores baixam o app em `https://patch.herosaga.com.br/apk/<versão>/HeroSaga.apk` (o canal aponta pro último).
+  `-ApkMin` obriga quem tem um APK mais velho a instalar o novo antes de jogar; sem ele, o app só avisa.
+- Conteúdo novo (um mapa, Lua): publique o cliente de PC como sempre e rode `publish-android.ps1 -Channel android-live`
+  e o `ENVIAR_ATUALIZACAO.cmd`, sem APK novo. Na próxima abertura, cada celular baixa só o que mudou.
+- O `ENVIAR_ATUALIZACAO.cmd` reenvia todos os canais: confira que o `channels/live.json` local é o mesmo da CDN antes,
+  ou os jogadores de PC voltam pra versão que estiver no arquivo local. Arquivos de teste na pasta
+do app (`/sdcard/Android/data/com.ro3emu.client/files/`): `patch-repo` e `patch-channel` trocam o repositório e o canal;
+`patch-verify` força a verificação completa na próxima abertura.

@@ -55,8 +55,35 @@ namespace Ro3Android.Editor
                 EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android);
 
             PlayerSettings.companyName = "RO3Emu";
-            PlayerSettings.productName = "RO3Emu";
+            // The name under the icon. The package id below must never change: Android ties the app's data folder (the
+            // 20 GB of game data) and updates to it.
+            PlayerSettings.productName = "Hero Saga";
             PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, "com.ro3emu.client");
+            // The PC launcher's icon (src\Ro3Emu.Launcher\app.ico, 256 px), for every density.
+            var icon = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Shell/Icon/app-icon.png");
+            if (icon != null) PlayerSettings.SetIconsForTargetGroup(BuildTargetGroup.Unknown, new[] { icon });
+            // -ro3Version x.y.z (build-apk.ps1 -Version): the updater compares it with the channel's apk.minVersion.
+            var args = Environment.GetCommandLineArgs();
+            int at = Array.IndexOf(args, "-ro3Version");
+            if (at >= 0 && at + 1 < args.Length && Version.TryParse(args[at + 1], out var version))
+            {
+                PlayerSettings.bundleVersion = args[at + 1];
+                PlayerSettings.Android.bundleVersionCode = version.Major * 10000 + version.Minor * 100 + Math.Max(0, version.Build);
+            }
+            Debug.Log($"[Ro3Android] app version {PlayerSettings.bundleVersion} ({PlayerSettings.Android.bundleVersionCode})");
+            // -ro3Keystore <file> -ro3KeystorePass <file with the password> (build-apk.ps1): every APK players get is signed
+            // with the same key, or Android refuses it as an update. Without it Unity signs with this PC's debug key.
+            int ks = Array.IndexOf(args, "-ro3Keystore"), pass = Array.IndexOf(args, "-ro3KeystorePass");
+            PlayerSettings.Android.useCustomKeystore = ks >= 0 && pass >= 0;
+            if (PlayerSettings.Android.useCustomKeystore)
+            {
+                string password = File.ReadAllText(args[pass + 1]).Trim();
+                PlayerSettings.Android.keystoreName = args[ks + 1];
+                PlayerSettings.Android.keystorePass = password;
+                PlayerSettings.Android.keyaliasName = "herosaga";
+                PlayerSettings.Android.keyaliasPass = password;
+            }
+            Debug.Log($"[Ro3Android] signing: {(PlayerSettings.Android.useCustomKeystore ? PlayerSettings.Android.keystoreName : "debug key")}");
             PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android, ScriptingImplementation.IL2CPP);
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
             PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel26;

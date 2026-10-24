@@ -12,6 +12,10 @@ if (args.Length < 2)
           release <client dir> <server url> <gate_rsa_public.pem> <repo dir> <version> [channel] [zstd level] [--no-cache]
                                                 publish the client patched for that server for Ro3Emu.Launcher
           release-launcher <repo dir> <channel> <Ro3EmuLauncher.exe> <version>
+          release-android <repo dir> <base version> <version> <channel> --key <pem> [--overlay <dir>] [--exclude <glob>]...
+                          [--apk <file> --apk-version <x.y.z>] [--apk-min <x.y.z>]
+                                                publish the Android app's content from a PC release (android\updater)
+          android-key <pem>                     create the Android channel signing key; prints its public half
           init-repo <repo dir> [channel] [version]
                                                 initialize a clean patch repository structure
           scan    <client dir> <text>...        list string literals in the client DLLs
@@ -48,6 +52,10 @@ try
             var withLauncher = await Ro3Emu.Patcher.Publisher.PublishLauncherAsync(args[1], args[2], args[3], args[4]);
             Console.WriteLine($"channel {withLauncher.Channel}: game {withLauncher.Version}, launcher {withLauncher.Launcher!.Version}");
             return 0;
+        case "release-android":
+            return await AndroidRelease.PublishAsync(args);
+        case "android-key":
+            return AndroidRelease.Key(args[1]);
         case "init-repo":
             if (args.Length < 2) throw new ArgumentException("init-repo needs <repo dir> [channel] [version]");
             return await InitRepo(args[1], args.Length > 2 ? args[2] : "test", args.Length > 3 ? args[3] : "1.0.0");

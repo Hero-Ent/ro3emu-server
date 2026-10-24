@@ -25,6 +25,11 @@ public sealed class PublishOptions
     /// unchanged files (the other server's variant, the next release) skips reading them. Never inside the repository.
     /// </summary>
     public string? CacheFile { get; init; }
+    /// <summary>
+    /// Files taken as they are from another release (their chunks are already in the repository), e.g. the Android
+    /// release reusing the PC release's StreamingAssets. A file of <see cref="Files"/> with the same path replaces one.
+    /// </summary>
+    public IReadOnlyList<ManifestFile> Inherited { get; init; } = [];
 }
 
 public sealed record PublishResult(Manifest Manifest, ChannelInfo Channel, int NewChunks, long NewStoredBytes, int ReusedChunks);
@@ -79,7 +84,8 @@ public static class Publisher
         {
             throw new ArgumentException("Duplicate destination paths: " + string.Join(", ", duplicates));
         }
-        if (!options.Files.Any(f => string.Equals(f.Key, options.LaunchExe, StringComparison.OrdinalIgnoreCase)))
+        if (!options.Files.Any(f => string.Equals(f.Key, options.LaunchExe, StringComparison.OrdinalIgnoreCase))
+            && !options.Inherited.Any(f => string.Equals(f.Path, options.LaunchExe, StringComparison.OrdinalIgnoreCase)))
         {
             throw new ArgumentException($"The launch exe '{options.LaunchExe}' is not part of the release.");
         }
@@ -186,6 +192,16 @@ public static class Publisher
         }
         await Task.WhenAll(workers);
 
+        var own = new HashSet<string>(manifest.Files.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
+        foreach (var inherited in options.Inherited)
+        {
+            if (own.Contains(inherited.Path)) continue;
+            PathRules.ValidateRelative(inherited.Path);
+            manifest.Files.Add(inherited);
+            reused += inherited.Chunks.Count;
+        }
+        manifest.Files.Sort((a, b) => string.CompareOrdinal(a.Path, b.Path));
+
         foreach (var refs in pendingRefs.Values)
         {
             int stored = refs[0].StoredSize;
@@ -288,7 +304,7 @@ public static class Publisher
         return channel;
     }
 
-    static async Task WriteChannelAsync(string repo, ChannelInfo channel, CancellationToken ct)
+    public static async Task WriteChannelAsync(string repo, ChannelInfo channel, CancellationToken ct)
     {
         string path = Path.Combine(repo, "channels", channel.Channel + ".json");
         if (channel.Launcher is null && File.Exists(path))

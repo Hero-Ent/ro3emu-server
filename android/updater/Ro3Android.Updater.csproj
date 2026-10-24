@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The Android app's game-data updater (UpdateScreen + the engine in Installer.cs). setup-project.ps1 installs the
+    output and ZstdSharp.dll next to the game's DLLs. Compiled against the class libraries IL2CPP builds the app with
+    (Unity's unityaot profile), not the PC client's: those were stripped (no JsonDocument.Parse, no IncrementalHash),
+    which is also why JSON goes through MiniJson. tests\ runs the engine on the PC.
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <UnityData Condition="'$(UnityData)' == ''">C:\Dev\Unity\Editors\2022.3.62f3\Editor\Data</UnityData>
+    <UnityAot>$(UnityData)\MonoBleedingEdge\lib\mono\unityaot-linux</UnityAot>
+    <UnityModules>$(UnityData)\Managed\UnityEngine</UnityModules>
+    <NoWarn>$(NoWarn);MSB3277;CS1701;CS1702</NoWarn>
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+    <NoStdLib>true</NoStdLib>
+    <NoCompilerStandardLib>true</NoCompilerStandardLib>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="mscorlib"><HintPath>$(UnityAot)\mscorlib.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="netstandard"><HintPath>$(UnityAot)\Facades\netstandard.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System"><HintPath>$(UnityAot)\System.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System.Core"><HintPath>$(UnityAot)\System.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System.Net.Http"><HintPath>$(UnityAot)\System.Net.Http.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(UnityModules)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(UnityModules)\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(UnityModules)\UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.AndroidJNIModule"><HintPath>$(UnityModules)\UnityEngine.AndroidJNIModule.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+</Project>

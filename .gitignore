@@ -73,6 +73,7 @@ Client/RO3Emu/server/fakeplayers/
 
 # Release tooling (tools/release/publicar.ps1, upload_to_r2.py)
 patch-server/.publish-cache.json.zst*
+patch-server/.publish-cache-android.json.zst*
 patch-server/repo/.publish.lock
 r2-credentials.txt
 /bin-temp-launcher/
@@ -99,3 +100,11 @@ Client/Ragnarok3/ro3emu-backup/patching.journal
 .upstream-sync/
 # Temporary solution of tools/AnalyzerBaseline
 /.analyzer-baseline.slnx
+
+# Android channel signing key (android\publish-android.ps1); the app carries its public half
+android-signing-key.pem
+# Android release signing key (android
+ew-keystore.ps1)
+android-release.keystore
+android-release.keystore.pass
+patch-server/repo/apk/

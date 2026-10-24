@@ -9,7 +9,13 @@ param(
   [string]$Project = (Join-Path $PSScriptRoot 'Ro3Android'),
   [string]$Unity = 'C:\Dev\Unity\Editors\2022.3.62f3\Editor\Unity.exe',
   # AssetRipper export of the PC player (see README): its assets go into the project and its DLL GUIDs into our metas.
-  [string]$Export = (Join-Path $PSScriptRoot 'build\arexport\ExportedProject')
+  [string]$Export = (Join-Path $PSScriptRoot 'build\arexport\ExportedProject'),
+  # Patch repository the app downloads its game data from (android\updater): https://patch.herosaga.com.br/ or the PC's
+  # android\serve-repo.ps1 (http://<LAN-IP>:8790/). Without it the app uses the data push-data.ps1 put on the phone.
+  [string]$PatchRepo,
+  [string]$PatchChannel = 'android-live',
+  # Channel signing key (ClientTools android-key creates it; never committed): the app gets its public half.
+  [string]$PatchKey = (Join-Path (Split-Path $PSScriptRoot -Parent) 'android-signing-key.pem')
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -46,6 +52,15 @@ if ($LASTEXITCODE) { throw 'build Ro3Android.Hooks failed' }
 $hooks = Join-Path $PSScriptRoot 'hooks\bin\Debug\netstandard2.1\Ro3Android.Hooks.dll'
 dotnet run (Join-Path $PSScriptRoot 'tools\AndroidPatch.cs') -- (Join-Path $stage 'ro3_Data\Managed') $hooks
 if ($LASTEXITCODE) { throw 'android patch failed' }
+
+Write-Host '== game-data updater (android\updater)'
+dotnet build (Join-Path $PSScriptRoot 'updater\Ro3Android.Updater.csproj') -v q | Out-Null
+if ($LASTEXITCODE) { throw 'build Ro3Android.Updater failed' }
+# Installed with the game's DLLs below. Its System.Runtime.CompilerServices.Unsafe (ZstdSharp needs it) replaces the
+# game's copy, which the PC build stripped to the few methods the game used.
+foreach ($n in 'Ro3Android.Updater.dll', 'ZstdSharp.dll', 'System.Runtime.CompilerServices.Unsafe.dll') {
+  Copy-Item -Force (Join-Path $PSScriptRoot "updater\bin\Debug\netstandard2.1\$n") (Join-Path $stage 'ro3_Data\Managed')
+}
 
 Write-Host "== project $Project"
 $template = Join-Path $PSScriptRoot 'unity-template'
@@ -225,6 +240,22 @@ $pcShaderNames = foreach ($dir in (Join-Path $PSScriptRoot 'build\arshaders'), $
 $pcShaderNames = @($pcShaderNames | Sort-Object -Unique)
 [IO.File]::WriteAllText((Join-Path $Project 'Assets\Shell\Resources\Ro3D3DShaders.txt'), ($pcShaderNames -join "`n") + "`n")
 Write-Host "PC-only shader names: $($pcShaderNames.Count)"
+
+# Where the updater looks for game data (read by Ro3Android.Updater.UpdateScreen).
+$patchConfig = Join-Path $Project 'Assets\Shell\Resources\Ro3Patch.txt'
+if ($PatchRepo) {
+  if ($PatchRepo -match '://(127\.0\.0\.1|localhost)') { Write-Warning "$PatchRepo is the phone itself on Android; use the PC's LAN IP" }
+  $publicKey = ''
+  if (Test-Path $PatchKey) {
+    $publicKey = (& $tools android-key $PatchKey | Select-Object -Last 1).Trim()
+    if ($LASTEXITCODE) { throw 'android-key failed' }
+  } else { Write-Warning "no signing key at ${PatchKey}: the app will accept unsigned channels (create one: Ro3Emu.ClientTools android-key $PatchKey)" }
+  [IO.File]::WriteAllText($patchConfig, "repo=$($PatchRepo.TrimEnd('/'))/`nchannel=$PatchChannel`nkey=$publicKey`n")
+  Write-Host "updater: $PatchRepo channel $PatchChannel$(if ($publicKey) { ', signed' })"
+} else {
+  Remove-Item -Force $patchConfig, "$patchConfig.meta" -ErrorAction SilentlyContinue
+  Write-Host 'updater: off (no -PatchRepo): the app plays the data push-data.ps1 put on the phone'
+}
 
 # Left over by setup runs that generated the game's initializers themselves (Unity registers them from the plugins).
 Remove-Item -Force (Join-Path $Project 'Assets\Shell\GameInit.g.cs*') -ErrorAction SilentlyContinue

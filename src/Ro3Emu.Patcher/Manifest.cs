@@ -92,6 +92,19 @@ public sealed class LauncherRelease
     [JsonPropertyName("sha256")] public string Sha256 { get; set; } = "";
 }
 
+/// <summary>The Android app a channel's content needs (android\updater reads it before installing anything).</summary>
+public sealed class ApkRelease
+{
+    /// <summary>Latest APK (PlayerSettings.bundleVersion, e.g. 1.0.3).</summary>
+    [JsonPropertyName("version")] public string Version { get; set; } = "";
+    /// <summary>Oldest APK that can run this content; an older one must be replaced before playing.</summary>
+    [JsonPropertyName("minVersion")] public string MinVersion { get; set; } = "";
+    /// <summary>Relative to the repository, or absolute (a store page).</summary>
+    [JsonPropertyName("url")] public string Url { get; set; } = "";
+    [JsonPropertyName("sha256")] public string Sha256 { get; set; } = "";
+    [JsonPropertyName("size")] public long Size { get; set; }
+}
+
 /// <summary>channels/&lt;name&gt;.json — the only mutable file the launcher polls.</summary>
 public sealed class ChannelInfo
 {
@@ -101,6 +114,44 @@ public sealed class ChannelInfo
     [JsonPropertyName("manifestSha256")] public string ManifestSha256 { get; set; } = "";
     [JsonPropertyName("published")] public DateTimeOffset Published { get; set; }
     [JsonPropertyName("launcher")] public LauncherRelease? Launcher { get; set; }
+    [JsonPropertyName("apk")] public ApkRelease? Apk { get; set; }
+    /// <summary>Base64 RSA (PKCS#1 v1.5, SHA-256) signature of <see cref="ChannelSigning.Payload"/>; Android channels only.</summary>
+    [JsonPropertyName("signature")] public string? Signature { get; set; }
+}
+
+/// <summary>
+/// Signs what a channel points at (the manifest's hash, which covers every file and chunk hash, and the APK), so a
+/// tampered bucket or DNS cannot feed the Android app other content. The app holds the public key
+/// (android\updater\ChannelVerifier.cs builds the same payload).
+/// </summary>
+public static class ChannelSigning
+{
+    public static byte[] Payload(ChannelInfo channel) => System.Text.Encoding.UTF8.GetBytes(string.Join("\n",
+        "ro3-channel-v1", channel.Channel, channel.Version, channel.Manifest, channel.ManifestSha256.ToLowerInvariant(),
+        channel.Apk?.Version ?? "", channel.Apk?.MinVersion ?? "", channel.Apk?.Url ?? "", (channel.Apk?.Sha256 ?? "").ToLowerInvariant()));
+
+    public static void Sign(ChannelInfo channel, RSA key) =>
+        channel.Signature = Convert.ToBase64String(key.SignData(Payload(channel), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
+
+    public static bool Verify(ChannelInfo channel, RSA key)
+    {
+        if (string.IsNullOrEmpty(channel.Signature)) return false;
+        try
+        {
+            return key.VerifyData(Payload(channel), Convert.FromBase64String(channel.Signature), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The public half as the app stores it: "modulus-base64:exponent-base64" (no PEM parser needed on Mono).</summary>
+    public static string PublicKeyText(RSA key)
+    {
+        var p = key.ExportParameters(false);
+        return Convert.ToBase64String(p.Modulus!) + ":" + Convert.ToBase64String(p.Exponent!);
+    }
 }
 
 public static class Json

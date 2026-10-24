@@ -16,6 +16,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 #include <android/log.h>
 
@@ -26,6 +27,20 @@ typedef struct { FILE* f; int fd; } fsni_file;
 
 static char g_internal[1024], g_external[1024];
 static __thread char t_error[256];
+// Access trace for the on-demand download work (android/updater): with a file named vfs-trace in the app's data folder,
+// every read open and existence check is appended to vfs-access.log as "<seconds since startup> <op> <path>".
+static int g_trace = -1;
+static struct timespec g_start;
+
+static void trace(const char* op, const char* path)
+{
+    if (g_trace < 0) return;
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    char line[1200];
+    int n = snprintf(line, sizeof line, "%ld %s %s\n", (long)(now.tv_sec - g_start.tv_sec), op, path);
+    if (n > 0) write(g_trace, line, (size_t)(n < (int)sizeof line ? n : (int)sizeof line - 1));
+}
 
 static void fail(const char* what, const char* path)
 {
@@ -53,6 +68,15 @@ EXPORT int fsni_startup(const char* internal_path, const char* external_path)
     copy_root(g_internal, internal_path);
     copy_root(g_external, external_path);
     __android_log_print(ANDROID_LOG_INFO, TAG, "startup internal=%s external=%s", g_internal, g_external);
+    char flag[1100];
+    snprintf(flag, sizeof flag, "%svfs-trace", g_external);
+    if (g_trace < 0 && access(flag, F_OK) == 0)
+    {
+        snprintf(flag, sizeof flag, "%svfs-access.log", g_external);
+        g_trace = open(flag, O_WRONLY | O_CREAT | O_APPEND, 0664);
+        clock_gettime(CLOCK_MONOTONIC, &g_start);
+        __android_log_print(ANDROID_LOG_INFO, TAG, "access trace -> %s", flag);
+    }
     if (strncmp(g_internal, "jar:", 4) == 0)
         __android_log_print(ANDROID_LOG_ERROR, TAG, "internal root is inside the APK; the RO3Emu port expects StreamingAssets redirected to external storage");
     return 0;
@@ -75,6 +99,7 @@ EXPORT void* fsni_open(const char* name, int mode)
     int fd;
     if (mode & 1) { make_parent_dirs(path); fd = open(path, O_RDWR | O_CREAT, 0664); }
     else fd = open(path, O_RDONLY);
+    trace(fd < 0 ? "miss" : "open", path);
     if (fd < 0) { fail("open", path); return NULL; }
     FILE* f = fdopen(fd, (mode & 1) ? "r+b" : "rb");
     if (!f) { fail("fdopen", path); close(fd); return NULL; }
@@ -152,7 +177,10 @@ EXPORT int fsni_exists(const char* name, int flags)
     (void)flags;
     char buf[1024];
     struct stat st;
-    return stat(resolve(name, buf, sizeof buf), &st) == 0;
+    const char* path = resolve(name, buf, sizeof buf);
+    int found = stat(path, &st) == 0;
+    trace(found ? "exists" : "absent", path);
+    return found;
 }
 
 EXPORT void* fsni_alloc(int size) { return size > 0 ? malloc((size_t)size) : NULL; }
