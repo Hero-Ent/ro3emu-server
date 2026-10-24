@@ -30,7 +30,7 @@ public sealed partial class GuildService
 
     private bool MergeCooling(GuildStore.State g) => NowSec() < g.MergeCooldownSec;
     private List<GuildStore.MergeInvite> LiveInvites(GuildStore.State g) =>
-        g.MergeInvites.Where(i => NowSec() - i.RecvSec < MergeLapseSec && store.Get(i.From) != null).ToList();
+        [.. g.MergeInvites.Where(i => NowSec() - i.RecvSec < MergeLapseSec && store.Get(i.From) != null)];
     private IEnumerable<GuildStore.State> InvitedBy(GuildStore.State g) =>
         store.List().Where(o => o.Id != g.Id && LiveInvites(o).Any(i => i.From == g.Id));
 
@@ -86,9 +86,9 @@ public sealed partial class GuildService
     /// <summary>Who the absorbed guild brings: its saved choice, else everyone while there is room (master first).</summary>
     private List<long> MergeMembersOf(GuildStore.State absorbed, GuildStore.State absorber)
     {
-        var chosen = absorbed.PendingMergeGuildId == absorber.Id && absorbed.MergeMemberIds.Count > 0
-            ? absorbed.MergeMemberIds.Where(absorbed.Members.ContainsKey).ToList()
-            : absorbed.Members.Values.OrderBy(m => m.Official).ThenBy(m => m.EnterTime).Select(m => m.RoleId).ToList();
+        List<long> chosen = absorbed.PendingMergeGuildId == absorber.Id && absorbed.MergeMemberIds.Count > 0
+            ? [.. absorbed.MergeMemberIds.Where(absorbed.Members.ContainsKey)]
+            : [.. absorbed.Members.Values.OrderBy(m => m.Official).ThenBy(m => m.EnterTime).Select(m => m.RoleId)];
         return absorbed.MergeMemberIds.Count > 0 && absorbed.PendingMergeGuildId == absorber.Id ? chosen : [.. chosen.Take(MergeRoom(absorber))];
     }
 
@@ -163,7 +163,7 @@ public sealed partial class GuildService
         else if (code == 0 && !target!.MergeInvites.Any(i => i.From == g!.Id)) code = ErrorCodes.MergeNoInvite;
         if (code == 0)
         {
-            target!.MergeInvites = LiveInvites(target).Where(i => i.From != g!.Id).ToList();
+            target!.MergeInvites = [.. LiveInvites(target).Where(i => i.From != g!.Id)];
             if (req.IsAgree) target.MergeInvites.Add(new GuildStore.MergeInvite { From = g!.Id, RecvSec = NowSec(), Announce = req.Announce ?? "" });
             await SaveGuildAsync(target);
         }
@@ -290,7 +290,7 @@ public sealed partial class GuildService
         }
         ClearMerge(absorber);
         absorber.MergeCooldownSec = NowSec() + Setting("GuildMergeTimeCD", 604800)[0];
-        absorber.MergeInvites = LiveInvites(absorber).Where(i => i.From != absorbed.Id).ToList();
+        absorber.MergeInvites = [.. LiveInvites(absorber).Where(i => i.From != absorbed.Id)];
         store.EnlistSave(absorber, transaction, "Guild merge roster write failed");
         EnlistViews(absorber, transaction);
         transaction.WithEconomy(disband);

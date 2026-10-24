@@ -22,7 +22,7 @@ public sealed partial class GuildService
     public const uint Peach = 32235, PeachApply = 32236;
     private const int ImpeachItem = 3;
 
-    private bool Impeaching(GuildStore.State g) => g.ImpeachOwner != 0;
+    private static bool Impeaching(GuildStore.State g) => g.ImpeachOwner != 0;
 
     /// <summary>The master's offline ground (25079 ${1} days); OfflineTime is unix s, -1 online.</summary>
     private bool CanImpeach(GuildStore.State g)

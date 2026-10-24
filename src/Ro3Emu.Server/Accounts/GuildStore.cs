@@ -68,16 +68,16 @@ public sealed class GuildStore(AccountStore accounts)
         public long ImpeachOwner { get; set; }
         public long ImpeachEndMs { get; set; }
         public int ImpeachNeed { get; set; }
-        public List<long> ImpeachResponders { get; set; } = new();
+        public List<long> ImpeachResponders { get; set; } = [];
         public long NextImpeachMs { get; set; }
         /// <summary>Merging guilds (32314-32319, GuildService.Merge): invitations received, the partner of an accepted
         /// merge and whether this guild absorbs it, when it runs (unix s, the next 05:00), the members the absorbed guild
         /// brings, and the end of the cooldown after a merge (unix s).</summary>
-        public List<MergeInvite> MergeInvites { get; set; } = new();
+        public List<MergeInvite> MergeInvites { get; set; } = [];
         public long PendingMergeGuildId { get; set; }
         public bool MergeAbsorbs { get; set; }
         public long MergeAtSec { get; set; }
-        public List<long> MergeMemberIds { get; set; } = new();
+        public List<long> MergeMemberIds { get; set; } = [];
         public long MergeCooldownSec { get; set; }
         /// <summary>32228 journal rows (GuildEventData bytes) to append with this state's next save; not part of the state.</summary>
         internal List<byte[]> PendingEvents { get; } = new();
