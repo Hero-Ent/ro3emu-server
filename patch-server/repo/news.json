@@ -1,6 +1,13 @@
 {
   "items": [
     {
+      "tag": "PATCH 1.1.2",
+      "color": "green",
+      "title": "Patch Notes v1.1.2 - Câmera",
+      "text": "• Zoom da câmera: agora dá para afastar a câmera 30% mais longe do que antes.\n• O zoom que você escolhe fica memorizado: não volta mais ao padrão ao trocar de mapa, entrar em dungeons ou reabrir o jogo. Em mapas com limite menor, ele fica no máximo permitido ali.\n• Câmeras de cutscene e de cenas especiais continuam como antes.\n• Atualizador 1.1.2.",
+      "date": "2026-10-25"
+    },
+    {
       "tag": "PATCH 1.1.1",
       "color": "green",
       "title": "Patch Notes v1.1.1 - Dungeon do Dirigível",
