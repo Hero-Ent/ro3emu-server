@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Romsg;
 using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 using Ro3Emu.Server.Maps;
 using Ro3Emu.Server.Game.Ownership;
 
@@ -31,8 +32,18 @@ public sealed class ActiveSkillCast
     internal Dictionary<long, long>? GuardianDamage { get; init; }
     internal SemaphoreSlim? GuardianGate { get; init; }
     internal HashSet<int>? GuardianOnce { get; init; }
+    /// <summary>A turret's shot (CombatService.TurretFired): its projectile and its effects.</summary>
+    public TurretShot? Turret { get; init; }
     public long SourceId => Operator?.Uid ?? OwnerId;
 }
+
+/// <summary>
+/// How a turret's shot is shown (CombatService.TurretFired): its projectile leaves the turret unit
+/// <paramref name="SourceId"/> (at <paramref name="Origin"/>), and its hit and projectile effects are those of the skill
+/// template <paramref name="Show"/> instead of the row's _iScriptShow. A hit shows <paramref name="Shown"/>, give or take
+/// <see cref="CombatService.TurretShownSpread"/>, as its damage number (0: its own damage).
+/// </summary>
+public sealed record TurretShot(long SourceId, Vec3 Origin, long Show, long Shown = 0);
 
 public sealed partial class CombatService
 {
@@ -70,6 +81,8 @@ public sealed partial class CombatService
     private async Task CastCoreAsync(GameSession s, CastSkillReq request)
     {
         var req = request.Clone();
+        bool turret = TurretSkill?.Invoke(s, req.SkillId) == true;
+        if (turret) TurretAim?.Invoke(s, req);
         var row = EffectiveSkillRow(s, req.SkillId);
         var owned = req.OpUnitId == 0 || req.OpUnitId == s.Role?.Id ? null
             : s.SkillObjects.FirstOrDefault(u => u.Uid == req.OpUnitId && u.WorldScene == s.WorldScene && u.ExpiresMs > Now);
@@ -105,7 +118,8 @@ public sealed partial class CombatService
                 if (free - Now <= MaxQueuedCastMs) { QueueCast(s, request, free - Now); return; }
                 error = ErrorCodes.SkillBusy;
             }
-            else error = ValidateTarget(s, row.Value, req, origin, owned == null ? WalkSlack(s) : 0);
+            else error = ValidateTarget(s, row.Value, req, origin, owned == null ? WalkSlack(s) : 0,
+                _data.Row("SkillConfig", request.SkillId) is { } askedRow ? Range(askedRow) : 0, turret);
         }
         var costs = row is { } value ? ResolveCosts(s, value) : new CastCosts();
         long errorParam = 0;
@@ -136,7 +150,9 @@ public sealed partial class CombatService
         _eventAttacks.Remove(s);
         await PayCostsAsync(s, costs);
         await _buffs.SpendEnergyAsync(s, row!.Value);
+        var shot = turret ? TurretFired?.Invoke(s, req) : null;
         await s.SendGameAsync(UseSkill, new CastSkillRsp { SessionId = id, IsAutoCast = req.IsAutoCast });
+        if (shot != null) await TurretMuzzleAsync(s, req, shot);
         var target = FindMonster(s.WorldScene, req.TargetId);
         var playerTarget = EventTarget(s, req.TargetId);
         // _iIfAutoAtk 2 (enum_AutoNormalAttackType.AutoNormalAttack) follows the cast with the career's normal attack
@@ -158,8 +174,37 @@ public sealed partial class CombatService
             _eventAttacks[s] = new EventAttack(playerTarget, loopSkill,
                 Now + SkillMs(s, row.Value) + ChantMs(s, row.Value) + 1,
                 s.Position.X, s.Position.Z);
-        await StartCooldownAsync(s, row.Value);
-        await StartCastAsync(s, row.Value, req, id, owned);
+        await StartCooldownAsync(s, row.Value, SkillConfig.Get(_data, request.SkillId) is { } asked ? (int)asked.Mode : null);
+        await StartCastAsync(s, row.Value, req, id, owned, turret: shot);
+    }
+
+    /// <summary>A skill template's m_kShows entry [effect, kind] of kind 2 is a Gfx point; enum_DisplayEffectType.Gfx is 2.</summary>
+    private const int ShowKindGfx = 2, ShowKindAudio = 3, ShowKindShake = 4, DisplayGfx = 2, DisplayShake = 3, DisplayAudio = 4;
+    /// <summary>How far a turret hit's shown number strays from TurretShot.Shown either way (the video's four hits:
+    /// 9,885,311 to 9,962,385).</summary>
+    internal const int TurretShownSpread = 45_000;
+
+    /// <summary>
+    /// A turret's fire as its template shows it (inferred: the cannon's fire row 5353001 plays the empty template 61098,
+    /// while its own template 53530 has the muzzle flash 5353004 in m_kShows, the ball 5353005 and the blast 5353003):
+    /// the template's first Gfx point plays from the turret unit (31119 SkillEffectDisplayNotify of type Gfx); a rapid
+    /// template's later flashes repeat the same prefab within 0.15 s, so one flash stands for them.
+    /// </summary>
+    private async Task TurretMuzzleAsync(GameSession s, CastSkillReq req, TurretShot shot)
+    {
+        if (s.Role == null || _data.SkillTemplate(shot.Show) is not { } template) return;
+        foreach (var (effect, kind, src) in SkillShows.ShowEffects(template, ShowKindGfx).Take(1).Select(e => (e, DisplayGfx, shot.SourceId))
+            .Concat(SkillShows.ShowEffects(template, ShowKindShake).Take(1).Select(e => (e, DisplayShake, s.Role.Id)))
+            .Concat(SkillShows.ShowEffects(template, ShowKindAudio).Take(1).Select(e => (e, DisplayAudio, shot.SourceId))))
+
+            await ToPlayerAndViewersAsync(s, SkillEffect, new SkillEffectDisplayNotify
+            {
+
+
+                SourceId = src, MasterId = s.Role.Id, TargetId = req.TargetId,
+                TargetPos = req.TargetPos?.Clone() ?? shot.Origin.Clone(), EffectId = effect, EffectType = kind,
+                SkillId = req.SkillId,
+            });
     }
 
     /// <summary>Cast item cost and frozen intent share one owner receipt; HP/SP/buffs remain runtime resources.
@@ -197,10 +242,12 @@ public sealed partial class CombatService
 
     private bool Learned(GameSession s, JsonElement row)
     {
-        if (GameData.Int(row, "_iID") == PublicSkill("WorldTreeSkillId")) return true; // paid item skill, LC_ReviveHelper.
+        int id = (int)GameData.Int(row, "_iID");
+        if (id == PublicSkill("WorldTreeSkillId")) return true; // paid item skill, LC_ReviveHelper.
+        if (TurretSkill?.Invoke(s, id) == true) return true; // the turret's fire button
         // A Survivor Battle career owns the match skill set (TimedBattleService.Chicken), not the job tree.
-        if (MatchSkillRule?.Invoke(s, (int)GameData.Int(row, "_iID")) is { } granted) return granted;
-        if (GameData.Int(row, "_iID") == _skills.NormalAttack(s.Progress!.Career)) return true;
+        if (MatchSkillRule?.Invoke(s, id) is { } granted) return granted;
+        if (id == _skills.NormalAttack(s.Progress!.Career)) return true;
         return _skills.Level(s.Progress, (int)GameData.Int(row, "_iSkillID")) >= GameData.Int(row, "_iLevel");
     }
 
@@ -245,7 +292,12 @@ public sealed partial class CombatService
     private static double WalkedSeconds(DateTime since) => Math.Clamp((DateTime.UtcNow - since).TotalSeconds, 0, MaxWalkSlackSeconds);
     private static float WalkSlack(GameSession s) => !s.Walking ? 0 : (float)(s.Speed / 100.0 * WalkedSeconds(s.LastWalkUtc));
 
-    private int ValidateTarget(GameSession s, JsonElement row, CastSkillReq req, Vec3 origin, float slack = 0)
+    /// <param name="askedRange">The range of the row the client asked for: it walks into that range, not into the
+    /// range of a mode row a talent or a mount selects (Arrow Smash 18 m, its wolf row 5 m; issue #62).</param>
+    /// <param name="turret">A turret's shot (DungeonService.Cannon): the row's height window and walkable line describe a
+    /// cast on foot, not a cannon fired from a deck at an airship below it, so neither applies (inferred).</param>
+    private int ValidateTarget(GameSession s, JsonElement row, CastSkillReq req, Vec3 origin, float slack = 0, float askedRange = 0,
+        bool turret = false)
     {
         int release = (int)GameData.Int(row, "_iRelease");
         var monster = FindMonster(s.WorldScene, req.TargetId);
@@ -278,7 +330,9 @@ public sealed partial class CombatService
         else { req.TargetPos ??= origin.Clone(); return 0; }
         if (!_buffs.CanSeePosition(s, targetPosition)) return ErrorCodes.SkillTargetInvalid;
         float d = Distance(origin, targetPosition);
-        if (d < GameData.Int(row, "_iDistanceMin") / 100f - slack || d > Range(row) + 0.5f + slack) return ErrorCodes.SkillDistance;
+        if (d < GameData.Int(row, "_iDistanceMin") / 100f - slack || d > Math.Max(Range(row), askedRange) + 0.5f + slack)
+            return ErrorCodes.SkillDistance;
+        if (turret) return 0;
         float height = GameData.Int(row, "_iHeightRange") / 100f;
         if (height > 0 && MathF.Abs(origin.Y - targetPosition.Y) > height) return ErrorCodes.SkillHeight;
         if (GameData.Int(row, "_iPassBlock") == 2 && _worldData.Map(s.SceneEntry)?.Nav is { } nav
@@ -365,20 +419,40 @@ public sealed partial class CombatService
             await _buffs.ConsumeBuffPilesAsync(s, group, (int)count);
     }
 
-    private async Task StartCooldownAsync(GameSession s, JsonElement row)
+    /// <summary>Ends a skill group's running cooldowns now, each under the mode it was shown (a talent's reset).</summary>
+    internal static async Task ResetCooldownAsync(GameSession s, int group)
+    {
+        long now = Now;
+        var notice = new SkillCdNotify { Uuid = s.Role!.Id };
+        foreach (var (key, end) in s.SkillModeCds.Where(c => c.Key.Group == group && c.Value > now).ToArray())
+        {
+            s.SkillModeCds.Remove(key);
+            notice.Infos.Add(new SkillCdInfo { SkillId = group, SkillMode = key.Mode, CdStartTimestampMs = now, CdEndTimestampMs = now });
+        }
+        if (s.SkillCds.Remove(group) && notice.Infos.Count == 0)
+            notice.Infos.Add(new SkillCdInfo { SkillId = group, CdStartTimestampMs = now, CdEndTimestampMs = now });
+        if (notice.Infos.Count > 0) await s.SendGameAsync(SkillCdUpdate, notice);
+    }
+
+    private async Task StartCooldownAsync(GameSession s, JsonElement row, int? askedMode = null)
     {
         int group = (int)GameData.Int(row, "_iSkillID"), mode = (int)GameData.Int(row, "_iMode");
         long now = Now, cd = GameData.Int(row, "_iCD");
         var notice = new SkillCdNotify { Uuid = s.Role!.Id };
-        void Set(int g, int m, long duration, bool shared)
+        void Set(int g, int m, long duration, bool shared, int shownMode)
         {
             if (duration <= 0) return;
             long end = now + duration;
             s.SkillModeCds[(g, m)] = Math.Max(end, s.SkillModeCds.GetValueOrDefault((g, m)));
             if (shared) s.SkillCds[g] = Math.Max(end, s.SkillCds.GetValueOrDefault(g));
-            notice.Infos.Add(new SkillCdInfo { SkillId = g, SkillMode = m, CdStartTimestampMs = now, CdEndTimestampMs = end });
+            notice.Infos.Add(new SkillCdInfo { SkillId = g, SkillMode = shownMode, CdStartTimestampMs = now, CdEndTimestampMs = end });
         }
-        Set(group, mode, cd, GameData.Int(row, "_iCdModeGroup") < 0);
+        // The client files a 31113 under group * 10000 + its mode (LC_Skill_Function.GetSkillCDInfoKey) and its bar reads
+        // the key of the row it keeps, the row it asks to cast. A mode a talent or a mount selects (type 15: Joint Beat,
+        // Spear Throw, Arrow Smash on the wolf) casts another row, and a cooldown sent under that row's mode never showed
+        // (issue #62): it goes under the asked row's mode. Without one, a mode row's _iCdModeGroup (0: mode 0's) decides.
+        int cdModeGroup = (int)new SkillConfig(row).CdModeGroup;
+        Set(group, mode, cd, cdModeGroup < 0, askedMode ?? (cdModeGroup >= 0 ? cdModeGroup : mode));
         var shared = Numbers(row, "_iPubCD");
         var groups = Numbers(row, "_iPubCDGroup");
         // Parallel arrays, e.g. BackSlide [15104,15330,15329] / [1000,15000,0] (inferred server application).
@@ -386,7 +460,7 @@ public sealed partial class CombatService
         {
             int sibling = (int)groups[i];
             if (_data.Row("SkillConfig", sibling) is { } siblingRow) sibling = (int)GameData.Int(siblingRow, "_iSkillID");
-            if (sibling > 0) Set(sibling, 0, (long)shared[i], true);
+            if (sibling > 0) Set(sibling, 0, (long)shared[i], true, 0);
         }
         if (notice.Infos.Count > 0) await s.SendGameAsync(SkillCdUpdate, notice);
     }
@@ -441,7 +515,8 @@ public sealed partial class CombatService
         return Current();
     }
 
-    private async Task StartCastAsync(GameSession s, JsonElement row, CastSkillReq req, long id, SkillObject? actor = null, bool independent = false)
+    private async Task StartCastAsync(GameSession s, JsonElement row, CastSkillReq req, long id, SkillObject? actor = null,
+        bool independent = false, TurretShot? turret = null)
     {
         var origin = actor?.Pos ?? s.Position.Clone();
         var target = FindMonster(s.WorldScene, req.TargetId);
@@ -451,7 +526,7 @@ public sealed partial class CombatService
             Id = id, OwnerId = s.Role!.Id, WorldScene = s.WorldScene, SceneGeneration = s.SceneGeneration,
             Attachment = s.Attachment, Request = req, Row = row, Origin = origin,
             StartMs = Now, ChantMs = ChantMs(s, row), ActionMs = SkillMs(s, row), Operator = actor,
-            Independent = independent,
+            Independent = independent, Turret = turret,
         };
         if (!independent) s.SkillCast = action;
         // A chanted skill that may not be cast on the move (_bMovement 0 = enum_SkillLockMoveType.Lock) holds the caster

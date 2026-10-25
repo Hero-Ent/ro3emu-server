@@ -95,7 +95,9 @@ original-server encounter parity:
 10. Normal spends its own extra balance first, then an unlocked same-type Hard balance, paying the selected Normal
     boss's reward. When Lua's same-type lookup has multiple Hard candidates, the lowest config id wins.
 11. Team-boss world loot is suppressed because the personal award is paid with its allowance. Story results report
-    actual inventory/currency deltas from existing NPC/task rewards; they do not synthesize a personal award.
+    actual inventory/currency deltas from existing NPC/task rewards; they do not synthesize a personal award. A won
+    story scene (DungeonConfig _iGamePlayType 6) returns its participants 5 s after the result, as their own 30402 exit
+    would: the client offers no exit countdown and _iExitAction is empty (inferred delay).
 12. A changed `(PlayBook, Start)` resets seasonal progress, allowances and report history, retaining role job/guide
     preferences. An attempt from a previous season ID or playbook cannot grant its old-season reward, including a new
     cycle with the same playbook. A session from the old cycle must relog before admission.
@@ -108,7 +110,7 @@ Reconstructed story encounters (`ReconstructedDungeons`, switch `Ro3Emu:Reconstr
 - [dungeon-inventory.md](dungeon-inventory.md) (generated from the client data) lists every eligible scene with its
   spawn points, labels, quest stages and base map: 28 story scenes, 7 tutorial, 4 minigames, 29 Territory War zones
   and 4 developer test maps. The story scenes' combat templates (2000xxxx) exist only on the original server.
-- `src/Ro3Emu.Server/Reconstructed/dungeon-monsters.json` (embedded) rebuilds 15 of them as waves of client-known
+- `src/Ro3Emu.Server/Reconstructed/dungeon-monsters.json` (embedded) rebuilds 10 of them as waves of client-known
   NPCConfig monsters at authored points, one wave per quest stage, each spawn with its reason (point label, quest
   text, base map) and each dungeon with a confidence: 8 high, 5 medium, 2 low. Bosses use the client's story
   templates (530xxxx: Golden Thief Bug, Baphomet, Pharaoh, Maya, the airship's Evil Warriors/Archers/Boss,
@@ -119,7 +121,8 @@ Reconstructed story encounters (`ReconstructedDungeons`, switch `Ro3Emu:Reconstr
 - Not reconstructed as monster waves (listed in the file): pure scripted scenes without a fight (ant nest
   exploration, Deniro ride, Louie's game, Moonlight Flower's hide-and-seek), the MVP party event, the Ring Test map and
   scenes without points. The first three are rebuilt as scripted scenes (below).
-  Airship cannons, allied NPC companions, the Professor rescue and the Goblin Forest transfer are not reproduced.
+  Allied NPC companions and the Goblin Forest transfer are not reproduced (the airship's cannons and the Professor's
+  rescue are scripted steps, below).
 - The task widget: each reconstructed wave names the DungeonQuestConfig quest it plays. 30401 carries var 10001
   `PDungeonQuestIdList` (the scene's quests up to the current one; the widget shows the last one's title and goals)
   and var 10003 `PDungeonQuestGoalParamList` (the wave's kills and size, the goal's "(done/total)"). Seen live: the
@@ -145,7 +148,94 @@ Reconstructed story encounters (`ReconstructedDungeons`, switch `Ro3Emu:Reconstr
 - `DungeonTests.Reconstructed` resolves every reconstructed plan, clears each dungeon wave by wave to a win with the
   tracker vars checked, counts a clear toward its 101018 quest, and switches off.
 
-Reconstructed scripted scenes without a fight (`Reconstructed/scripted-scenes.json`, same switch):
+Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch):
+
+- A step may carry a fight: client-known monsters at scene-editor points (`fight`), spawned with the step; it then
+  waits for every kill and, when it also lists events, for its event too. A fight-only step ends on its kills. A step
+  with `all` needs every listed event, not any one, and its tracker counter follows them. A Journey scene (gameplay
+  type 24) with a scripted reconstruction plays it instead of its bare point respawns. A step's `cannon` makes an
+  actor's interaction a turret the player boards (the airship's cannons, below).
+- A fight's monster may fly a scene-editor patrol path instead of standing at a point (`patrol`: kPatrolList, loaded as
+  MapWorld.Patrols; it appears at the path's first point, MonsterService.Fly moves it one straight segment after the
+  other at its NPC speed, and as MonsterUnit.ScriptDriven it is never engaged), come later than the step's start (`at`;
+  the wave waits for it), carry `riders` (scene units at an offset turned with its facing, moving with it, gone when it
+  falls) and show its end with `sink` effects (Lua_Config_EffectData, as 31119 where it fell). A scripted fight's
+  monster with an NPCConfig `_kRespawnSkill` plays it as it appears (31100 from it: the show only) and holds still while
+  it lasts. A step's `cues` run on its clock (`at`, repeated `every` while the step lasts): a ChatConfig line (1022; a
+  Bubbling row over the actor `speaker`), an effect each participant sees from their own unit (31119 of each
+  enum_DisplayEffectType the effect has; a camera shake moves only the camera of the unit it plays on), or a unit shown
+  at a point or walking a patrol path (or a route of the scene's own, `path`) for a `life`, until its path ends
+  (`vanish`) or with the room, born with its NPCConfig buffs, carrying `riders` and playing its `_kRespawnSkill`
+  (`DungeonService.Cues`); also an actor's head bubble (`bubble`: the 32700 reply of its bubble interaction, unasked)
+  or a cue unit's crew sent away (`dismiss`), a shown unit walking a route from where it stands (`walk`) or playing a
+  skill's show (`cast`); a cue unit may burn whoever stands near it with its NPCConfig skill (`burn`) or burst when the
+  fight reaches it (`fuse`, `blast`). A cue with `hpBelow` waits until the fight's monster `of` is down to that share of
+  its HP. A step may also complete on its own clock (`after`, ms, paced like its cues) and bring `allies`, scene units
+  that fight its monsters beside the participants (DungeonService.Allies). Their timing is inferred, scene by scene.
+- Moonlight Flower's hide-and-seek (3120802) is played as a game, inferred as a whole from its ChatConfig lines (a step
+  `seek`, DungeonService.HideAndSeek): her three opening bubbles over her head, then rounds of a warning
+  (5310005), the 5 s countdown tip (5310010) and a look. A player within 3 m of a group 27 point (the darkness that
+  rings the room) passes the round; anyone else is found (5310014) and the game starts over. A passed round searches
+  the darkness within 8 m of the hiding place, so the second round needs another side of the room; it wins (5310007)
+  and completes the step. The lines go out as 1022 with her uid, which the client's Bubbling rows need for the head
+  bubble. `ScriptedScenePacePercent` shortens these timers for tests.
+- Five story dungeons that were monster waves (or bare point respawns) now play their scripted stages around the
+  fights, each with its evidence and guessed parts in the file:
+  - Maya's nest (1000401): Maya, then 'Find the Professor' (within 10 m of the egg point), 'Free the Ant Egg' (5300056,
+    interaction 5300021, message 5300022), 'Help the Professor Up' (5300026, message 5300023) and the chest (5300052,
+    message 5300024), each interaction opened by buff group 53014.
+  - The airship (1000501), rebuilt from the official video (Ragnarok 3 Genesis, 33:05-37:05; the scene loads at about
+    33:19). Stage 1 runs on the scene's clock (`after`): 13 s of calm with the crew (5300031-5300035, their gated bubbles
+    open) and the Captain's 5300540/5300541; then a shell bursts on the deck at mark 59 (blast 5300037, shake 5353201,
+    SFX DECKEXPLOSION, its fire 5300057 burning on), the startled crew (5300061-5300065) take their places and their
+    bubbles play on the clock (cue `bubble`: the 32700 reply of their bubble interactions 5300048-5300052, which the
+    client plays as if the player had walked up), the Chief comes down from the prow (cue `walk`), the lines
+    5300550-5300554 follow, and at 33:40 two pirate ships come up to port (5300039 with the Evil Boss and three pirates
+    on deck, 5300053 further out), the Boss showing off with 5351901 (cue `cast`); 25 s later stage 2 begins. Stage 2,
+    the cannons: 'Board the Cannon' (5300006) on one of the three Cannons 5300022 enters its GameplayStatusConfig 12, of
+    type 10 UpperCannon (DungeonService.Cannon): 32702 with upperCannonInfo.cannonGuId, which
+    LC_GamePlayStatusMgr.CommonCannon turns into the cannon's camera (3C 19), crosshair and buttons from the client's Lua
+    GamePlayStatusExtraConfig, {27, 28}. Button 27 casts 5353001 'Fire - Rapid' through the ordinary skill request:
+    CombatService admits it for the gunner (TurretSkill) without the row's height window and walkable line. Button 28
+    sends 32703 QuitStatus. The cannon's camera (Camera 5300000) turns only 45-135 degrees, to starboard: two ships come
+    up at once and a third later from astern (5300053 and two 5300015, pirates on deck), sailing along the deck's heading
+    to lie parallel to it 30-50 m off (routes of the scene's own, `path`), shown from 150 m (World.WidenSightAsync). A
+    shot is one ball at the ship aimed at, shown with template 61201 (the cannon's `show`; CombatService.TurretShot): the
+    flash 6120105 (`_02_fire`), the arcing ball 6120102 (`_02_bullet01`, its fire tail) and the fireball blast 6120103
+    (`_02_boom01`), with the template's camera shake 6120106 ('开炮') and sound, which the video shows rather than the flat
+    `_03` ball of 61202 or the fire
+    skill's own template 53530, which has no sounds. A hit shows about 9.9 million (`shown`, the video's numbers) while
+    three hits sink a ship, which breaks up where it fell (5353102/5353103, 5353104/5353105 for the small one) and takes
+    its crew with it; the enemy's fire lands on the deck every 12 s. Stage 3 is one fight of nine (0/9): the ships
+    collide, the pirates leave their deck (cue `dismiss`), five warriors drop in with their FallDown at the Boss's
+    'Charge!' and four archers 13 s later, each opening with its once-only skill as its FallDown ends (the warriors' dash
+    5350301-5350601 along their spawn facing, the archers' volley 5351301-5351601). A monster skill whose show has an
+    m_kPoint.m_kWarningRange not scheduled in its m_kShows (5352807, 53503023, 53513019) is telegraphed as 31119
+    EffectType 6 (enum_DisplayEffectType.WarningRange) and hits when the telegraph ends; a lock row with a placeholder
+    _kRange takes the telegraph's shape and size. The Evil Boss's '击飞' effects (53523015, 53526015) knock the players
+    hit back. While the ships sail, their archers loose volleys at the deck (5351801, cue `cast`).
+    Wule, Boya and the Eden Group Chief (5300086-5300088) fight beside the player
+    through the boarding and the Boss (`allies`, DungeonService.Allies). The Evil Boss enters at mark 66; at 29 % of its HP
+    (cue `hpBelow`) a blast shakes the ship, its fire burns whoever stands within 4.5 m every second (cue `burn`: the
+    fire's 5365201, cast as the Boss) and two rows of barrels appear, five rolling along patrols 69-72 and 98 and five
+    across the deck, each bursting (5352903) when the fight reaches it (cue `fuse`). Stage 5 ends at the prow or after
+    15 s while the crew walk back to their posts; stage 6 waits on the injured captain's dialogue (530003802, whose
+    option triggers interaction 5300039 and message 5300039); then the tracker goes back to stage 5 while four shells
+    burst around the Captain ('reinforcements?'), and the closing cutscene (PlotInterpretation 130161, its QTE, then
+    130162 or 130163) ends the scene. **Inferred**: where the ships lie and the pirates stand on a deck, the allies' hits
+    (1 % of a monster's HP, 3 % for a special; the monsters never turn on them), the fire's and the barrels' radii, that
+    the bombardment and the barrels hurt nobody, three hits sinking a ship at any level, a shot aimed at nothing going
+    to the ship nearest the cannon, and the end of the stage, the settlement, a death or leaving the room putting the
+    gunner back to Idle. The rope stakes (5300040) and the Sharpshooter (5300054) are not shown.
+  - Payon Forest (1022001): 'Cover Boya and Wule' (reach the standoff point 22 between them and Eddga), then Eddga.
+    Boya and Wule (5300086/5300087) are shown, not fighting.
+  - The Peco Peco nest (1051001): the Elusive Pecopeco with the Ancient Nest and Bragis shown.
+  - Pharaoh (main story, 3120702): Pharaoh with the Relic he leaps out of, his coffin 5300013 at point 24, and the
+    Pyramid 5300011 beside him (6 m east, 7 m north of point 20: the scene has no point for it). Its use is **inferred**
+    from the raid Pharaoh's tip 4370002 'Pharaoh is unleashing Cleansing Light! Quickly, hide behind the Pyramid!': every
+    20 s of the fight the tip goes out, Pharaoh holds still for 4 s, then his strongest skill 5340301 (whose effect the
+    client draws as a cross of light) hits everyone outside the Pyramid's shadow (a step `shelter`, DungeonService.Shelter).
+
 
 - The last three main-story blockers of the story walk: the ant nest vortex and egg passage (1000201, task 10104290),
   Bobo and the Deniro (1000301, task 10104300) and Louie's game in the Culvert (3120402, task 10106270). The original

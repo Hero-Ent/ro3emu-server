@@ -16,6 +16,28 @@ compartilhado. Integramos as novidades deles por **merge** (nunca cherry-pick), 
 | 2026-10-12 | fork inicial ..`6befb4b` | tudo | - | import do projeto |
 | 2026-10-22 | `6befb4b..9f3c04d8` (145 commits, PRs #10-#61) | tudo, em 4 etapas (`de99453e`, `9cd23f33`, `249a72be`, `9f3c04d8`) | nenhum revertido; ajustes abaixo | ver "Sync 2026-10-22" |
 
+## Sync 2026-10-23
+
+Faixa `9f3c04d8..bbc9e3b2` (29 commits, PRs #62 a #84). Decisoes do usuario: D1 furtividade do upstream
+(`StealthEffects` + `CombatService.Stealth`), a nossa removida; D2 Nivel Astral, Ritual do Dragao e Titulos com os
+drops padrao; D3 aplicado com o bonus de EXP: a EXP acima do nivel maximo alimenta o Nivel Astral (se encher rapido
+demais, o bonus deixa de contar para ele).
+
+Como os conflitos foram resolvidos:
+
+- **Furtividade**: removidos o nosso `RevealRule`/`WireStealth`, o bit de status 2 (`BuffService.IsStealth`/`Hidden`)
+  e o `MonsterService.Unseen`. Agora vale a regra do upstream: nenhum monstro mira um jogador escondido (o nosso
+  deixava os chefes verem).
+- **Barra de atalhos**: mantidos os 9 slots (`ShortcutSlotLimit = 9`, `NormalizeShortcutBar`); o `FullShortcutBar`
+  do upstream usa o nosso limite. Os testes de barra do upstream foram ajustados para 9.
+- **Cast**: a nossa fila de casts mais o alcance e o cooldown da linha pedida (fac8b3f6, issue #62).
+- **prebuilt/client**: regenerado (o `TitleButton` e novo nos hooks); a proxima versao do cliente leva os hooks novos.
+
+Pendencias:
+
+- `ConfigViewTests.FieldNamesOutsideViews` = 2712 do upstream + 75 nossas.
+- `TowerTests.ATeamBelowTheRecommendedPowerMeetsASuppressedFloor` falha com o nosso export de dados, tambem no
+  `upstream/main` puro (por ambiente).
 ## Sync 2026-10-22
 
 Decisoes do usuario: D1 Double Attack do upstream (o nosso desligado: `CombatService.LegacyDoubleAttack`);

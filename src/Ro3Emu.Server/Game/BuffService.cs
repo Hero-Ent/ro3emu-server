@@ -91,19 +91,6 @@ public sealed partial class BuffService : IGameTicker
         _ => 0,
     };
 
-    /// <summary>
-    /// BuffConfig._kBuffCategory 31 marks every "cannot be seen or targeted" buff (Cloaking 15006, Enhance Cloaking
-    /// 15304/115304, Stealth 23022, monster Hiding 50009/50021...): eObjectStateInvisible = SpecialStatusConfig 2
-    /// "隐身" (stealth), published as status bit 2 (inferred from enum_specialStatue.Invisible = 2).
-    /// </summary>
-    internal const int StealthCategory = 31, StealthState = 2;
-
-    internal static bool IsStealth(JsonElement row) => row.TryGetProperty("_kBuffCategory", out var c) && c.ValueKind == JsonValueKind.Array
-        && c.EnumerateArray().Any(v => GameData.Number(v) == StealthCategory);
-
-    /// <summary>The player is under a stealth buff (status bit 2): ordinary monsters neither see nor keep it as a target.</summary>
-    public static bool Hidden(GameSession p) => (p.StatusBits & (1L << (StealthState - 1))) != 0;
-
     /// <summary>Place or refresh a validated buff. Zero-time source rows retain the previous 60s fallback (inferred).</summary>
     public Task AddAsync(GameSession p, int configId, int durationMs, long sourceId) =>
         AddCoreAsync(p, configId, durationMs, sourceId, null);
@@ -146,8 +133,7 @@ public sealed partial class BuffService : IGameTicker
         if (SourceAttributes != null) pairs = SourceAttributes(sourceId, row, [.. pairs]);
         var changes = pairs.Select(c => (c.Id, c.Value * pile * attributeMultiplier)).ToList();
         var buff = new ActiveBuff(existing?.Guid ?? Interlocked.Increment(ref _guids), configId,
-            now + durationMs, durationMs, changes, sourceId, pile,
-            StateOrdinal: StateFor(group, guardianOwned) is var state and > 0 ? state : IsStealth(row) ? StealthState : 0,
+            now + durationMs, durationMs, changes, sourceId, pile, StateOrdinal: StateFor(group, guardianOwned),
             ShieldRemaining: Math.Max(0, shieldAmount), IsGuardianOwned: guardianOwned,
             ShieldDebuffImmunity: shieldDebuffImmunity, HpFloorBasisPoints: hpFloorBasisPoints);
         if (existing != null) p.Buffs.Remove(existing);

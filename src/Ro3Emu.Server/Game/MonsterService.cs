@@ -345,19 +345,13 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         _loop.TrackRuntimeDetached("monster speed", () => _world.ToUnitViewersAsync(m, CombatService.AoiAttrChange, SpeedChange(m, now)));
     private void SendHealth(MonsterUnit m) => _loop.TrackRuntimeDetached("monster health", () => _world.ToUnitViewersAsync(m, CombatService.AoiAttrChange, Hp(m)));
 
-    /// <summary>
-    /// A stealthed player ("cannot be seen or targeted": Cloaking, Enhance Cloaking) is invisible to ordinary monsters,
-    /// which drop it as a target; bosses (a BossSkillBook) still see it (inferred, the RO rule).
-    /// </summary>
-    internal static bool Unseen(MonsterUnit m, GameSession p) => m.Template.Skills == null && BuffService.Hidden(p);
-
     private GameSession? NearestTarget(MonsterUnit m)
     {
         GameSession? near = null;
         float best = float.MaxValue;
         foreach (var p in m.Viewers)
         {
-            if (p.Role == null || p.Dead || Unseen(m, p) || TargetVisible?.Invoke(m, p) == false) continue;
+            if (p.Role == null || p.Dead || TargetVisible?.Invoke(m, p) == false) continue;
             float d = Distance(m, p);
             if (d <= m.Template.ViewRange && d < best) { best = d; near = p; }
         }
@@ -437,7 +431,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
             }
         }
         // Roam only where somebody can see it.
-        if (!m.Moving && m.Template.RoamDistance > 0 && now >= m.NextRoamMs)
+        if (!m.Moving && !m.ScriptDriven && m.Template.RoamDistance > 0 && now >= m.NextRoamMs)
         {
             m.NextRoamMs = now + m.Template.RoamTimeMs + _random.Next(-m.Template.RoamTimeMs / 4, m.Template.RoamTimeMs / 4);
             if (m.Viewers.Count > 0) Roam(m, map);
@@ -490,7 +484,8 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     /// <summary>A player hit it (or came into view of an aggressive one): chase and attack.</summary>
     public void Engage(MonsterUnit m, GameSession target)
     {
-        if (m.Dead || m.WorldScene != target.WorldScene || Unseen(m, target) || TargetVisible?.Invoke(m, target) == false || m.Template.SpeedCm == 0 && m.Template.AttackRange <= 0) return;
+        if (m.Dead || m.ScriptDriven || m.WorldScene != target.WorldScene || TargetVisible?.Invoke(m, target) == false
+            || m.Template.SpeedCm == 0 && m.Template.AttackRange <= 0) return;
         if (m.Target == null) m.NextSwingMs = NowMs + 300;
         SetTarget(m, target);
         m.Returning = false;
@@ -566,7 +561,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     private void Fight(MonsterUnit m, MapInstance map, long now)
     {
         var target = m.Target!;
-        bool lost = target.Role == null || target.Dead || target.SceneLoading || Unseen(m, target) || TargetVisible?.Invoke(m, target) == false || target.WorldScene != m.WorldScene
+        bool lost = target.Role == null || target.Dead || target.SceneLoading || TargetVisible?.Invoke(m, target) == false || target.WorldScene != m.WorldScene
                     || Distance(m.Home.X, m.Home.Z, target.Position.X, target.Position.Z) > m.Template.LeashDistance;
         if (lost)
         {
@@ -661,6 +656,42 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
                 MovementWalk = new MovementWalk { Dir = m.Face, Speed = speed, Acc = 0, EndHeight = y.Value },
             },
         }));
+    }
+
+    /// <summary>
+    /// A scripted straight move that the nav grid does not bound (a ship flying in along its scene-editor patrol,
+    /// DungeonService.Cues): one segment to (x, y, z) at the monster's speed, shown as a Walk ending at that height.
+    /// Returns its time in ms (0: no move).
+    /// </summary>
+    public int Fly(MonsterUnit m, float x, float y, float z)
+    {
+        long now = NowMs;
+        float dx = x - m.X, dz = z - m.Z, len = MathF.Sqrt(dx * dx + dz * dz), speed = m.SpeedCm(now) / 100f;
+        if (m.Dead || len < 0.1f || speed <= 0) return 0;
+        m.FromX = m.X; m.FromY = m.Y; m.FromZ = m.Z;
+        m.ToX = x; m.ToY = y; m.ToZ = z;
+        m.StartMs = now;
+        m.EndMs = now + (long)Math.Max(1, len / speed * 1000);
+        m.SegmentSpeed = speed;
+        m.Moving = true;
+        m.Face = Angle(m.X, m.Z, x, z);
+        var flight = new MovementChangeNtf
+        {
+            Uid = m.Uid, TransType = MovementTransitionType.MoveTransNormal, MovementInfo = m.CurrentMovement(now),
+        };
+        _loop.TrackRuntimeDetached("monster flight", () => _world.MoveUnitAsync(m, flight));
+        return (int)(m.EndMs - now);
+    }
+
+    /// <summary>A scripted monster at the end of its flight turns to a facing (a ship coming alongside, DungeonService.Cues).</summary>
+    public void Turn(MonsterUnit m, float face)
+    {
+        if (m.Dead) return;
+        long now = NowMs;
+        m.Advance(now);
+        m.Moving = false;
+        m.Face = face;
+        SendStop(m, now);
     }
 
     private static MovementChangeNtf Stop(MonsterUnit m, long now) => new()

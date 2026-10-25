@@ -82,6 +82,9 @@ public sealed class MapWorld
     /// <summary>Dungeon m_kGroups joined to m_kMonsterSpawnPoints; templates/timing belong to PetFloorConfig.</summary>
     public IReadOnlyDictionary<int, IReadOnlyList<SpawnPoint>> DungeonGroups { get; init; } = new Dictionary<int, IReadOnlyList<SpawnPoint>>();
 
+    /// <summary>Scene-editor patrol paths (kPatrolList) by id: their pathPoints in order (no facing).</summary>
+    public IReadOnlyDictionary<long, IReadOnlyList<MapPoint>> Patrols { get; init; } = new Dictionary<long, IReadOnlyList<MapPoint>>();
+
     public WorldNpc? Portal(int travelPointId) =>
         Npcs.FirstOrDefault(n => n.Kind == WorldNpcKind.Portal && GameData.Int(n.Entry, "TravelPointID") == travelPointId);
 
@@ -249,8 +252,26 @@ public sealed partial class WorldData(IOptions<ServerOptions> options, GameData 
         return new MapWorld
         {
             SceneEntry = sceneEntry, Born = born, Revive = revive, Npcs = npcs, Points = points, Nav = map.Nav, SpawnGroups = spawnGroups,
-            GatheringPoints = LoadGatheringPoints(se, sceneEntry), DungeonGroups = LoadDungeonGroups(se), Regions = LoadRegions(se)
+            GatheringPoints = LoadGatheringPoints(se, sceneEntry), DungeonGroups = LoadDungeonGroups(se), Regions = LoadRegions(se),
+            Patrols = LoadPatrols(se),
         };
+    }
+
+    /// <summary>kPatrolList: each entry's id and its pathPoints, each an [x, y, z] array.</summary>
+    private static Dictionary<long, IReadOnlyList<MapPoint>> LoadPatrols(JsonElement se)
+    {
+        var patrols = new Dictionary<long, IReadOnlyList<MapPoint>>();
+        if (!se.TryGetProperty("kPatrolList", out var list) || list.ValueKind != JsonValueKind.Array) return patrols;
+        foreach (var patrol in list.EnumerateArray())
+        {
+            if (!patrol.TryGetProperty("pathPoints", out var path) || path.ValueKind != JsonValueKind.Array) continue;
+            List<MapPoint> points = [];
+            foreach (var at in path.EnumerateArray())
+                if (at.ValueKind == JsonValueKind.Array && at.GetArrayLength() >= 3)
+                    points.Add(new MapPoint(at[0].GetSingle(), at[1].GetSingle(), at[2].GetSingle(), 0));
+            if (points.Count > 0) patrols[GameData.Int(patrol, "id")] = points;
+        }
+        return patrols;
     }
 
     private static Dictionary<long, MapRegion> LoadRegions(JsonElement se)

@@ -262,6 +262,19 @@ public sealed partial class CombatService : IGameTicker
     public List<Func<GameSession, Task>> PlayerRevived { get; } = new();
     /// <summary>A match owner decides which skills a participant may cast (true/false), or defers (null).</summary>
     public Func<GameSession, int, bool?>? MatchSkillRule { get; set; }
+    /// <summary>
+    /// A turret the participant sits on (GameplayStatusConfig type 10 UpperCannon, DungeonService.Cannon): true for the
+    /// skill of its fire button, which the participant may then cast without owning it.
+    /// </summary>
+    public Func<GameSession, int, bool>? TurretSkill { get; set; }
+    /// <summary>
+    /// Called with a turret skill's request before it is validated: the turret owner may aim it (a shot fired at nothing
+    /// in particular goes to the nearest target of its fight).
+    /// </summary>
+    public Action<GameSession, CastSkillReq>? TurretAim { get; set; }
+    /// <summary>Called once a turret skill's cast is admitted (paid, about to start), with its validated request; the
+    /// turret owner answers how the shot is shown (null: as any cast of the skill).</summary>
+    public Func<GameSession, CastSkillReq, TurretShot?>? TurretFired { get; set; }
     /// <summary>World-core owns the dead player's explicit accept/decline invitation.</summary>
     public Func<GameSession, GameSession, JsonElement, Task>? ReviveOffer { get; set; }
     public Func<GameSession, int>? ReviveCheck { get; set; }
@@ -329,7 +342,11 @@ public sealed partial class CombatService : IGameTicker
             {
                 if (int.TryParse(k, out int id))
                 {
-                    if (dmg.TryGetProperty("m_kActionDamge", out _) && action == 0) action = id;
+                    if (dmg.TryGetProperty("m_kActionDamge", out var act))
+                    {
+                        if (SkillShows.DisplayKinds(v).Contains(2)) return id;
+                        if (action == 0) action = id;
+                    }
                     if (fallback == 0) fallback = id;
                 }
             }
@@ -580,7 +597,7 @@ public sealed partial class CombatService : IGameTicker
 
     private async Task MonsterAttackAsync(MonsterUnit m, GameSession p)
     {
-        if (m.Dead || m.Hp <= 0 || _buffs.UnitForbidden(m, ForbiddenState.NormalAttack) || GuardianStealthed(p) || !_buffs.CanSeePosition(m, p.Position)) return;
+        if (m.Dead || m.Hp <= 0 || _buffs.UnitForbidden(m, ForbiddenState.NormalAttack) || Stealthed(p) || !_buffs.CanSeePosition(m, p.Position)) return;
         var targetRole = p.Role;
         if (targetRole == null) return;
         long targetScene = p.WorldScene;
@@ -599,12 +616,11 @@ public sealed partial class CombatService : IGameTicker
             && GameData.Int(swingRow, "_iSkillEffectLevel") > 0);
         ScheduleRuntime(m.WorldScene, TimeSpan.FromSeconds(m.Template.HitPointSeconds), async () =>
         {
-            if (m.Dead || m.Hp <= 0 || _buffs.UnitForbidden(m, ForbiddenState.NormalAttack) || GuardianStealthed(p) || p.Dead || p.Role == null || p.SceneLoading || p.WorldScene != m.WorldScene) return;
+            if (m.Dead || m.Hp <= 0 || _buffs.UnitForbidden(m, ForbiddenState.NormalAttack) || Stealthed(p) || p.Dead || p.Role == null || p.SceneLoading || p.WorldScene != m.WorldScene) return;
             if (!ReferenceEquals(p.Role, targetRole) || p.WorldScene != targetScene
                 || p.SceneGeneration != targetGeneration || !ReferenceEquals(p.Attachment, targetLease)
                 || targetLease?.Cancelled == true) return;
             if (MonsterService.Distance(m, p) > m.Template.AttackRange + 2f || !_buffs.CanSeePosition(m, p.Position)) return; // stepped away
-            if (MonsterService.Unseen(m, p)) return; // cloaked before the blow landed (inferred)
             var stats = _character.Stats(p);
             var attacker = MonsterFighter(m);
             var defender = new Fighter(0, 0, 0, 0, p.Progress!.Level, 1) { Def = stats[105], Mdef = stats[106], Flee = stats[110], ResCri = stats[112] };

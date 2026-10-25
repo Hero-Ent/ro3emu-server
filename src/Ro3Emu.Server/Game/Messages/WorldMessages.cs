@@ -51,7 +51,9 @@ public sealed class WorldMessages(Maps.World world, CombatService combat, SceneS
         });
         routes.Map(32703, "interaction", async (session, msgId, body) =>
         {
-            await interaction.UseActionAsync(session, UseInteractActionReq.Parser.ParseFrom(body.Span));
+            var action = UseInteractActionReq.Parser.ParseFrom(body.Span);
+            // A scripted scene's cannon (DungeonService.Cannon) answers its own gunner's buttons.
+            if (!await DungeonService.TryCannonActionAsync(session, action)) await interaction.UseActionAsync(session, action);
         });
         routes.Map(32708, "interaction", async (session, msgId, body) =>
         {
@@ -133,6 +135,10 @@ public sealed class WorldMessages(Maps.World world, CombatService combat, SceneS
             if (!await training.TryEnterAsync(session, dungeonRequest) && !await festival.TryEnterAsync(session, dungeonRequest) && !await timedBattles.TryEnterOnePieceAsync(session, dungeonRequest) && !await guildHome.TryEnterViaDungeonAsync(session, dungeonRequest)
                 && !await dracula.TryEnterAsync(session, dungeonRequest))
                 await dungeons.EnterAsync(session, dungeonRequest);
+        });
+        routes.Map(DraculaWeddingService.Watch, "territory", async (session, msgId, body) =>
+        {
+            await dracula.WatchAsync(session, DungeonWatchChangeTargetReq.Parser.ParseFrom(body.Span));
         });
         routes.Map(TowerService.LeaveDungeon, "territory", async (session, msgId, body) =>
         {

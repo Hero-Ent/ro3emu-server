@@ -31,6 +31,9 @@ public sealed class MonsterUnit : WorldUnit
     public bool Dead { get; set; }
     /// <summary>Scene script presentation camp; null uses the NPCConfig template camp.</summary>
     public int? CampOverride { get; set; }
+    /// <summary>A scene script moves it (a ship flying in along its patrol, DungeonService.Cues): it is never engaged,
+    /// so it neither chases, leashes home nor regains its HP there.</summary>
+    public bool ScriptDriven { get; set; }
     public long BornTimeMs { get; init; }
     internal string SpawnGeneration { get; } = Guid.NewGuid().ToString("N");
     public RewardSourceId? RewardSource { get; internal set; }

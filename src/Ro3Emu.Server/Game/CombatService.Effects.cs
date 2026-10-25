@@ -241,6 +241,8 @@ public sealed partial class CombatService
             && ReferenceEquals(s.Attachment, action.Attachment)
             && _sessions.All().Contains(s);
         string script = Script(row);
+        // A turret's shot shows its own template's hit and projectile (CombatService.TurretMuzzleAsync).
+        long show = action.Turret?.Show ?? GameData.Int(row, "_iScriptShow");
         // Heal's enemy branch is [1] for damage, and so is its segment count; a spin's final hit is branch [1] too.
         int branch = impact?.Branch ?? (script == "Heal" ? 1 : 0);
         int split = impact?.Split ?? HitSplit(row, branch);
@@ -248,7 +250,9 @@ public sealed partial class CombatService
             ? (forced.Hp > 0 && !forced.Dead && CanHitMonster(s, forced) ? [forced] : new List<MonsterUnit>())
             : chosenTargets?.Where(m => m.Hp > 0 && CanHitMonster(s, m)).ToList()
                 ?? SelectEnemies(s, action, center, field?.Trap == true ? field.Radius : null, field: field != null, maxOverride: field?.MaxTargets);
-        var playerTargets = impact?.Forced != null ? [] : EffectPlayerTargets(s, action, center);
+        // A turret's shot is one ball at the unit aimed at (DungeonService.Cannon), never a spread over everything near it.
+        if (action.Turret != null) targets.RemoveAll(m => m.Uid != action.Request.TargetId);
+        var playerTargets = impact?.Forced != null || action.Turret != null ? [] : EffectPlayerTargets(s, action, center);
         var alreadySlowed = GuardianPreviouslySlowed(row, targets, playerTargets);
         if (playerTargets.Length > 0)
         {
@@ -258,14 +262,14 @@ public sealed partial class CombatService
                 .OrderBy(p => p.Distance).ThenBy(p => p.Id).Take(maxTargets).Select(p => p.Id).ToHashSet();
             targets.RemoveAll(m => !selected.Contains(m.Uid));
             await HitEventPlayersAsync(s, playerTargets.Where(p => selected.Contains(p.Role!.Id)).ToArray(),
-                row, action.Request.SkillId, HitEffect(GameData.Int(row, "_iScriptShow")), action.Id, CanApplyMoreEffects,
+                row, action.Request.SkillId, HitEffect(show), action.Id, CanApplyMoreEffects,
                 action.GuardianDamage == null ? null : (id, amount) => RecordGuardianDamage(action, id, amount));
             if (IsGuardianEffect(row))
                 await GuardianPlayerDebuffsAsync(s, row, playerTargets.Where(p => selected.Contains(p.Role!.Id)),
                     alreadySlowed, castingRole.Id, CanApplyMoreEffects);
         }
         if (!CanApplyMoreEffects()) return; // player publication can yield before any monster hit is committed
-        int bulletEffect = BulletEffect(GameData.Int(row, "_iScriptShow"));
+        int bulletEffect = BulletEffect(show);
         if (bulletEffect > 0 && field == null && WolfRunMs(bulletEffect, 0) != null)
         {
             // A Wolf-track "bullet" (m_eBulletType 8) is the owner's Wolf pendant charging (verified in the client:
@@ -292,8 +296,9 @@ public sealed partial class CombatService
         }
         else if (bulletEffect > 0 && field == null)
         {
-            float maxDist = targets.Select(t => Distance(action.Origin, t.Pos))
-                .Concat(playerTargets.Select(p => Distance(action.Origin, p.Position)))
+            var origin = action.Turret?.Origin ?? action.Origin;
+            float maxDist = targets.Select(t => Distance(origin, t.Pos))
+                .Concat(playerTargets.Select(p => Distance(origin, p.Position)))
                 .DefaultIfEmpty(10f).Max();
             int flyTime = BulletLifeTime(bulletEffect, maxDist);
             bool highLevel = GameData.Int(row, "_iSkillEffectLevel") > 0;
@@ -301,7 +306,7 @@ public sealed partial class CombatService
             {
                 var bullet = new SkillFixTimeBulletNotify
                 {
-                    SourceId = action.SourceId,
+                    SourceId = action.Turret?.SourceId ?? action.SourceId,
                     TargetId = target.Uid,
                     EffectId = bulletEffect,
                     FixedTime = flyTime,
@@ -309,7 +314,7 @@ public sealed partial class CombatService
                     TargetPosition = target.Pos,
                     SkillConfigId = (int)GameData.Int(row, "_iID"),
                     MasterId = action.SourceId,
-                    SourcePosition = action.Origin,
+                    SourcePosition = action.Turret?.Origin ?? action.Origin,
                     StartTimestampMs = Now,
                 };
                 await SendSkillBulletAsync(s, bullet, highLevel: highLevel);
@@ -318,7 +323,7 @@ public sealed partial class CombatService
             {
                 var bullet = new SkillFixTimeBulletNotify
                 {
-                    SourceId = action.SourceId,
+                    SourceId = action.Turret?.SourceId ?? action.SourceId,
                     TargetId = pTarget.Role!.Id,
                     EffectId = bulletEffect,
                     FixedTime = flyTime,
@@ -326,7 +331,7 @@ public sealed partial class CombatService
                     TargetPosition = pTarget.Position,
                     SkillConfigId = (int)GameData.Int(row, "_iID"),
                     MasterId = action.SourceId,
-                    SourcePosition = action.Origin,
+                    SourcePosition = action.Turret?.Origin ?? action.Origin,
                     StartTimestampMs = Now,
                 };
                 await SendSkillBulletAsync(s, bullet, highLevel: highLevel);
@@ -362,7 +367,7 @@ public sealed partial class CombatService
         var hit = new SkillHitInfo
         {
             SrcID = field?.Uid ?? action.SourceId, SkillId = action.Request.SkillId, SessionId = action.Id,
-            RootCtxGuid = action.Id, ComboIndex = action.Request.ComboIndex, ShowPoint = HitEffect(GameData.Int(row, "_iScriptShow")),
+            RootCtxGuid = action.Id, ComboIndex = action.Request.ComboIndex, ShowPoint = HitEffect(show),
             SrcElement = (int)Math.Max(1, GameData.Int(row, "_iEleType")),
             // Heals on allies are one number; damage segments only when an enemy is hit.
             Split = targets.Count > 0 ? split : 1,
@@ -424,7 +429,10 @@ public sealed partial class CombatService
                             catch (Exception ex) { _log.LogError(ex, "Monster damage callback failed for {Uid}", target.Uid); }
                         }
                     long extraShown = doubles.Where(d => d.Target == target).Sum(d => d.Amount);
-                    hit.Dsts.Add(new DamageInfo { DstID = target.Uid, Damage = amount - extraShown, HitResult = result, DstElement = target.Template.Element, IsDead = target.Hp == 0 && extraShown == 0 });
+                    // A turret's hit may show a number of its own (the airship's cannon: about 9.9 million in the official video).
+                    long shownDamage = action.Turret is { Shown: > 0 } turretShot
+                        ? turretShot.Shown - TurretShownSpread + Rolls.Proc(2 * TurretShownSpread + 1) : amount - extraShown;
+                    hit.Dsts.Add(new DamageInfo { DstID = target.Uid, Damage = shownDamage, HitResult = result, DstElement = target.Template.Element, IsDead = target.Hp == 0 && extraShown == 0 });
                 }
                 if (CanApplyMoreEffects())
                     foreach (var tuple in Tuples(row, "_kBuff2"))
@@ -732,7 +740,7 @@ public sealed partial class CombatService
     internal static (int Id, int Ms, string Curve) FindMovementEffect(GameData data, long show)
     {
         var effects = data.SkillTemplateTable("Lua_Config_EffectData");
-        for (long id = show * 100; id < show * 100 + 100; id++)
+        foreach (long baseId in (ReadOnlySpan<long>)[show * 100, show * 1000]) for (long id = baseId; id < baseId + 100; id++)
             if (effects.TryGetValue(id.ToString(), out var e) && e.TryGetProperty("m_kPoint", out var point)
                 && point.TryGetProperty("m_bMovement", out var moves) && moves.ValueKind == JsonValueKind.True)
                 return ((int)id, point.TryGetProperty("m_iMovementTime", out var ms) && ms.TryGetInt32(out int t) ? t : 0,

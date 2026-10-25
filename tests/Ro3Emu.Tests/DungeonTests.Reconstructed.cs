@@ -124,7 +124,8 @@ public sealed partial class DungeonTests
     /// <summary>The living actors of the room's current wave, once all of them have spawned.</summary>
     private async Task<IReadOnlyList<MonsterUnit>> WaveIn(long instance, int count)
     {
-        for (int i = 0; i < 150; i++)
+        // Up to 15 s: a scripted step's monsters may arrive later than its start (the airship's boarders, 11.5 s).
+        for (int i = 0; i < 750; i++)
         {
             var alive = await Service<GameLoop>().InvokeAsync(() => Task.FromResult(Service<World>().AllUnits()
                 .OfType<MonsterUnit>().Where(m => m.InstanceId == instance && !m.Dead && m.Hp > 0).ToArray()));

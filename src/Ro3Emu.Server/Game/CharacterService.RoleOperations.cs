@@ -327,6 +327,20 @@ public sealed partial class CharacterService
         await SyncItemsAsync(session);
     }
 
+    /// <summary>
+    /// 5009 shortcutBarInfos as the client needs it: one entry per slot, in slot order, GUID 0 when empty.
+    /// LC_DAL_Item.OnShortcutBarInfosUpdate only updates a slot already in ShortcutBarData and drops a whole-list
+    /// replacement, so a slot missing from the login list never shows what is saved into it, and a list whose
+    /// length changes is never applied. A fixed list makes every save an element-wise increment.
+    /// </summary>
+    internal static IEnumerable<ShortcutBarInfo> FullShortcutBar(IEnumerable<ShortcutBarInfo> saved)
+    {
+        var bySlot = saved.Where(i => i.SlotIndex is >= 0 and < ShortcutSlotLimit)
+            .GroupBy(i => i.SlotIndex).ToDictionary(g => g.Key, g => g.Last().ItemGuid);
+        for (int slot = 0; slot < ShortcutSlotLimit; slot++)
+            yield return new ShortcutBarInfo { SlotIndex = slot, ItemGuid = bySlot.GetValueOrDefault(slot) };
+    }
+
     /// <summary>31336 stores an owned GUID at a zero-based slot. GUID 0 clears it.</summary>
     public async Task ShortcutBarSaveAsync(GameSession session, ShortcutBarSaveReq req)
     {

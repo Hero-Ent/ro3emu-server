@@ -40,6 +40,24 @@ public sealed partial class MonsterService
     private BossSkillBook? BossBook(int npcId, JsonElement npc, int normalSkill) =>
         _bossOptions.Enabled && GameData.Int(npc, "_iNPCSubType") is 3 or 4 or 6 ? BossSkillSets.For(npcId, normalSkill) : null;
 
+    /// <summary>
+    /// Arms a scripted fight's monster (DungeonService.Cues: the airship boarders and Evil Boss) so any Once skill is
+    /// cast as its opening move right after its entrance skill ends, and its other skills follow soon after (inferred).
+    /// </summary>
+    internal void ArmScriptedSkills(MonsterUnit m, long readyAtMs)
+    {
+        if (m.Template.Skills is not { } book) return;
+        var rt = m.BossSkills ??= new BossSkillRuntime(book);
+        rt.Engaged = true;
+        for (int i = 0; i < book.Skills.Length; i++)
+            if (book.Skills[i].Once)
+            {
+                rt.ReadyMs[i] = readyAtMs;
+                if (!rt.Opener[i]) { rt.Opener[i] = true; rt.Openers++; }
+            }
+            else rt.ReadyMs[i] = readyAtMs + 1500;
+    }
+
     /// <summary>MvpService's tick: its own plans were not due, so the boss may cast one of its generic specials.</summary>
     internal bool TryBossSkill(MonsterUnit m, long now) =>
         m.Target is { } target && !m.Dead && m.BusyUntilMs <= now && TryBossSkill(m, target, null, Distance(m, target), now);
@@ -62,7 +80,7 @@ public sealed partial class MonsterService
             for (int i = 0; i < book.Skills.Length; i++)
             {
                 var skill = book.Skills[i];
-                if (skill.FromPhase == rt.Phase && !rt.Opener[i])
+                if (skill.FromPhase == rt.Phase && !rt.Opener[i] && (!skill.Once || rt.LastCastMs[i] == 0))
                 {
                     rt.ReadyMs[i] = now;
                     rt.Opener[i] = true;
@@ -93,9 +111,10 @@ public sealed partial class MonsterService
         for (int i = 0; i < skills.Length; i++)
         {
             var skill = skills[i];
-            if (rt.Phase < skill.FromPhase || rt.Phase > skill.ToPhase || rt.ReadyMs[i] > now) continue;
             bool opener = rt.Opener[i];
-            if (!opener && !gapOpen || dist > skill.Reach + 0.5f) continue;
+            if (!opener && (rt.Phase < skill.FromPhase || rt.Phase > skill.ToPhase) || rt.ReadyMs[i] > now) continue;
+            float reach = opener && skill.Once ? Math.Max(skill.Reach, 25f) : skill.Reach;
+            if (!opener && !gapOpen || dist > reach + 0.5f) continue;
             if (best >= 0 && (bestOpener && !opener || bestOpener == opener && rt.LastCastMs[i] >= bestLast)) continue;
             best = i;
             bestOpener = opener;
@@ -114,12 +133,15 @@ public sealed partial class MonsterService
             rt.Opener[index] = false;
             rt.Openers--;
         }
-        long busy = BossChant(m, skill) + skill.ActionMs + skill.ChargeMs;
+        long busy = BossChant(m, skill) + skill.ActionMs + (skill.WarningEffect > 0 ? 0 : skill.ChargeMs);
         m.BusyUntilMs = now + busy;
         m.NextSpecialMs = now + Math.Max(busy + _bossOptions.GlobalCooldownMs, skill.PublicCdMs);
         m.NextSwingMs = Math.Max(m.NextSwingMs, m.BusyUntilMs);
-        if (player != null) m.Face = Angle(m.X, m.Z, player.Position.X, player.Position.Z);
-        else if (pet != null) m.Face = Angle(m.X, m.Z, pet.X, pet.Z);
+        if (!skill.SpawnFacing)
+        {
+            if (player != null) m.Face = Angle(m.X, m.Z, player.Position.X, player.Position.Z);
+            else if (pet != null) m.Face = Angle(m.X, m.Z, pet.X, pet.Z);
+        }
         long serial = ++rt.CastSerial;
         rt.ActiveSkill = skill.Id;
         rt.ActiveSession = 0;
@@ -245,6 +267,7 @@ public sealed partial class MonsterService
             if (k.Once) text.Append(" once");
             if (k.SummonNpc > 0) text.Append(CultureInfo.InvariantCulture, $" summons {k.SummonCount}x{k.SummonNpc}");
             if (k.ChargeEffect > 0) text.Append(" charge");
+            if (k.GroundNpc > 0) text.Append(CultureInfo.InvariantCulture, $" places {k.GroundNpc}{(k.GroundBlast > 0 ? $" (blast {k.GroundBlast})" : "")}");
             if (live?.BossSkills is { } state)
                 text.Append(state.ReadyMs[i] == long.MaxValue ? " (spent)" : state.ReadyMs[i] > now
                     ? string.Create(CultureInfo.InvariantCulture, $" (ready in {(state.ReadyMs[i] - now) / 1000.0:0.#}s)") : " (ready)");

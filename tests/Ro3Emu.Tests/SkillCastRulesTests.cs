@@ -132,7 +132,7 @@ public sealed partial class SkillCombatTests
             await Buffs.AddAsync(s, 1500610, 10000, s.Role!.Id); // Disguise lv10: "revealed after taking damage «3» times"
             monsters.Engage(monster, s);
         });
-        Assert.True(await Loop.InvokeAsync(() => Task.FromResult(BuffService.Hidden(s))));
+        Assert.True(await Loop.InvokeAsync(() => Task.FromResult(Combat.Stealthed(s))));
         Assert.Null(await Loop.InvokeAsync(() => Task.FromResult(monster.Target))); // an ordinary monster does not see it
         await Loop.InvokeAsync(async () =>
         {
@@ -141,6 +141,6 @@ public sealed partial class SkillCombatTests
         Assert.Contains(await BuffsOf(s), b => b.ConfigId == 1500610);
         await Loop.InvokeAsync(async () => { foreach (var handler in Combat.TakenAsync) await handler(monster, s, 10); });
         Assert.DoesNotContain(await BuffsOf(s), b => b.ConfigId == 1500610);
-        Assert.False(await Loop.InvokeAsync(() => Task.FromResult(BuffService.Hidden(s))));
+        Assert.False(await Loop.InvokeAsync(() => Task.FromResult(Combat.Stealthed(s))));
     }
 }
