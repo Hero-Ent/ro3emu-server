@@ -120,6 +120,26 @@ public sealed class BossSkillSetsTests(ITestOutputHelper output)
     }
 
     [ClientDataFact]
+    public void TheAirshipEvilBossAndBoardersCastTheirSkills()
+    {
+        // The Evil Boss (AI MainStory_DevilBoss, no _kSkills): its four MainStory_EvilBossSkill rows, the cone and front
+        // circle, the three-rectangle fan, the pull and the circle with its blast.
+        Assert.All(new[] { 5352301, 5352601, 5352701, 5352801 }, id => Assert.Contains(id, Ids(5300018)));
+        // The boarders' listed specials: the warriors' charge and slash, the archers' arrow rain and line shot.
+        Assert.All(new[] { 5350101, 5350201 }, id => Assert.Contains(id, Ids(5300016)));
+        Assert.All(new[] { 5351101, 5351201 }, id => Assert.Contains(id, Ids(5300046)));
+        var boss = Book(5300018)!;
+        Assert.Equal((BossSkillArea.AroundTarget, 10f, 5352807), (boss.Skills.Single(k => k.Id == 5352801).Area,
+            boss.Skills.Single(k => k.Id == 5352801).Radius, boss.Skills.Single(k => k.Id == 5352801).WarningEffect));
+        Assert.Equal(53523015, boss.Skills.Single(k => k.Id == 5352301).PushEffect);
+        var dash = Book(5300042)!.Skills.Single(k => k.Id == 5350301);
+        Assert.Equal((BossSkillArea.Rect, 20f, 5f, 53503023, 53503021, true),
+            (dash.Area, dash.Radius, dash.Width, dash.WarningEffect, dash.ChargeEffect, dash.SpawnFacing));
+        var volley = Book(5300046)!.Skills.Single(k => k.Id == 5351301);
+        Assert.Equal((BossSkillArea.AroundTarget, 6f, 53513019), (volley.Area, volley.Radius, volley.WarningEffect));
+    }
+
+    [ClientDataFact]
     public void StoryMiniAndRiftBossesGetTheirOwnRows()
     {
         Assert.Equal([5101201], Ids(5100000));     // Rocker: "Rocker Skills"

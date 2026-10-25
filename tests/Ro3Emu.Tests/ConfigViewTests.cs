@@ -144,7 +144,7 @@ public sealed class ConfigViewTests
     // count only goes down: lower it when a change removes such reads, never raise it.
     // Hero Saga: upstream's 2712 plus 75 reads of our own combat code (SkillMechanics, triggers) still to move into
     // the views (upstream sync 2026-10-22).
-    private const int FieldNamesOutsideViews = 2787;
+    private const int FieldNamesOutsideViews = 2783;
     private static readonly string Obj = Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar;
 
     [Fact]

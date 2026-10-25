@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Text.Json;
 using Romsg;
 using Ro3Emu.Server.Accounts;
 using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 using Ro3Emu.Server.Maps;
 
 namespace Ro3Emu.Server.Game;
@@ -18,6 +20,7 @@ namespace Ro3Emu.Server.Game;
 public sealed partial class CombatService
 {
     private const float ChargeStopShort = 1.5f; // a charge ends this far in front of its target (inferred)
+    private const int DisplayWarningRange = 6;  // Lua_GameDefine.enum_DisplayEffectType.WarningRange
 
     private void WireBossSkills()
     {
@@ -36,25 +39,23 @@ public sealed partial class CombatService
         if (!BossCastCurrent(boss, serial)) return;
         var rt = boss.BossSkills!;
         var options = _monsters.BossOptions;
-        long now = Now;
-        long session = ++_sessionIds;
+        long now = Now, session = ++_sessionIds;
         int chant = _monsters.BossChant(boss, skill);
         rt.ActiveSession = session;
         var role = player?.Role;
         bool hasTarget = player != null ? role != null && !player.Dead && player.WorldScene == boss.WorldScene
             : pet != null && !pet.Dead && pet.WorldScene == boss.WorldScene;
         var targetPos = player != null ? player.Position.Clone() : pet?.Pos ?? boss.Pos;
-        if (skill.ChargeEffect > 0 && hasTarget)
+        if (skill.ChargeEffect > 0 && skill.WarningEffect == 0 && hasTarget)
         {
             await ChargeAsync(boss, skill, targetPos);
             if (!BossCastCurrent(boss, serial)) return;
         }
-        float face = hasTarget ? MonsterService.Angle(boss.X, boss.Z, targetPos.X, targetPos.Z) : boss.Face;
+        float face = hasTarget && !skill.SpawnFacing ? MonsterService.Angle(boss.X, boss.Z, targetPos.X, targetPos.Z) : boss.Face;
         boss.Face = face;
         var origin = boss.Pos;
         var center = skill.Area == BossSkillArea.AroundTarget && hasTarget ? targetPos : origin;
-        long targetId = !hasTarget || skill.Area is not (BossSkillArea.Target or BossSkillArea.AroundTarget) ? 0
-            : role?.Id ?? pet!.Uid;
+        long targetId = !hasTarget || skill.Area is not (BossSkillArea.Target or BossSkillArea.AroundTarget) ? 0 : role?.Id ?? pet!.Uid;
         await SendMonsterTimelineAsync(boss, new UseInSkillInfo
         {
             SrcID = boss.Uid, SkillID = skill.Id, TargetId = targetId, TargetPos = hasTarget ? targetPos : origin, Face = face,
@@ -62,14 +63,63 @@ public sealed partial class CombatService
         }, highLevel: skill.HighLevel);
         if (!skill.Once && skill.CdMs > 0) await BossCooldownStartedAsync(boss, skill.Id, now + skill.CdMs);
         await FightingAsync(boss);
+        await ScheduleBossHitsAsync(boss, player, role, pet, skill, serial, session, origin, center, face, targetId, chant, options);
+        _log.LogDebug("Boss {Npc} casts {Skill} (phase {Phase})", boss.Template.NpcId, skill.Id, rt.Phase);
+    }
+
+    private async Task ScheduleBossHitsAsync(MonsterUnit boss, GameSession? player, Role? role, TowerPetUnit? pet, BossSkill skill,
+        long serial, long session, Vec3 origin, Vec3 center, float face, long targetId, int chant, BossSkillOptions options)
+    {
         int show = HitEffect(GameData.Int(skill.Row, "_iScriptShow"));
+        if (skill.WarningEffect > 0) await SendBossWarningAsync(boss, skill, targetId, center, face);
         for (int i = 0; i < skill.HitMs.Length; i++)
         {
             bool first = i == 0;
-            ScheduleRuntime(boss.WorldScene, TimeSpan.FromMilliseconds(Math.Max(0, skill.HitMs[i] + chant - skill.ChantMs)), () =>
-                BossSkillHitAsync(boss, player, role, pet, skill, serial, session, origin, center, face, show, first, options));
+            int hitAt = Math.Max(0, skill.HitMs[i] + chant - skill.ChantMs);
+            if (skill.WarningEffect > 0 && !first)
+            {
+                int warnAt = Math.Max(0, hitAt - skill.WarningMs);
+                ScheduleRuntime(boss.WorldScene, TimeSpan.FromMilliseconds(warnAt), () =>
+                    BossNextWarningAsync(boss, player, role, pet, skill, serial, targetId));
+            }
+            ScheduleRuntime(boss.WorldScene, TimeSpan.FromMilliseconds(hitAt), () =>
+                BossScheduledHitAsync(boss, player, role, pet, skill, serial, session, origin, center, face, show, first, options));
         }
-        _log.LogDebug("Boss {Npc} casts {Skill} (phase {Phase})", boss.Template.NpcId, skill.Id, rt.Phase);
+    }
+
+    private Task SendBossWarningAsync(MonsterUnit boss, BossSkill skill, long targetId, Vec3 center, float face) =>
+        _world.ToUnitViewersAsync(boss, SkillEffect, new SkillEffectDisplayNotify
+        {
+            SourceId = boss.Uid, MasterId = boss.Uid, TargetId = targetId, TargetPos = center.Clone(),
+            EffectId = skill.WarningEffect, EffectType = DisplayWarningRange, Angle = (int)MathF.Round(face), SkillId = skill.Id,
+        });
+
+    private async Task BossNextWarningAsync(MonsterUnit boss, GameSession? player, Role? role, TowerPetUnit? pet,
+        BossSkill skill, long serial, long targetId)
+    {
+        if (!BossCastCurrent(boss, serial)) return;
+        var aim = player != null && ReferenceEquals(player.Role, role) && !player.Dead && player.WorldScene == boss.WorldScene ? player.Position
+            : pet != null && !pet.Dead && pet.WorldScene == boss.WorldScene ? pet.Pos : null;
+        boss.Face = aim != null ? MonsterService.Angle(boss.X, boss.Z, aim.X, aim.Z) : (boss.Face + 180f) % 360f;
+        await SendBossWarningAsync(boss, skill, targetId, boss.Pos, boss.Face);
+    }
+
+    private async Task BossScheduledHitAsync(MonsterUnit boss, GameSession? player, Role? role, TowerPetUnit? pet, BossSkill skill,
+        long serial, long session, Vec3 origin, Vec3 center, float face, int show, bool first, BossSkillOptions options)
+    {
+        if (!BossCastCurrent(boss, serial)) return;
+        if (skill.WarningEffect > 0)
+        {
+            origin = boss.Pos;
+            face = boss.Face;
+            if (skill.Area != BossSkillArea.AroundTarget) center = origin;
+            if (skill.ChargeEffect > 0)
+            {
+                await ChargeAlongAsync(boss, skill, face);
+                if (!BossCastCurrent(boss, serial)) return;
+            }
+        }
+        await BossSkillHitAsync(boss, player, role, pet, skill, serial, session, origin, center, face, show, first, options);
     }
 
     private async Task BossSkillHitAsync(MonsterUnit boss, GameSession? player, Role? role, TowerPetUnit? pet, BossSkill skill,
@@ -81,6 +131,8 @@ public sealed partial class CombatService
         {
             foreach (var (buff, chance, ms) in skill.SelfBuffs)
                 if (ms > 0 && Rolls.Proc(10000) < chance) await _buffs.AddSupportAsync(boss, buff, ms, boss.Uid);
+            if (skill.WarningEffect > 0 && skill.Area is BossSkillArea.AroundTarget or BossSkillArea.AroundSelf)
+                await ShowAreaHitEffectAsync(boss, skill.Id, show, center);
         }
         if (first && skill.GroundNpc > 0)
         {
@@ -96,33 +148,7 @@ public sealed partial class CombatService
             return;
         }
         if (!skill.HitsPlayers) return;
-        var victims = new List<GameSession>();
-        var pets = new List<TowerPetUnit>();
-        if (skill.Area == BossSkillArea.Target)
-        {
-            // The locked target, unless it left the skill's reach or the scene meanwhile.
-            if (player != null && role != null && ReferenceEquals(player.Role, role) && !player.Dead && !player.SceneLoading
-                && player.WorldScene == boss.WorldScene && MonsterService.Distance(boss, player) <= skill.Reach + 2f) victims.Add(player);
-            else if (pet != null && !pet.Dead && pet.Hp > 0 && pet.WorldScene == boss.WorldScene
-                && MonsterService.Distance(boss.X, boss.Z, pet.X, pet.Z) <= skill.Reach + 2f) pets.Add(pet);
-        }
-        else
-        {
-            float reach = skill.Area == BossSkillArea.Rect ? MathF.Sqrt(skill.Radius * skill.Radius + skill.Width * skill.Width) : skill.Radius;
-            var near = new List<GameSession>();
-            _world.CollectPlayers(boss.WorldScene, center.X, center.Z, reach + 0.5f, near);
-            foreach (var p in near)
-                if (p.Role != null && !p.Dead && !p.SceneLoading && p.WorldScene == boss.WorldScene
-                    && InBossArea(skill, origin, center, face, p.Position.X, p.Position.Z)) victims.Add(p);
-            if (boss.InstanceId != 0)
-                foreach (var unit in _world.Map(boss.WorldScene).Near(center.X, center.Z, reach + 0.5f))
-                    if (unit is TowerPetUnit tp && !tp.Dead && tp.Hp > 0 && InBossArea(skill, origin, center, face, tp.X, tp.Z)) pets.Add(tp);
-            victims.Sort((a, b) => MonsterService.Distance(center.X, center.Z, a.Position.X, a.Position.Z)
-                .CompareTo(MonsterService.Distance(center.X, center.Z, b.Position.X, b.Position.Z)));
-            if (victims.Count > skill.MaxTargets) victims.RemoveRange(skill.MaxTargets, victims.Count - skill.MaxTargets);
-            int room = Math.Max(0, skill.MaxTargets - victims.Count);
-            if (pets.Count > room) pets.RemoveRange(room, pets.Count - room);
-        }
+        var (victims, pets) = CollectBossVictims(boss, player, role, pet, skill, origin, center, face);
         if (victims.Count > 0)
             await MonsterSkillHitAsync(boss, skill.Row, victims, boss.Uid, session, skill.Damages ? options.DamagePercent : 0, bossDebuffsOnly: true);
         if (skill.PushEffect > 0)
@@ -136,6 +162,49 @@ public sealed partial class CombatService
             if (!BossCastCurrent(boss, serial)) break;
             if (!tp.Dead && tp.Hp > 0 && skill.Damages) await DamageTowerPetAsync(boss, tp, skill.Row, skill.Id, session, show, options.DamagePercent);
         }
+    }
+
+    private (List<GameSession> Victims, List<TowerPetUnit> Pets) CollectBossVictims(MonsterUnit boss, GameSession? player,
+        Role? role, TowerPetUnit? pet, BossSkill skill, Vec3 origin, Vec3 center, float face)
+    {
+        var victims = new List<GameSession>();
+        var pets = new List<TowerPetUnit>();
+        if (skill.Area == BossSkillArea.Target)
+        {
+            // The locked target, unless it left the skill's reach or the scene meanwhile.
+            if (player != null && role != null && ReferenceEquals(player.Role, role) && !player.Dead && !player.SceneLoading
+                && player.WorldScene == boss.WorldScene && MonsterService.Distance(boss, player) <= skill.Reach + 2f) victims.Add(player);
+            else if (pet != null && !pet.Dead && pet.Hp > 0 && pet.WorldScene == boss.WorldScene
+                && MonsterService.Distance(boss.X, boss.Z, pet.X, pet.Z) <= skill.Reach + 2f) pets.Add(pet);
+            return (victims, pets);
+        }
+        float reach = skill.Area == BossSkillArea.Rect ? MathF.Sqrt(skill.Radius * skill.Radius + skill.Width * skill.Width) : skill.Radius;
+        var near = new List<GameSession>();
+        _world.CollectPlayers(boss.WorldScene, center.X, center.Z, reach + 0.5f, near);
+        foreach (var p in near)
+            if (p.Role != null && !p.Dead && !p.SceneLoading && p.WorldScene == boss.WorldScene
+                && InBossArea(skill, origin, center, face, p.Position.X, p.Position.Z)) victims.Add(p);
+        if (boss.InstanceId != 0)
+            foreach (var unit in _world.Map(boss.WorldScene).Near(center.X, center.Z, reach + 0.5f))
+                if (unit is TowerPetUnit tp && !tp.Dead && tp.Hp > 0 && InBossArea(skill, origin, center, face, tp.X, tp.Z)) pets.Add(tp);
+        victims.Sort((a, b) => MonsterService.Distance(center.X, center.Z, a.Position.X, a.Position.Z)
+            .CompareTo(MonsterService.Distance(center.X, center.Z, b.Position.X, b.Position.Z)));
+        if (victims.Count > skill.MaxTargets) victims.RemoveRange(skill.MaxTargets, victims.Count - skill.MaxTargets);
+        int room = Math.Max(0, skill.MaxTargets - victims.Count);
+        if (pets.Count > room) pets.RemoveRange(room, pets.Count - room);
+        return (victims, pets);
+    }
+
+    private async Task ShowAreaHitEffectAsync(MonsterUnit boss, int skillId, int effectId, Vec3 center)
+    {
+        if (!_data.SkillTemplateTable("Lua_Config_EffectData").TryGetValue(effectId.ToString(CultureInfo.InvariantCulture), out var e)) return;
+        foreach (int kind in SkillShows.DisplayKinds(e))
+            if (kind is 2 or 4)
+                await _world.ToUnitViewersAsync(boss, SkillEffect, new SkillEffectDisplayNotify
+                {
+                    SourceId = boss.Uid, MasterId = boss.Uid, TargetPos = center.Clone(), Is3DPosition = true,
+                    EffectId = effectId, EffectType = kind, SkillId = skillId,
+                });
     }
 
     /// <summary>Whether (x, z) is inside the skill's area: a circle around the boss or its marked point, a fan or a
@@ -208,6 +277,27 @@ public sealed partial class CombatService
         {
             EntityID = (ulong)boss.Uid, StartPos = start, EndPos = end, SkillConfigId = skill.Id, EffectId = skill.ChargeEffect,
             MoveType = 1, StartTimestampMs = Now, Face = MonsterService.Angle(start.X, start.Z, end.X, end.Z), MoveTimeMs = skill.ChargeMs,
+        });
+        await _world.MoveUnitAsync(boss, new MovementChangeNtf { Uid = boss.Uid, MovementInfo = boss.CurrentMovement(Now) });
+    }
+
+    /// <summary>A telegraphed rectangle charge (5350101, 5350301-5350601): the unit dashes along its warning rectangle.</summary>
+    private async Task ChargeAlongAsync(MonsterUnit boss, BossSkill skill, float face)
+    {
+        double radians = face * Math.PI / 180;
+        var start = boss.Pos;
+        float distance = Math.Min(skill.Radius, 14f);
+        var end = WalkableEnd(boss.SceneEntry, start, (float)Math.Sin(radians) * distance, (float)Math.Cos(radians) * distance);
+        if (_worldData.Map(boss.SceneEntry)?.Nav is { } nav && (nav.WalkHeight(end.X + 1f, end.Z, end.Y) is not float h || MathF.Abs(h - end.Y) > 2f || !nav.CanWalk(end.X, end.Y, end.Z, end.X + 1.2f, end.Z)))
+            end = WalkableEnd(boss.SceneEntry, start, (float)Math.Sin(radians) * Math.Max(0, distance - 2f), (float)Math.Cos(radians) * Math.Max(0, distance - 2f));
+        if (MonsterService.Distance(start.X, start.Z, end.X, end.Z) < 0.5f) return;
+        boss.Moving = false;
+        boss.X = end.X; boss.Y = end.Y; boss.Z = end.Z;
+        boss.Face = face;
+        await _world.ToUnitViewersAsync(boss, SkillMove, new SkillStartMoveNotify
+        {
+            EntityID = (ulong)boss.Uid, StartPos = start, EndPos = end, SkillConfigId = skill.Id, EffectId = skill.ChargeEffect,
+            MoveType = 1, StartTimestampMs = Now, Face = face, MoveTimeMs = skill.ChargeMs,
         });
         await _world.MoveUnitAsync(boss, new MovementChangeNtf { Uid = boss.Uid, MovementInfo = boss.CurrentMovement(Now) });
     }

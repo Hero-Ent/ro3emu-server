@@ -57,6 +57,11 @@ public sealed class BossSkill
     public int PushEffect { get; init; }
     public int PushMs { get; init; }
     public float PushDistance { get; init; }
+    /// <summary>A show whose m_kWarningRange is not in m_kShows: sent as 31119 EffectType 6 (WarningRange).</summary>
+    public int WarningEffect { get; init; }
+    public int WarningMs { get; init; }
+    /// <summary>An opening Once rectangle dash (the airship boarders' 5350301-5350601): keeps the unit's spawn facing.</summary>
+    public bool SpawnFacing { get; init; }
     public int BusyMs => ChantMs + ActionMs;
 }
 
@@ -351,6 +356,41 @@ public sealed class BossSkillSets(GameData data, BossSkillOptions options)
         int chant = (int)Math.Max(0, GameData.Int(row, "_iChantFix") + GameData.Int(row, "_iChantVar"));
         int action = (int)Math.Max(0, GameData.Int(row, "_iActionTime"));
         var template = data.SkillTemplate(GameData.Int(row, "_iScriptShow"));
+        var (shape, radius, width, angle, reach, warn) = ResolveArea(row, template);
+        // A _kBuff2 of BuffConfig _iType 1 (enum_BuffType.Buff) is the boss's own: Frenzy 5202301 / 5002201 "increases its own
+        // ... damage" (MvpService treats it alike). A row whose _kBuff2 are all such buffs only buffs the boss, its
+        // _kDamageParam1 (Frenzy's 10000) notwithstanding (inferred).
+        var buff2 = Tuples(row, "_kBuff2").Where(b => b.Length >= 3 && b[0] > 0).ToArray();
+        var beneficial = buff2.Where(b => data.Row("BuffConfig", (long)b[0]) is { } buff && GameData.Int(buff, "_iType") == 1).ToArray();
+        var hostile = buff2.Except(beneficial).ToArray();
+        bool damages = (hostile.Length > 0 || beneficial.Length == 0)
+            && (Numbers(row, "_kDamageParam1").Any(v => v > 0) || Numbers(row, "_kDamageParam2").Any(v => v > 0));
+        int warnEffect = warn is { EffectId: > 0, InTimeline: false } ? warn.EffectId : 0;
+        int warnMs = warnEffect > 0 ? Math.Max(400, warn.DurationMs) : 0;
+        return new BossSkill
+        {
+            Id = id, Row = row, Logic = logic, CdMs = cd, ChantMs = chant, ActionMs = action,
+            PublicCdMs = (int)Numbers(row, "_iPubCD").FirstOrDefault(),
+            FromPhase = from, ToPhase = to, Once = once,
+            Area = shape, Radius = radius, Width = width, AngleDeg = angle, Reach = reach,
+            MaxTargets = (int)Math.Max(1, GameData.Int(row, "_iTargetMax")),
+            HitMs = HitMoments(template, chant, action, warnMs), HighLevel = GameData.Int(row, "_iSkillEffectLevel") > 0,
+            Damages = damages, HitsPlayers = damages || hostile.Length > 0,
+            SelfBuffs = Tuples(row, "_kBuff1").Where(b => b.Length >= 3 && b[0] > 0).Concat(beneficial)
+                .Select(b => ((int)b[0], (int)b[1], (int)b[2])).ToArray(),
+            SummonNpc = SummonNpc(row), SummonCount = SummonCountOf(row), SummonLifeMs = SummonLifeOf(row), SummonBlast = SummonBlastOf(row),
+            GroundNpc = GroundNpc(row), GroundLifeMs = GroundLifeOf(row),
+            GroundBlast = GroundNpc(row) is var ground and > 0 && NPCConfig.Get(data, ground) is { RespawnSkill: > 0 and var groundBlast }
+                && data.Row("SkillConfig", groundBlast) != null ? (int)groundBlast : 0,
+            ChargeEffect = Charge(row, out int chargeMs), ChargeMs = chargeMs,
+            PushEffect = Push(row, out int pushMs, out float pushDistance), PushMs = pushMs, PushDistance = pushDistance,
+            WarningEffect = warnEffect, WarningMs = warnMs, SpawnFacing = once && shape == BossSkillArea.Rect,
+        };
+    }
+
+    private (BossSkillArea Shape, float Radius, float Width, float Angle, float Reach, SkillShows.WarningInfo Warn) ResolveArea(
+        JsonElement row, JsonElement? template)
+    {
         int release = (int)GameData.Int(row, "_iRelease");
         bool area = GameData.Int(row, "_iRangeType") == 2;
         var range = Numbers(row, "_kRange");
@@ -370,51 +410,45 @@ public sealed class BossSkillSets(GameData data, BossSkillOptions options)
         // Rect: _kRange [length, width] (Stone Glyph Slash [2300,700], Devouring Tongue [1500,600]); a missing width is 3 m.
         float width = shape == BossSkillArea.Rect ? range.Length > 1 && range[1] >= 100 ? (float)range[1] / 100 : 3f : 0;
         float angle = shape == BossSkillArea.Fan ? range.Length > 1 && range[1] > 0 ? (float)range[1] : 120f : 0;
+        // A lock row with a placeholder _kRange [5] whose show has an m_kWarningRange uses the telegraph's shape and size.
+        var warn = SkillShows.Warning(template, data.SkillTemplateTable("Lua_Config_EffectData"), new SkillConfig(row).ScriptShow);
+        if (warn.EffectId > 0 && release == 1 && rowRadius == 0)
+            (shape, radius, width, angle) = ApplyWarningArea(warn, radius, width, angle);
         float reach = shape switch
         {
             BossSkillArea.Target or BossSkillArea.AroundTarget => distance > 0 && distance <= options.MaxReach ? Math.Max(distance, 2f) : options.MaxReach,
             _ => Math.Min(radius, options.MaxReach),
         };
-        // A _kBuff2 of BuffConfig _iType 1 (enum_BuffType.Buff) is the boss's own: Frenzy 5202301 / 5002201 "increases its own
-        // ... damage" (MvpService treats it alike). A row whose _kBuff2 are all such buffs only buffs the boss, its
-        // _kDamageParam1 (Frenzy's 10000) notwithstanding (inferred).
-        var buff2 = Tuples(row, "_kBuff2").Where(b => b.Length >= 3 && b[0] > 0).ToArray();
-        var beneficial = buff2.Where(b => data.Row("BuffConfig", (long)b[0]) is { } buff && GameData.Int(buff, "_iType") == 1).ToArray();
-        var hostile = buff2.Except(beneficial).ToArray();
-        bool damages = (hostile.Length > 0 || beneficial.Length == 0)
-            && (Numbers(row, "_kDamageParam1").Any(v => v > 0) || Numbers(row, "_kDamageParam2").Any(v => v > 0));
-        return new BossSkill
-        {
-            Id = id, Row = row, Logic = logic, CdMs = cd, ChantMs = chant, ActionMs = action,
-            PublicCdMs = (int)Numbers(row, "_iPubCD").FirstOrDefault(),
-            FromPhase = from, ToPhase = to, Once = once,
-            Area = shape, Radius = radius, Width = width, AngleDeg = angle, Reach = reach,
-            MaxTargets = (int)Math.Max(1, GameData.Int(row, "_iTargetMax")),
-            HitMs = HitMoments(template, chant, action), HighLevel = GameData.Int(row, "_iSkillEffectLevel") > 0,
-            Damages = damages, HitsPlayers = damages || hostile.Length > 0,
-            SelfBuffs = Tuples(row, "_kBuff1").Where(b => b.Length >= 3 && b[0] > 0).Concat(beneficial)
-                .Select(b => ((int)b[0], (int)b[1], (int)b[2])).ToArray(),
-            SummonNpc = SummonNpc(row), SummonCount = SummonCountOf(row), SummonLifeMs = SummonLifeOf(row), SummonBlast = SummonBlastOf(row),
-            GroundNpc = GroundNpc(row), GroundLifeMs = GroundLifeOf(row),
-            GroundBlast = GroundNpc(row) is var ground and > 0 && NPCConfig.Get(data, ground) is { RespawnSkill: > 0 and var groundBlast }
-                && data.Row("SkillConfig", groundBlast) != null ? (int)groundBlast : 0,
-            ChargeEffect = Charge(row, out int chargeMs), ChargeMs = chargeMs,
-            PushEffect = Push(row, out int pushMs, out float pushDistance), PushMs = pushMs, PushDistance = pushDistance,
-        };
+        return (shape, radius, width, angle, reach, warn);
     }
+
+    private (BossSkillArea Shape, float Radius, float Width, float Angle) ApplyWarningArea(
+        SkillShows.WarningInfo warn, float radius, float width, float angle) => warn.Type switch
+        {
+            0 => (BossSkillArea.Rect, warn.Length > 0 ? Math.Min(options.MaxReach * 2, warn.Length) : radius, warn.Width > 0 ? warn.Width : 3f, 0),
+            1 => (warn.TargetType == 0 ? BossSkillArea.AroundSelf : BossSkillArea.AroundTarget,
+                warn.Radius > 0 ? Math.Min(options.MaxReach * 2, warn.Radius) : radius, 0, 0),
+            2 => (BossSkillArea.Fan, warn.Radius > 0 ? Math.Min(options.MaxReach * 2, warn.Radius) : radius, 0, warn.Degree > 0 ? warn.Degree : 120f),
+            _ => (BossSkillArea.Target, radius, width, angle),
+        };
 
     /// <summary>
     /// The show's attack points on the cast timeline (CombatService.ImpactOffset), distinct, at most MaxHitsPerCast. A
     /// show whose points all sit at 0 on a long action is a scripted warning whose damage parts were server objects: one
-    /// hit at 70 % of the action (inferred lead time).
+    /// hit at 70 % of the action (inferred lead time). When a warning telegraph is sent on 31119, its lead time precedes
+    /// the first hit (and 53528's 0.1 s warning-start point is not a damage hit).
     /// </summary>
-    private int[] HitMoments(JsonElement? template, int chant, int action)
+    private int[] HitMoments(JsonElement? template, int chant, int action, int warnMs)
     {
         var points = template is { } t && t.TryGetProperty("m_kAtkPoints", out var list) && list.ValueKind == JsonValueKind.Array
             ? list.EnumerateArray().Select(v => GameData.Number(v) ?? 0).Where(v => v >= 0).Distinct().Order().ToArray() : [];
+        if (warnMs >= 2000 && points.Length > 1 && points[0] < 0.2) points = points[1..];
         if (points.Length == 0 || points.All(p => p < 0.05) && action >= 1000) return [chant + action * 7 / 10];
-        return points.Select(p => CombatService.ImpactOffset(template, p, chant, action)).Distinct()
+        var hits = points.Select(p => CombatService.ImpactOffset(template, p, chant, action)).Distinct()
             .Take(Math.Max(1, options.MaxHitsPerCast)).ToArray();
+        if (warnMs > 0 && hits.Length > 0 && hits[0] < warnMs)
+            hits[0] = Math.Min(chant + action, warnMs);
+        return hits;
     }
 
     /// <summary>"summons three" / "@{1} Thief Bugs": the description's first parameter when it is a small count.</summary>
@@ -470,7 +504,7 @@ public sealed class BossSkillSets(GameData data, BossSkillOptions options)
 
     /// <summary>
     /// A show with a displacement EffectData (CombatService.FindMovementEffect) moves someone. A knockback or pull is
-    /// named in its curve (击退/震退, 勾/吸/拉) or in the skill's name/description ("Pulls enemies"); otherwise the
+    /// named in its curve (击退/震退/击飞, 勾/吸/拉) or in the skill's name/description ("Pulls enemies"); otherwise the
     /// caster moves: a charge or a leap toward its target (inferred).
     /// </summary>
     private int Charge(JsonElement row, out int ms)
@@ -478,7 +512,7 @@ public sealed class BossSkillSets(GameData data, BossSkillOptions options)
         ms = 0;
         var (effect, time, curve, text) = Displacement(row);
         if (effect == 0) return 0;
-        if (curve.Contains("击退") || curve.Contains("震退") || curve.Contains('勾') || curve.Contains('吸') || curve.Contains('拉')
+        if (curve.Contains("击退") || curve.Contains("震退") || curve.Contains("击飞") || curve.Contains('勾') || curve.Contains('吸') || curve.Contains('拉')
             || text.Contains("pull") || text.Contains("knock") || text.Contains("repel")) return 0;
         ms = time > 0 ? time : 300;
         return effect;
@@ -497,7 +531,7 @@ public sealed class BossSkillSets(GameData data, BossSkillOptions options)
     private const float KnockbackMeters = 3, PullStopMeters = 1;
 
     /// <summary>A show whose displacement EffectData moves the players hit (the cases <see cref="Charge"/> leaves out): a
-    /// knockback when its curve is 击退/震退 or the skill says knock/repel, a pull when its curve is 勾/吸/拉 or it says
+    /// knockback when its curve is 击退/震退/击飞 or the skill says knock/repel, a pull when its curve is 勾/吸/拉 or it says
     /// "pull" (Powerful Drain: "Pulls enemies inward toward yourself") (inferred).</summary>
     private int Push(JsonElement row, out int ms, out float distance)
     {
@@ -506,7 +540,7 @@ public sealed class BossSkillSets(GameData data, BossSkillOptions options)
         var (effect, time, curve, text) = Displacement(row);
         if (effect == 0) return 0;
         bool pull = curve.Contains('勾') || curve.Contains('吸') || curve.Contains('拉') || text.Contains("pull");
-        bool knock = curve.Contains("击退") || curve.Contains("震退") || text.Contains("knock") || text.Contains("repel");
+        bool knock = curve.Contains("击退") || curve.Contains("震退") || curve.Contains("击飞") || text.Contains("knock") || text.Contains("repel");
         if (!pull && !knock) return 0;
         ms = time > 0 ? time : 300;
         distance = pull ? -PullStopMeters : KnockbackMeters;

@@ -671,6 +671,9 @@ public sealed class StoryWalkTests(ITestOutputHelper output) : IAsyncLifetime
         var t = step.Complete[0];
         switch (t.Kind)
         {
+            case ReconstructedDungeons.TriggerKind.After:
+                detail.Add($"step {wave + 1}: waited {t.Id} ms (the scene's own clock)");
+                break;
             case ReconstructedDungeons.TriggerKind.Plot:
                 await _bot.SendGameAsync(TaskService.ExitCutSceneState, new ExitCutSceneStateReq());
                 await _bot.SendGameAsync(TaskService.PlotActingEnd, new PlotActingEndReq { PlotId = t.Id });

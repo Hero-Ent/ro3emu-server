@@ -33,6 +33,11 @@ public abstract class WorldUnit
 
     /// <summary>Players that currently show this unit (managed by World).</summary>
     public HashSet<GameSession> Viewers { get; } = new();
+    /// <summary>
+    /// How far players see this unit, in m (0: World.ViewRadius like every unit). Set through World.WidenSightAsync
+    /// for a target the scene places beyond the view radius (the airship's enemy ships, 100 m off the deck).
+    /// </summary>
+    public float SightRadius { get; internal set; }
     // An in-flight AOI enter must finish before removal publishes its leave.
     internal SemaphoreSlim PresentationGate { get; } = new(1, 1);
     internal bool Removed { get; set; }
@@ -65,6 +70,10 @@ public sealed class MapInstance(long sceneEntry, World world) : IGameTicker
     public World World => world;
     public IReadOnlyList<WorldUnit> Units => _units;
     public bool Contains(WorldUnit unit) => _members.Contains(unit);
+    /// <summary>The widest WorldUnit.SightRadius beyond World.ViewRadius given on this map (0: none), in m.</summary>
+    public float FarSight { get; private set; }
+
+    internal void Widened(WorldUnit unit) => FarSight = MathF.Max(FarSight, unit.SightRadius - Ro3Emu.Server.Maps.World.ViewRadius);
 
     private static (int, int) CellOf(float x, float z) => ((int)MathF.Floor(x / CellSize), (int)MathF.Floor(z / CellSize));
 

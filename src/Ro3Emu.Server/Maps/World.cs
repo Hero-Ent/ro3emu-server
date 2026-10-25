@@ -119,7 +119,7 @@ public sealed partial class World(IAoiSink sink, GameLoop loop, ILogger<World> l
             unit.Removed = false;
             Map(unit.WorldScene).Add(unit);
             List<GameSession> near;
-            lock (_sync) near = NearLocked(unit.WorldScene, unit.X, unit.Z).ToList();
+            lock (_sync) near = NearLocked(unit.WorldScene, unit.X, unit.Z, LeaveRadius + SightBeyondView(unit)).ToList();
             foreach (var player in near.Where(p => InRange(p, unit, ViewRadius)))
             {
                 unit.Viewers.Add(player);
@@ -166,7 +166,8 @@ public sealed partial class World(IAoiSink sink, GameLoop loop, ILogger<World> l
             if (unit.Removed) return;
             Map(unit.WorldScene).Moved(unit);
             List<GameSession> candidates;
-            lock (_sync) candidates = NearLocked(unit.WorldScene, unit.X, unit.Z).Concat(unit.Viewers).Distinct().ToList();
+            lock (_sync) candidates = NearLocked(unit.WorldScene, unit.X, unit.Z, LeaveRadius + SightBeyondView(unit))
+                .Concat(unit.Viewers).Distinct().ToList();
             var movers = new List<GameSession>();
             foreach (var player in candidates)
             {
@@ -193,6 +194,37 @@ public sealed partial class World(IAoiSink sink, GameLoop loop, ILogger<World> l
             if (!unit.Removed && player.VisibleUnits.Contains(unit)) await AfterUnitEnteredAsync(player, unit);
     }
 
+    /// <summary>How much farther than the view radius players see the unit (WorldUnit.SightRadius), in m.</summary>
+    private static float SightBeyondView(WorldUnit unit) => MathF.Max(0, unit.SightRadius - ViewRadius);
+
+    /// <summary>
+    /// Lets players see the unit from <paramref name="radius"/> m (WorldUnit.SightRadius) and shows it now to those
+    /// within that reach; its leave radius widens by the same amount.
+    /// </summary>
+    public async Task WidenSightAsync(WorldUnit unit, float radius)
+    {
+        var entered = new List<GameSession>();
+        await unit.PresentationGate.WaitAsync();
+        try
+        {
+            if (unit.Removed) return;
+            unit.SightRadius = radius;
+            Map(unit.WorldScene).Widened(unit);
+            List<GameSession> near;
+            lock (_sync) near = [.. NearLocked(unit.WorldScene, unit.X, unit.Z, LeaveRadius + SightBeyondView(unit))];
+            foreach (var player in near.Where(p => !unit.Viewers.Contains(p) && InRange(p, unit, ViewRadius)))
+            {
+                unit.Viewers.Add(player);
+                player.VisibleUnits.Add(unit);
+                await Safe(player, () => sink.UnitsChangedAsync(player, [unit], []));
+                entered.Add(player);
+            }
+        }
+        finally { unit.PresentationGate.Release(); }
+        foreach (var player in entered)
+            if (!unit.Removed && player.VisibleUnits.Contains(unit)) await AfterUnitEnteredAsync(player, unit);
+    }
+
     /// <summary>Sends a message about the unit to every player that shows it (HP change, attack...).</summary>
     public async Task ToUnitViewersAsync(WorldUnit unit, uint msgId, Google.Protobuf.IMessage body)
     {
@@ -208,7 +240,7 @@ public sealed partial class World(IAoiSink sink, GameLoop loop, ILogger<World> l
         if (!_maps.TryGetValue(player.WorldScene, out var map)) return;
         var left = new List<long>();
         // Candidates: units near the player plus the ones it shows (they may have walked away).
-        var candidates = map.Near(player.Position.X, player.Position.Z, LeaveRadius).Concat(player.VisibleUnits)
+        var candidates = map.Near(player.Position.X, player.Position.Z, LeaveRadius + map.FarSight).Concat(player.VisibleUnits)
             .Distinct().OrderBy(unit => unit.Uid).ToArray();
         var held = new List<WorldUnit>(candidates.Length);
         try
@@ -272,6 +304,7 @@ public sealed partial class World(IAoiSink sink, GameLoop loop, ILogger<World> l
 
     private static bool InRange(GameSession player, WorldUnit unit, float radius)
     {
+        radius += SightBeyondView(unit);
         float dx = player.Position.X - unit.X, dz = player.Position.Z - unit.Z;
         return dx * dx + dz * dz <= radius * radius;
     }
@@ -802,12 +835,14 @@ public sealed partial class World(IAoiSink sink, GameLoop loop, ILogger<World> l
         }
     }
 
-    private IEnumerable<GameSession> NearLocked(long scene, float x, float z)
+    /// <param name="reach">How far to look, in m: the cells within it (at least the 3 x 3 around the point).</param>
+    private IEnumerable<GameSession> NearLocked(long scene, float x, float z, float reach = LeaveRadius)
     {
         if (!_grids.TryGetValue(scene, out var grid)) yield break;
         var (cx, cz) = Cell(x, z);
-        for (int dx = -1; dx <= 1; dx++)
-            for (int dz = -1; dz <= 1; dz++)
+        int span = Math.Max(1, (int)MathF.Ceiling(reach / CellSize));
+        for (int dx = -span; dx <= span; dx++)
+            for (int dz = -span; dz <= span; dz++)
                 if (grid.TryGetValue((cx + dx, cz + dz), out var list))
                     foreach (var p in list) yield return p;
     }

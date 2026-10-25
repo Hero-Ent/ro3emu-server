@@ -262,6 +262,19 @@ public sealed partial class CombatService : IGameTicker
     public List<Func<GameSession, Task>> PlayerRevived { get; } = new();
     /// <summary>A match owner decides which skills a participant may cast (true/false), or defers (null).</summary>
     public Func<GameSession, int, bool?>? MatchSkillRule { get; set; }
+    /// <summary>
+    /// A turret the participant sits on (GameplayStatusConfig type 10 UpperCannon, DungeonService.Cannon): true for the
+    /// skill of its fire button, which the participant may then cast without owning it.
+    /// </summary>
+    public Func<GameSession, int, bool>? TurretSkill { get; set; }
+    /// <summary>
+    /// Called with a turret skill's request before it is validated: the turret owner may aim it (a shot fired at nothing
+    /// in particular goes to the nearest target of its fight).
+    /// </summary>
+    public Action<GameSession, CastSkillReq>? TurretAim { get; set; }
+    /// <summary>Called once a turret skill's cast is admitted (paid, about to start), with its validated request; the
+    /// turret owner answers how the shot is shown (null: as any cast of the skill).</summary>
+    public Func<GameSession, CastSkillReq, TurretShot?>? TurretFired { get; set; }
     /// <summary>World-core owns the dead player's explicit accept/decline invitation.</summary>
     public Func<GameSession, GameSession, JsonElement, Task>? ReviveOffer { get; set; }
     public Func<GameSession, int>? ReviveCheck { get; set; }
@@ -329,7 +342,11 @@ public sealed partial class CombatService : IGameTicker
             {
                 if (int.TryParse(k, out int id))
                 {
-                    if (dmg.TryGetProperty("m_kActionDamge", out _) && action == 0) action = id;
+                    if (dmg.TryGetProperty("m_kActionDamge", out var act))
+                    {
+                        if (SkillShows.DisplayKinds(v).Contains(2)) return id;
+                        if (action == 0) action = id;
+                    }
                     if (fallback == 0) fallback = id;
                 }
             }
