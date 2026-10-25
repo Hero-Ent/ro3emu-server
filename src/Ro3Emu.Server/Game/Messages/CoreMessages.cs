@@ -295,7 +295,17 @@ public sealed class CoreMessages(RoleSessionService roleSessions, ChatService ch
                     [Ownership.ReservationKey.Role(role.Id), Ownership.ReservationKey.Lifecycle(role.Id)], session, OwnAsync);
             else await OwnAsync();
             await guilds.ReconcileOnHeartbeatAsync();
-            await session.SendGameAsync(MsgId.Heartbeat, new Pong { ServerTimeMs = roleSessions.NowMs() });
+            // The HUD's "ms" is measured by the client (RO3.PingTiming): it stamps Ping.strDebugTag ("ro3pt:<seq>")
+            // when the heartbeat leaves and takes the round trip when a Pong carries that tag back in strDebugTag.
+            // Without the echo it never matches and the ping stays at 0.
+            await session.SendGameAsync(MsgId.Heartbeat, new Pong { ServerTimeMs = roleSessions.NowMs(), StrDebugTag = DebugTag(body) });
         });
+    }
+
+    /// <summary>Ping.strDebugTag of a heartbeat; empty when the body is empty or not a Ping.</summary>
+    private static string DebugTag(ReadOnlyMemory<byte> body)
+    {
+        try { return Ping.Parser.ParseFrom(body.Span).StrDebugTag; }
+        catch (InvalidProtocolBufferException) { return ""; }
     }
 }

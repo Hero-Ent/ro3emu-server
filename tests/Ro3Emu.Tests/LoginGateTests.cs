@@ -104,4 +104,16 @@ public sealed class LoginGateTests : IAsyncLifetime
         Assert.All(bot.Inbox.Snapshot().Where(e => e.Kind == BotEventKind.Game),
             e => Assert.Equal(MsgId.Heartbeat, e.MsgId));
     }
+
+    [Fact]
+    public async Task ThePongEchoesTheHeartbeatsTimingTag()
+    {
+        // RO3.PingTiming stamps Ping.strDebugTag and reads the HUD's ping from the Pong that carries it back.
+        await using var bot = new BotClient(_http, _pem);
+        await bot.LoginAsync("pinger", "pw");
+        await bot.OpenGateAsync();
+
+        Assert.Equal("ro3pt:000000000000002a", (await bot.HeartbeatAsync("ro3pt:000000000000002a")).StrDebugTag);
+        Assert.Equal("", (await bot.HeartbeatAsync()).StrDebugTag);
+    }
 }

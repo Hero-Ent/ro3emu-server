@@ -311,12 +311,13 @@ public sealed class BotClient : IAsyncDisposable
         return bound;
     }
 
-    /// <summary>HEARTBEAT (msgId 1, empty) and its Pong: everything sent before it has been handled.</summary>
-    public async Task HeartbeatAsync()
+    /// <summary>HEARTBEAT (msgId 1) and its Pong: everything sent before it has been handled. The body is empty
+    /// unless <paramref name="debugTag"/> is given (Ping.strDebugTag, what the real client's ping timing stamps).</summary>
+    public async Task<Pong> HeartbeatAsync(string debugTag = "")
     {
         using var pong = _inbox.Expect(e => e.IsGame(MsgId.Heartbeat));
-        await SendGameBytesAsync(MsgId.Heartbeat, []);
-        await pong.WaitAsync(Timeout, _cts.Token);
+        await SendGameBytesAsync(MsgId.Heartbeat, debugTag.Length == 0 ? [] : new Ping { StrDebugTag = debugTag }.ToByteArray());
+        return Pong.Parser.ParseFrom((await pong.WaitAsync(Timeout, _cts.Token)).Body);
     }
 
     /// <summary>Micro PhonestGate.bind {Id, Auth, ClusterId} (GameClient.Bind); true when the gate accepted it.</summary>
