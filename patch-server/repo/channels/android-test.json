@@ -1,8 +1,16 @@
 {
   "channel": "android-test",
-  "version": "1.1.1-android1-local",
-  "manifest": "manifests/1.1.1-android1-local.json.zst",
-  "manifestSha256": "7b8892048e016eb873e56f7485ceb9e9fdedad3fdb4fd5d4a38aabb4e1857f08",
-  "published": "2026-10-23T19:48:07.0632936+00:00",
-  "signature": "ML9SHtz05LyejXWAScL0ePdlpWVZ674a3OwB2UYohqOD81qUNTOWnCFKkN9kZL2hzjpxaN/QBzfFC0Oxke9\u002BszhWwOq1UZsFH/bU7F/tVCX4UZR7rxLJelFsbd/RguEZQBoiXg4KAE3rlHi2LPklhiQmAQpdza50napyB1bqFgqgOhEYhs3WjEjiXgmbox3uKbg6TB5xJ17wqH0b7dgFNTeMRudKtGTHmmOPPPfKd9T9ppbiXwPWgq0Su2xV\u002BeKcxusEw4d8oeB7LsEiqpmNefRjYtfp90DPKqswsyQWe6LCtNAkfIaq/Ua/\u002BLK6wxWdkhZcVsCF3ICIKCMTO4/GrBrzfBrjXgFOlUu93Me2M7qViKDWddxwQGQk9iHUqeqAbzAAYv0exEAscz31IxICo22yDDMGuDgjbjBetSFYZ7k/TMH/md7OU/cUV1y\u002BEDebZRa2E\u002BnpTgRr2Lw9mMD\u002BdBD0edHdseFj4mFYd21sVzjQzeyBDV73lA5AjHSxdKLg"
+  "version": "1.1.1-android2-local",
+  "manifest": "manifests/1.1.1-android2-local.json.zst",
+  "manifestSha256": "6665c772c83859f626d73c5ccfe0aace9e83f0e8b7ce2a59e884333b8b39e3a1",
+  "published": "2026-10-25T05:59:06.3995837+00:00",
+  "apk": {
+    "version": "1.0.1",
+    "minVersion": "1.0.1",
+    "url": "apk/1.0.1/HeroSaga.apk",
+    "sha256": "b764c0b27b69ed2250d5c8e0cbdb1fcd407c565db332269ca3a05b86cd479cf2",
+    "size": 71595805,
+    "pcVersion": "1.1.1-local"
+  },
+  "signature": "ZLPFVNs\u002BPpEg/ljy8YLMpmE/YOYDkbMReKIQAaPTH78QHoiZz\u002BX1Ov58QtwgJXuk40d\u002Bq8KOGzij347/k6JOgdrOyI0BiUmt\u002BM8vkgVLhsO4a4tq3gRDYDzio2uETMES5nujgebItIOeDr7jbjRjZTr2L9gKWUH6bvuACdF8dttZPh8Jb4t5qIERnq7M7QZ3ozrakZRziMnTkkGA7/mkLdoORTNMTY/D6N2BUFWyxiUx7pFytqJj17FESMC4YXj2T\u002BT\u002BdBqSG28\u002B\u002BXVNzZyolfYh2\u002BPTl/H7u9BERve6oZb8a/R9wv/qO0ZkPdrjWjvjb8h2pNOluohjZRz8Lxo2m1\u002BRc/GCnXrl6Un7TylWN3HWXCpBvW8gwKJhX3B8nXoz0vUaWdaZUne929hNxWUDyR2KJKzg/7BPrrx5IcmVD1lAg2NWkpwrIKdju8QftheQypzlSB/Quy6HUZh8j2UJfQxT\u002B8LuWFhCPd0h8cIoN6cb37Xem/4WgU06xjLzK1JA"
 }

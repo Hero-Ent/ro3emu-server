@@ -47,6 +47,9 @@ public static class AndroidRelease
             Console.WriteLine($"overlay {overlay}: {files.Count} files");
         }
 
+        var apkRelease = await ApkAsync(repo, channelName, baseVersion, opts);
+        if (Single(opts, "apk") is null) await RefuseStaleApkAsync(repo, apkRelease, baseManifest, baseVersion, Single(opts, "allow-old-apk") == "yes");
+
         var result = await Publisher.PublishAsync(new PublishOptions
         {
             Files = files,
@@ -62,7 +65,7 @@ public static class AndroidRelease
         Console.WriteLine($"manifest {version}: {result.Manifest.Files.Count} files, {result.Manifest.Files.Sum(f => f.Chunks.Sum(c => (long)c.StoredSize)) / 1048576} MiB to download; {result.NewChunks} new chunks ({result.NewStoredBytes / 1048576} MiB)");
 
         var channel = result.Channel;
-        channel.Apk = await ApkAsync(repo, channelName, opts);
+        channel.Apk = apkRelease;
         using var key = RSA.Create();
         key.ImportFromPem(await File.ReadAllTextAsync(keyFile));
         ChannelSigning.Sign(channel, key);
@@ -71,8 +74,36 @@ public static class AndroidRelease
         return 0;
     }
 
+    /// <summary>
+    /// The phones run the game code compiled into their APK, not the PC release's DLLs: a PC release that changed
+    /// ro3_Data/Managed (the client hooks, a patched game DLL) needs a new APK, or Android players silently miss those
+    /// changes. Refused (before anything is written) unless --allow-old-apk yes.
+    /// </summary>
+    static async Task RefuseStaleApkAsync(string repo, ApkRelease? apk, Manifest baseManifest, string baseVersion, bool allow)
+    {
+        if (apk is null) return;
+        if (string.IsNullOrEmpty(apk.PcVersion))
+        {
+            Console.WriteLine($"warning: APK {apk.Version} does not record which PC release it was built from; cannot check its code is current");
+            return;
+        }
+        if (apk.PcVersion == baseVersion) return;
+        var built = Manifest.FromCompressedBytes(await File.ReadAllBytesAsync(Path.Combine(repo, "manifests", apk.PcVersion + ".json.zst")));
+        var builtCode = CodeFiles(built);
+        var changed = CodeFiles(baseManifest).Where(f => !builtCode.TryGetValue(f.Key, out var sha) || sha != f.Value).Select(f => f.Key).ToList();
+        if (changed.Count == 0) return;
+        string message = $"PC {baseVersion} changed game code since APK {apk.Version} (built from {apk.PcVersion}): {string.Join(", ", changed.Select(Path.GetFileName))}. "
+                         + "Build a new APK (build-apk.ps1 -Release -Version x.y.z) and publish it with -Apk -ApkVersion x.y.z";
+        if (!allow) throw new InvalidOperationException(message + " (or pass -AllowOldApk to publish the data anyway).");
+        Console.WriteLine("warning: " + message);
+    }
+
+    static Dictionary<string, string> CodeFiles(Manifest manifest) => manifest.Files
+        .Where(f => f.Path.StartsWith("ro3_Data/Managed/", StringComparison.OrdinalIgnoreCase) && f.Path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+        .ToDictionary(f => f.Path, f => f.Sha256, StringComparer.OrdinalIgnoreCase);
+
     /// <summary>--apk copies the APK into apk/&lt;version&gt;/; without it the channel keeps the APK it had.</summary>
-    static async Task<ApkRelease?> ApkAsync(string repo, string channelName, Dictionary<string, List<string>> opts)
+    static async Task<ApkRelease?> ApkAsync(string repo, string channelName, string baseVersion, Dictionary<string, List<string>> opts)
     {
         string? apkFile = Single(opts, "apk");
         string? apkVersion = Single(opts, "apk-version"), minVersion = Single(opts, "apk-min");
@@ -101,6 +132,7 @@ public static class AndroidRelease
             Url = relative,
             Sha256 = Hashing.Sha256Hex(apk),
             Size = apk.Length,
+            PcVersion = baseVersion,
         };
     }
 

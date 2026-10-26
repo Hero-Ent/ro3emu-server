@@ -20,6 +20,12 @@ namespace Ro3Android
         private readonly HashSet<string> _reported = new HashSet<string>();
         private readonly HashSet<string> _errorMaterials = new HashSet<string>();
         private Shader _fallback, _fallback3D, _invisible;
+
+        /// <summary>The game's shader of each material this fixer swapped (by instance id), for UiDump's diagnostics.</summary>
+        internal static readonly Dictionary<int, string> OriginalShader = new Dictionary<int, string>();
+
+        /// <summary>The same by material name: what a graphic draws with is often a copy (masking, clipping, instancing).</summary>
+        internal static readonly Dictionary<string, string> OriginalShaderByName = new Dictionary<string, string>();
         private float _next;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -135,6 +141,8 @@ namespace Ro3Android
             // UV, colour) makes an invalid pipeline there, which crashes the Vulkan driver. Those stay as they are.
             bool fallbackOk = !own && !IsFullScreen(name);
             var kind = Classify(name);
+            OriginalShader[material.GetInstanceID()] = name;
+            OriginalShaderByName[material.name.Replace(" (Instance)", "")] = name;
             if (own) material.shader = replacement;
             else if (fallbackOk)
             {

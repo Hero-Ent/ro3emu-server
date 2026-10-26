@@ -7,7 +7,8 @@ namespace Ro3Android
 {
     /// <summary>
     /// Diagnostics for the port's rendering work: 20, 60, 120 and 180 s after start, logs every active TextMeshPro text (content, font,
-    /// material, shader and whether the GPU runs it) and every UI Graphic's shader, grouped. Reflection only: the shell
+    /// material, shader and whether the GPU runs it) and every UI Graphic's shader, grouped; and, on demand (a "ui-dump"
+    /// file in the app's folder), every graphic on screen one by one. Reflection only: the shell
     /// does not compile against the game's DLLs.
     /// </summary>
     public class UiDump : MonoBehaviour
@@ -27,10 +28,163 @@ namespace Ro3Android
 
         private void Start() => _start = Time.realtimeSinceStartup;
 
+        // On demand, for a window that draws wrong: `adb shell touch /sdcard/Android/data/com.ro3emu.client/files/ui-dump`
+        // with the window open logs every graphic on screen ("[Ro3Android] ui graphic"), then the file is removed.
+        private float _nextTrigger;
+
         private void Update()
         {
             float t = Time.realtimeSinceStartup - _start;
             if (_done < Times.Length && t > Times[_done]) { _done++; Dump(); }
+            if (Time.realtimeSinceStartup < _nextTrigger) return;
+            _nextTrigger = Time.realtimeSinceStartup + 2;
+            var trigger = System.IO.Path.Combine(Application.persistentDataPath, "ui-dump");
+            if (!System.IO.File.Exists(trigger)) return;
+            try { System.IO.File.Delete(trigger); } catch (Exception) { }
+            DumpGraphics();
+        }
+
+        // Every active UI graphic: where it is, what it draws with (shader, material, texture, keywords), whether it is
+        // visible (alpha, culled, size) and whether it takes touches - what an empty, misplaced or unclickable window needs.
+        private static void DumpGraphics()
+        {
+            var graphic = Type.GetType("UnityEngine.UI.Graphic, UnityEngine.UI");
+            if (graphic == null) return;
+            var forRendering = graphic.GetProperty("materialForRendering");
+            var mainTexture = graphic.GetProperty("mainTexture");
+            var raycast = graphic.GetProperty("raycastTarget");
+            var color = graphic.GetProperty("color");
+            var all = FindObjectsOfType(graphic).Cast<Component>().ToArray();
+            Debug.Log($"[Ro3Android] ui graphics: {all.Length} active, screen {Screen.width}x{Screen.height}");
+            foreach (var g in all)
+            {
+                var m = forRendering.GetValue(g) as Material;
+                var tex = mainTexture.GetValue(g) as Texture;
+                var cr = g.GetComponent<CanvasRenderer>();
+                var rect = ((RectTransform)g.transform).rect;
+                var game = !m ? "-"
+                    : ShaderFixer.OriginalShader.TryGetValue(m.GetInstanceID(), out var original) ? original
+                    : ShaderFixer.OriginalShaderByName.TryGetValue(m.name.Replace(" (Instance)", ""), out original) ? original + " (by name)" : "-";
+                string F(string p) => m && m.HasProperty(p) ? m.GetFloat(p).ToString("0") : "-";
+                Debug.Log($"[Ro3Android] ui graphic {g.GetType().Name} '{FullPath(g.transform)}' size={rect.width:0}x{rect.height:0} "
+                    + $"color={color.GetValue(g)} alpha={(cr ? cr.GetInheritedAlpha() : -1):0.##} culled={(cr && cr.cull)} ray={raycast.GetValue(g)} "
+                    + $"rectClip={(cr && cr.hasRectClipping)} stencil={F("_Stencil")}/{F("_StencilComp")}/{F("_StencilOp")}/{F("_ColorMask")} masks=[{Masks(g.transform)}] "
+                    + $"shader={(m && m.shader ? m.shader.name : "none")} game={game} queue={(m ? m.renderQueue : 0)} mat='{(m ? m.name : "none")}' kw=[{(m ? string.Join(",", m.shaderKeywords) : "")}] "
+                    + $"tex={(tex ? $"{tex.name} {tex.width}x{tex.height}{(tex is RenderTexture rt ? " " + rt.graphicsFormat : "")}" : "none")}"
+                    + (g.GetType().GetProperty("uvRect")?.GetValue(g) is Rect uv ? $" uvRect={uv}" : ""));
+            }
+            DumpCameras();
+        }
+
+        private static readonly Type CameraData = Type.GetType("UnityEngine.Rendering.Universal.UniversalAdditionalCameraData, Unity.RenderPipelines.Universal.Runtime");
+
+        // Every camera in the loaded scenes, enabled or not: the game renders its model previews (the bag's character) with
+        // disabled cameras into render textures.
+        private static void DumpCameras()
+        {
+            foreach (var cam in Resources.FindObjectsOfTypeAll<Camera>())
+            {
+                if (!cam.gameObject.scene.IsValid()) continue;
+                var data = CameraData != null ? cam.GetComponent(CameraData) : null;
+                string P(string n) => data != null ? CameraData.GetProperty(n)?.GetValue(data)?.ToString() ?? "-" : "-";
+                var rt = cam.targetTexture;
+                Debug.Log($"[Ro3Android] ui camera '{FullPath(cam.transform)}' enabled={cam.enabled} active={cam.gameObject.activeInHierarchy} "
+                    + $"rt={(rt ? $"{rt.name} {rt.graphicsFormat}" : "screen")} clear={cam.clearFlags} bg={cam.backgroundColor} mask=0x{cam.cullingMask:X} "
+                    + $"hdr={cam.allowHDR} type={P("renderType")} post={P("renderPostProcessing")} depthTex={P("requiresDepthTexture")} colorTex={P("requiresColorTexture")}");
+                if (rt && cam.enabled && cam.gameObject.activeInHierarchy) DumpRenderersSeenBy(cam);
+            }
+        }
+
+        // What a render-texture camera draws (the bag's character preview): each renderer on its layers, with the game's
+        // shader it replaced - a backdrop or a shadow catcher drawn by the opaque stand-in shows as a solid box.
+        private static void DumpRenderersSeenBy(Camera cam)
+        {
+            LogPixels(cam.targetTexture);
+            var planes = GeometryUtility.CalculateFrustumPlanes(cam);
+            Debug.Log($"[Ro3Android] ui camera-at {cam.transform.position} forward={cam.transform.forward} fov={cam.fieldOfView} ortho={cam.orthographic} near={cam.nearClipPlane} far={cam.farClipPlane} rect={cam.rect} pixelRect={cam.pixelRect}");
+            LogRendererFeatures(cam);
+            foreach (var r in FindObjectsOfType<Renderer>())
+            {
+                if ((cam.cullingMask & (1 << r.gameObject.layer)) == 0 || !r.enabled) continue;
+                if (!GeometryUtility.TestPlanesAABB(planes, r.bounds)) continue;
+                var m = r.sharedMaterial;
+                var game = m && ShaderFixer.OriginalShaderByName.TryGetValue(m.name.Replace(" (Instance)", ""), out var original) ? original : "-";
+                Debug.Log($"[Ro3Android] ui camera-sees {r.GetType().Name} '{FullPath(r.transform)}' layer={r.gameObject.layer} "
+                    + $"shader={(m && m.shader ? m.shader.name : "none")} game={game} mat='{(m ? m.name : "none")}' queue={(m ? m.renderQueue : 0)} "
+                    + $"tex={(m && m.mainTexture ? m.mainTexture.name : "none")} center={r.bounds.center} bounds={r.bounds.size} "
+                    + $"scale={r.transform.lossyScale} root={ModelRoot(r.transform)}");
+            }
+        }
+
+        // The model's top node under the display node (ModelDisplayNode/ModelNode/<model>): the scale the game's Lua gave it
+        // (LC_UIModelManager: the export config's scale x the UI scale).
+        private static string ModelRoot(Transform t)
+        {
+            while (t.parent != null && t.parent.name != "ModelNode") t = t.parent;
+            return $"'{t.name}' localScale={t.localScale} position={t.position}";
+        }
+
+        // The passes the camera's URP renderer adds (the game's renderer features), active or not.
+        private static void LogRendererFeatures(Camera cam)
+        {
+            const System.Reflection.BindingFlags any = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            var data = CameraData != null ? cam.GetComponent(CameraData) : null;
+            var renderer = data != null ? CameraData.GetProperty("scriptableRenderer", any)?.GetValue(data) : null;
+            if (renderer == null) { Debug.Log("[Ro3Android] ui camera-features: no renderer"); return; }
+            var list = renderer.GetType().GetProperty("rendererFeatures", any)?.GetValue(renderer) as System.Collections.IList;
+            var sb = new StringBuilder($"[Ro3Android] ui camera-features {renderer.GetType().Name}:");
+            if (list != null)
+                foreach (var f in list)
+                    if (f is ScriptableObject so) sb.Append($" {so.GetType().Name}('{so.name}' active={f.GetType().GetProperty("isActive")?.GetValue(f)})");
+            Debug.Log(sb.ToString());
+        }
+
+        // What the render texture holds (the grey box: drawn into it, or added when it is shown?): its corners and
+        // centre, alpha included.
+        private static void LogPixels(RenderTexture rt)
+        {
+            var previous = RenderTexture.active;
+            var read = new Texture2D(1, 1, TextureFormat.RGBAFloat, false);
+            try
+            {
+                var sb = new StringBuilder($"[Ro3Android] ui camera-pixels {rt.name}:");
+                var points = new System.Collections.Generic.List<(float, float)> { (0.02f, 0.02f), (0.98f, 0.98f) };
+                for (int i = 0; i < 10; i++) points.Add((0.05f + i * 0.1f, 0.5f));
+                for (int i = 0; i < 10; i++) points.Add((0.35f, 0.05f + i * 0.1f));
+                foreach (var (x, y) in points)
+                {
+                    RenderTexture.active = rt;
+                    read.ReadPixels(new Rect((int)(x * (rt.width - 1)), (int)(y * (rt.height - 1)), 1, 1), 0, 0, false);
+                    sb.Append($" ({x:0.##},{y:0.##})={read.GetPixel(0, 0)}");
+                }
+                Debug.Log(sb.ToString());
+            }
+            catch (Exception e)
+            {
+                Debug.Log($"[Ro3Android] ui camera-pixels failed: {e.Message}");
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+                Destroy(read);
+            }
+        }
+
+        // The masking components on the graphic and its parents (Mask, RectMask2D, SoftMask...), nearest first.
+        private static string Masks(Transform t)
+        {
+            var found = new System.Collections.Generic.List<string>();
+            for (var p = t; p != null; p = p.parent)
+                foreach (var c in p.GetComponents<Component>())
+                    if (c != null && c.GetType().Name.Contains("Mask")) found.Add($"{c.GetType().Name}@{p.name}{(c is Behaviour b && !b.enabled ? "(off)" : "")}");
+            return string.Join(",", found);
+        }
+
+        private static string FullPath(Transform t)
+        {
+            var path = t.name;
+            for (var p = t.parent; p != null && path.Length < 300; p = p.parent) path = p.name + "/" + path;
+            return path;
         }
 
         private static void Dump()

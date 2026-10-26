@@ -103,6 +103,8 @@ public sealed class ApkRelease
     [JsonPropertyName("url")] public string Url { get; set; } = "";
     [JsonPropertyName("sha256")] public string Sha256 { get; set; } = "";
     [JsonPropertyName("size")] public long Size { get; set; }
+    /// <summary>The PC release whose game code (ro3_Data/Managed) the APK was built with; IL2CPP compiles it into the APK.</summary>
+    [JsonPropertyName("pcVersion")] public string? PcVersion { get; set; }
 }
 
 /// <summary>channels/&lt;name&gt;.json — the only mutable file the launcher polls.</summary>

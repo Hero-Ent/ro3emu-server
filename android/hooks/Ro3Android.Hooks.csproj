@@ -26,4 +26,9 @@
     <Reference Include="UnityEngine.AssetBundleModule"><HintPath>$(ClientManaged)\UnityEngine.AssetBundleModule.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 
+  <!-- Lua modules the port replaces (Ro3Android.Hooks.Lua). -->
+  <ItemGroup>
+    <EmbeddedResource Include="Lua\*.lua" LogicalName="Ro3Android.Lua.%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

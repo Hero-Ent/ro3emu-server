@@ -1,15 +1,16 @@
 {
   "channel": "android-live",
-  "version": "1.1.1-android2",
-  "manifest": "manifests/1.1.1-android2.json.zst",
-  "manifestSha256": "6ae7f439d37d7ce27e28bc95f4e6012960e23e71917a24ac7a69d3acf1173a01",
-  "published": "2026-10-24T03:21:46.7247786+00:00",
+  "version": "1.1.2-android2",
+  "manifest": "manifests/1.1.2-android2.json.zst",
+  "manifestSha256": "90c3639aab0bcd9ae5ba8e5c775e20a87a2875eda5576a1785ea72456808881b",
+  "published": "2026-10-26T05:04:47.4104028+00:00",
   "apk": {
-    "version": "1.0.1",
-    "minVersion": "1.0.1",
-    "url": "apk/1.0.1/HeroSaga.apk",
-    "sha256": "b764c0b27b69ed2250d5c8e0cbdb1fcd407c565db332269ca3a05b86cd479cf2",
-    "size": 71595805
+    "version": "1.0.3",
+    "minVersion": "1.0.2",
+    "url": "apk/1.0.3/HeroSaga.apk",
+    "sha256": "c37ddcb899eaa5bec60c1aa74675c3290e33b906084da2e22155c39dbc2f3a9a",
+    "size": 71675023,
+    "pcVersion": "1.1.2"
   },
-  "signature": "kYzpe5yu3PrgFkzGDn9vXEQe\u002BcLYW7bHsG\u002BVy/tSstCyfgbi1XSoHEoc7MhKxIA5MB8IBBBB\u002B5aeo9JJphtS6obBm9LOEr2wABa1pP1zBlL2YiihSGYGg\u002B\u002BpFFP3Id\u002B/zXM2GpaEEdfLDm6NAyp0RkSJvlyQn1Liav9F7synTJ21yRz\u002B1OzqDc4VpTNsi0r9KSsvswIAySWdDxE9ZfRdZC6AuAILamPHeo6tM9Y38gZSXpf7\u002BqDm7ZtAq2SoftIpcSZLl9mbX4SGkXunEUJWlQnEcnFLfa0kP/c4GZpeGYJrBco3azctwEN6GVqiV9ybdsv\u002BExrcuukfiIeCg6KtCWH9Wc5EeAL5\u002Bgbe\u002Bz0I/kXAJez9vjnMyugeH/XkYdJDzUcoooc2IIIsWx6iWBdsECfzkkGlPF14lSCjHTuazOiJ80/9T413ZENCJxPe6l8SXc84UU8OBtKW2CU\u002BtShp1SYTrBL3PU3xTtW0OOroCm85wHrgsg2i5KqQ/CN1jdqB"
+  "signature": "DdFdd9Q1/w0d2/\u002BjtiNn6vmNHS/WliPmZUeh9rT0Tvh7aSyRiixvwec61aoX85RKJg58tYZPXxlE4w8L/DhOSo\u002BdAfpBk8Uyd\u002B2EV98lR8lgguZGdmCuEXpNH1xBfsCeZp6Yk6srYbpXEE7D68kjnekOkMvE5UkiDxfcjdxdrcb3Cq1AvctYMfA7qwyJJStxSpXUu/g4IdXcJqCBOX2tIvQKiRnJJ2DWPzw9ckcFnuElFvw9YOmMzb6Mii6g8qkPP62ZJt5WIWrK\u002B3Y7/lCWvE90eASQ8pwvnHnEu3BFQQh1LNINn5jRtpSwmWGPrLKwoXDTmKQOLxMgk4Ys245pskJQTlzvpW6oM55hDW55OFLoDXuXlEfhF9PA0lDCIawidbXgn3/GZFOddjkZpGqcI9eUJjmVN4jfRb4bzb6NKhq1pssyp1eA6GyNoi2B4RULPmPrBuqoAkqNIxAjSbUK5bg0WZnLMj2sMT9Hob8XR4051A/WokPgUvL/uTxNr7aw"
 }

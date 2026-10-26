@@ -12,6 +12,9 @@ param(
   [string]$ApkVersion,
   [string]$ApkMin,
   [string]$ApkFile = (Join-Path $PSScriptRoot 'out\ro3emu.apk'),
+  # Without -Apk, a PC release that changed game code (ro3_Data/Managed) since the channel's APK is refused: phones only
+  # get new code through a new APK. This publishes the data anyway.
+  [switch]$AllowOldApk,
   [string]$Repo = (Join-Path (Split-Path $PSScriptRoot -Parent) 'patch-server\repo'),
   [string]$Key = (Join-Path (Split-Path $PSScriptRoot -Parent) 'android-signing-key.pem')
 )
@@ -46,6 +49,7 @@ if ($Apk) {
   $toolArgs += '--apk', $ApkFile, '--apk-version', $ApkVersion
 }
 if ($ApkMin) { $toolArgs += '--apk-min', $ApkMin }
+if ($AllowOldApk) { $toolArgs += '--allow-old-apk', 'yes' }
 & $tools @toolArgs
 if ($LASTEXITCODE) { throw 'release-android failed' }
 Write-Host "published $Version on $Channel$(if (-not $test) { ': run ENVIAR_ATUALIZACAO.cmd to upload' })"

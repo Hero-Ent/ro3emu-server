@@ -271,8 +271,10 @@ namespace Ro3Android
                     cam.backgroundColor = inWorld ? Sky : MenuSky;
                 }
                 // The water (Base/RoThreeWater) reads the scene's depth and colour behind it: make URP produce both
-                // for the world camera (not the UI one, which only renders layer 5).
-                if (CameraData == null || cam.cullingMask == 1 << 5) continue;
+                // for the world camera (not the UI one, which only renders layer 5). Not for cameras that render into a
+                // texture (the bag's and the portraits' character previews): no water there, and the copies cost a
+                // full-size intermediate target each.
+                if (CameraData == null || cam.cullingMask == 1 << 5 || cam.targetTexture != null) continue;
                 var data = cam.GetComponent(CameraData);
                 if (data == null) continue;
                 if (!(bool)RequiresDepth.GetValue(data)) RequiresDepth.SetValue(data, true);

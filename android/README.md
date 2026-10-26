@@ -128,6 +128,9 @@ a VPS. `127.0.0.1` no celular é o próprio celular.
 4. Suba o servidor escutando na rede, com o host que o celular alcança (e libere as portas no Firewall do Windows):
    `--Ro3Emu:PublicHost=192.168.1.100` no lugar do `127.0.0.1` do `RODAR_LOCAL.cmd`.
 5. Logs: `adb logcat -s Unity fsni` (tudo do port tem o prefixo `[Ro3Android]`).
+6. Janela desenhada errado (vazia, sobreposta, sem clique): com ela aberta,
+   `adb shell touch /sdcard/Android/data/com.ro3emu.client/files/ui-dump`; em até 2 s o log ganha uma linha
+   `[Ro3Android] ui graphic` por elemento da UI (caminho, tamanho, alpha, toque, shader, material, textura).
 
 ## Atualização automática (auto patcher)
 
@@ -176,6 +179,11 @@ o `StreamingAssets` (~11,4 GB comprimidos; 20 GB no aparelho, sem os vídeos) do
   `-ApkMin` obriga quem tem um APK mais velho a instalar o novo antes de jogar; sem ele, o app só avisa.
 - Conteúdo novo (um mapa, Lua): publique o cliente de PC como sempre e rode `publish-android.ps1 -Channel android-live`
   e o `ENVIAR_ATUALIZACAO.cmd`, sem APK novo. Na próxima abertura, cada celular baixa só o que mudou.
+- Código novo (uma DLL de `ro3_Data/Managed`, como o `Ro3Emu.ClientHooks.dll` do zoom da 1.1.2) só chega por APK novo.
+  O canal guarda de qual versão de PC veio o código do APK (`apk.pcVersion`); se a versão de PC mudou alguma DLL desde
+  então, o `publish-android.ps1` sem `-Apk` recusa e lista as DLLs. Gere o APK e publique com `-Apk -ApkVersion`
+  (`-AllowOldApk` publica só os dados mesmo assim). Mudanças só do servidor (dungeons, chat, habilidades) valem no
+  Android na hora, sem publicar nada.
 - O `ENVIAR_ATUALIZACAO.cmd` reenvia todos os canais: confira que o `channels/live.json` local é o mesmo da CDN antes,
   ou os jogadores de PC voltam pra versão que estiver no arquivo local. Arquivos de teste na pasta
 do app (`/sdcard/Android/data/com.ro3emu.client/files/`): `patch-repo` e `patch-channel` trocam o repositório e o canal;

@@ -38,6 +38,8 @@ var materialCopy = hooks.MainModule.GetType("Ro3Android.Hooks.Materials").Method
 var unityPc = hooks.MainModule.GetType("Ro3Android.Hooks.Platform").Methods.Single(m => m.Name == "UnityPc");
 var luaLog = hooks.MainModule.GetType("Ro3Android.Hooks.Platform").Methods.Single(m => m.Name == "LuaLog");
 var fixLoaded = hooks.MainModule.GetType("Ro3Android.Hooks.Materials").Methods.Single(m => m.Name == "FixLoaded");
+var luaOverride = hooks.MainModule.GetType("Ro3Android.Hooks.Lua").Methods.Single(m => m.Name == "OverridePath");
+var luaOverrideBytes = hooks.MainModule.GetType("Ro3Android.Hooks.Lua").Methods.Single(m => m.Name == "OverrideBytes");
 
 // The resolver keeps every DLL it opens locked, so the rewritten ones are kept in memory and written at the end.
 var resolver = new DefaultAssemblyResolver();
@@ -49,7 +51,7 @@ foreach (var file in Directory.GetFiles(managed, "*.dll").OrderBy(f => f))
     if (skip.IsMatch(name)) continue;
     using var asm = AssemblyDefinition.ReadAssembly(new MemoryStream(File.ReadAllBytes(file)), new ReaderParameters { AssemblyResolver = resolver });
     MethodReference? target = null;
-    int redirected = 0, dead = 0, stubbed = 0, inits = 0, bundleLoads = 0, windowsCalls = 0, shaderFinds = 0, platformChecks = 0, materials = 0;
+    int redirected = 0, dead = 0, stubbed = 0, inits = 0, bundleLoads = 0, windowsCalls = 0, shaderFinds = 0, platformChecks = 0, materials = 0, luaOverrides = 0;
     foreach (var type in asm.MainModule.GetTypes())
         foreach (var method in type.Methods)
         {
@@ -117,6 +119,40 @@ foreach (var file in Directory.GetFiles(managed, "*.dll").OrderBy(f => f))
                 il.InsertBefore(first, il.Create(OpCodes.Call, asm.MainModule.ImportReference(fixLoaded)));
                 materials++;
             }
+            // xLua's loader (LA_LuaLoader) reads every module through NewResourceManager.LoadLuaFromFile: a module the port
+            // replaces (Hooks.Lua.OverridePath gives its file) is loaded from the port's file with the game's own reader.
+            //   string path = Lua.OverridePath(fileName); if (path != null) return LoadBytesUtils.LoadDataFromFilePath(path, false);
+            if (type.FullName == "HappyEngine.Runtime.NewRuntimeSystem.NewResourceManager" && method.Name == "LoadLuaFromFile")
+            {
+                var readFile = type.Module.GetType("HappyEngine.Runtime.NewRuntimeSystem.LoadBytesUtils").Methods
+                    .Single(m => m.Name == "LoadDataFromFilePath" && m.Parameters.Count == 2);
+                var il = method.Body.GetILProcessor();
+                var first = method.Body.Instructions[0];
+                var original = il.Create(OpCodes.Pop);
+                il.InsertBefore(first, il.Create(OpCodes.Ldarg_1));
+                il.InsertBefore(first, il.Create(OpCodes.Call, asm.MainModule.ImportReference(luaOverride)));
+                il.InsertBefore(first, il.Create(OpCodes.Dup));
+                il.InsertBefore(first, il.Create(OpCodes.Brfalse, original));
+                il.InsertBefore(first, il.Create(OpCodes.Ldc_I4_0));
+                il.InsertBefore(first, il.Create(OpCodes.Call, readFile));
+                il.InsertBefore(first, il.Create(OpCodes.Ret));
+                il.InsertBefore(first, original);
+                luaOverrides++;
+            }
+            // The byte[] loader the same way: byte[] bytes = Lua.OverrideBytes(fileName); if (bytes != null) return bytes;
+            if (type.FullName == "HappyEngine.Runtime.NewRuntimeSystem.NewResourceManager" && method.Name == "LoadLuaBytesFromFile")
+            {
+                var il = method.Body.GetILProcessor();
+                var first = method.Body.Instructions[0];
+                var original = il.Create(OpCodes.Pop);
+                il.InsertBefore(first, il.Create(OpCodes.Ldarg_1));
+                il.InsertBefore(first, il.Create(OpCodes.Call, asm.MainModule.ImportReference(luaOverrideBytes)));
+                il.InsertBefore(first, il.Create(OpCodes.Dup));
+                il.InsertBefore(first, il.Create(OpCodes.Brfalse, original));
+                il.InsertBefore(first, il.Create(OpCodes.Ret));
+                il.InsertBefore(first, original);
+                luaOverrides++;
+            }
             // The scenery builds its materials from PC shaders and sets their textures right after, which a shader
             // without programs for this GPU drops: new Material(Shader) -> Hooks.Materials.Create (stand-in first).
             if (type.Namespace.StartsWith("HappyEngine.CustomScene"))
@@ -156,7 +192,7 @@ foreach (var file in Directory.GetFiles(managed, "*.dll").OrderBy(f => f))
     var output = new MemoryStream();
     asm.Write(output);
     rewritten.Add((file, output.ToArray()));
-    Console.WriteLine($"{name}: streamingAssetsPath x{redirected}, unreachable instructions x{dead}, HybridCLR stubs x{stubbed}, initializers off x{inits}, bundle loads x{bundleLoads}, absent-native P/Invokes stubbed x{windowsCalls}, Shader.Find x{shaderFinds}, PC platform x{platformChecks}, scenery materials x{materials}");
+    Console.WriteLine($"{name}: streamingAssetsPath x{redirected}, unreachable instructions x{dead}, HybridCLR stubs x{stubbed}, initializers off x{inits}, bundle loads x{bundleLoads}, absent-native P/Invokes stubbed x{windowsCalls}, Shader.Find x{shaderFinds}, PC platform x{platformChecks}, scenery materials x{materials}, Lua overrides x{luaOverrides}");
 }
 resolver.Dispose();
 foreach (var (file, bytes) in rewritten) File.WriteAllBytes(file, bytes);
