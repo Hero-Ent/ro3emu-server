@@ -746,8 +746,8 @@
 82332	session role:WholeRole dispatcher/82332	refused
 82333	session role:WholeRole dispatcher/82333	refused
 82334	session role:WholeRole dispatcher/82334	refused
-82335	session role:WholeRole dispatcher/82335	refused
-82336	session role:WholeRole dispatcher/unrouted	refused
+82335	economic dispatcher/economic request	refused
+82336	economic dispatcher/economic request	refused
 82337	session role:WholeRole dispatcher/unrouted	refused
 82338	session role:WholeRole dispatcher/82338	refused
 82339	session role:WholeRole dispatcher/unrouted	refused

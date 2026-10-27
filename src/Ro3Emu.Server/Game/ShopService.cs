@@ -18,7 +18,7 @@ namespace Ro3Emu.Server.Game;
 /// </summary>
 public sealed partial class ShopService(GameData data, CharacterService character, FunctionService functions, RoleStore roles, SeasonService seasons,
     WardrobeService wardrobe, AwardService awards, TimeProvider clock, SessionRegistry sessions, GameLoop loop,
-    FriendStore friends, ILogger<ShopService> log) : IGameTicker
+    FriendStore friends, MailService mail, ILogger<ShopService> log) : IGameTicker
 {
     public const uint ShopSync = 5024;
     public const uint BuyCommodity = 82332, CommodityCollect = 82333, CommodityPresent = 82335, CommodityGetInfo = 82338,
@@ -35,6 +35,7 @@ public sealed partial class ShopService(GameData data, CharacterService characte
     private readonly SessionRegistry _sessions = sessions;
     private readonly GameLoop _loop = loop;
     private readonly FriendStore _friends = friends;
+    private readonly MailService _mail = mail;
     private readonly ILogger<ShopService> _log = log;
     private TimeSpan _lastTick;
     private DateTime _gameDay;

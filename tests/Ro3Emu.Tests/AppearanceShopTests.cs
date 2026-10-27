@@ -75,10 +75,10 @@ public sealed class AppearanceShopTests : IAsyncLifetime
         return bot;
     }
 
-    private async Task Gm(string command)
+    private async Task Gm(string command, string account = "fashionalice")
     {
         using var client = new HttpClient();
-        (await client.PostAsync(_http + "/ro3emu/gm?account=fashionalice", new StringContent(command))).EnsureSuccessStatusCode();
+        (await client.PostAsync(_http + "/ro3emu/gm?account=" + account, new StringContent(command))).EnsureSuccessStatusCode();
     }
 
     private static async Task<T> Next<T>(BotClient bot, uint id, MessageParser<T> parser, Func<T, bool>? match = null) where T : IMessage<T> =>
@@ -360,6 +360,8 @@ public sealed class AppearanceShopTests : IAsyncLifetime
         var unlocked = await Next(bob, WardrobeService.WardrobeSync, DBWardRobeInfoIncrement.Parser, i => i.AllLightUpAppearances.ContainsKey(TeaPartySuit));
         Assert.True(unlocked.AllLightUpAppearances.ContainsKey(TeaPartyHat));
         Assert.Equal(crystals - 1880, Crystals); // the recipient pays nothing
+        var bobSession = Service<SessionRegistry>().All().Single(s => s.Account == "fashionbob" && s.Role != null);
+        Assert.Equal(1, bobSession.Items.Where(i => i.Entry == TeaPartyBonus).Sum(i => i.Stack)); // same bonus a direct purchase grants
 
         var updated = await Next(alice, ShopService.SentGiftsListNtf, SentGiftsListNtf.Parser,
             n => n.SentGifts.Any(o => o.OrderId == sent.OrderId && o.State == 2)); // AlreadyTake, not the earlier WaitTake push
@@ -390,6 +392,23 @@ public sealed class AppearanceShopTests : IAsyncLifetime
         Assert.Equal(ErrorCodes.ShopGiftDuplicate, (await Present(alice, bobId, TeaParty)).Result);
 
         Assert.Equal(crystals - 1880, Crystals); // only the one accepted gift was paid
+    }
+
+    [ClientDataFact]
+    public async Task GiftOfAnAppearanceTheRecipientAlreadyOwnsIsRefusedAtPresentTime()
+    {
+        await using var alice = await Enter();
+        var (bob, bobId) = await EnterRecipient("fashionbobowns", "FashionBobOwns");
+        await using var bobDispose = bob;
+        await Service<FriendStore>().LinkAsync(Alice.Role!.Id, bobId);
+        await Gm("!lvl 10", "fashionbobowns"); // FunctionConfig 70502-70509 open at base level 10 (conditions 2000302-2000307)
+        await Gm("!item 3 10000", "fashionbobowns");
+        Assert.Equal(0, (await Buy(bob, Macaron, price: 480)).Result);
+        await Next(bob, WardrobeService.WardrobeSync, DBWardRobeInfoIncrement.Parser, i => i.AllLightUpAppearances.ContainsKey(MacaronHair));
+        long crystals = Crystals;
+
+        Assert.Equal(ErrorCodes.ShopAppearanceOwned, (await Present(alice, bobId, Macaron)).Result);
+        Assert.Equal(crystals, Crystals); // refused before any payment
     }
 
     private static string RepoRoot()
