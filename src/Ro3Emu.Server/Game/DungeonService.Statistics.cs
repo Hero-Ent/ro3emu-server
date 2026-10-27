@@ -110,7 +110,8 @@ public sealed partial class DungeonService
     /// Another mode's own already-built result (CasualBattleService: Mock Battle) into the same queryable history an
     /// ordinary dungeon's clear leaves (StoreHistory), so a later 30128 QueryResultAsync finds it too. Mock Battle keeps
     /// no 30110/30117 Statistics entry here: its own live report already serves 30117 through CurrentStatisticsOwner, so
-    /// only Results (pruned to its own newest 20, independent of any ordinary-dungeon entries) gains one.
+    /// only Results gains one, retained at its own newest 20 among Results entries with no matching Statistics entry
+    /// (an ordinary dungeon's own Results entry is pruned only by StoreHistory, alongside its Statistics entry).
     /// </summary>
     public async Task StoreExternalResultAsync(GameSession s, DungeonResultNotify notice)
     {
@@ -132,8 +133,12 @@ public sealed partial class DungeonService
         snapshot.SceneStatistics.Add(info.SceneStatistics);
         result.Snapshots.Add(snapshot);
         state.Results[result.ResultId] = result.ToByteArray();
-        foreach (string id in state.Results.Keys.OrderBy(k => long.Parse(k, CultureInfo.InvariantCulture))
-            .Take(Math.Max(0, state.Results.Count - 20)).ToArray())
+        // Only the external keys: an ordinary dungeon's Results entry is pruned alongside its Statistics entry by
+        // StoreHistory, never here (a role with 20 dungeon clears finishing a match must not lose the oldest one's
+        // 30128 entry while 30114 still shows it from Statistics).
+        var external = state.Results.Keys.Where(k => !state.Statistics.ContainsKey(long.Parse(k, CultureInfo.InvariantCulture)))
+            .OrderBy(k => long.Parse(k, CultureInfo.InvariantCulture)).ToArray();
+        foreach (string id in external.Take(Math.Max(0, external.Length - 20)))
             state.Results.Remove(id);
         await SaveAsync(s, state);
     }

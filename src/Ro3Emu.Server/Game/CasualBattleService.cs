@@ -37,7 +37,9 @@ namespace Ro3Emu.Server.Game;
 /// 85202 (the losers' 85203 is not in DropPoolConfig); assists are the hits on the victim in its last 10 s.
 /// Not built: the arena's monsters and boss (their spawn script is not in the client), the 40-player virtual team
 /// (30441 with a team id, 30442-30451) and the pre-start notices 5711/5712. A settled match's result is also kept in
-/// the role's ordinary 30128 history (DungeonService.StoreExternalResultAsync), the same as a boss dungeon's clear.
+/// the role's ordinary 30128 history (DungeonService.StoreExternalResultAsync), the same as a boss dungeon's clear,
+/// for every player still online at settlement; one offline then is still paid at login (TryPayAsync's own retry)
+/// but gets no history entry, since nothing here revisits a login after the fact to write one.
 /// </summary>
 public sealed class CasualBattleService : IGameTicker
 {
