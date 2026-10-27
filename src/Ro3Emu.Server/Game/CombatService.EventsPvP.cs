@@ -57,7 +57,7 @@ public sealed partial class CombatService
         await StartCastAsync(source, row, request, session);
     }
     private async Task HitEventPlayersAsync(GameSession source, GameSession[] targets, JsonElement row,
-        int skillId, int show, long session, Func<bool> currentSource, Action<long, long>? onHit = null)
+        int skillId, int show, long session, Func<bool> currentSource, Action<long, long>? onHit = null, Vec3? center = null)
     {
         if (FirstNumber(row, "_kDamageParam1") is not > 0 && FirstNumber(row, "_kDamageParam2") is not > 0) return;
         foreach (var target in targets)
@@ -101,7 +101,7 @@ public sealed partial class CombatService
                 await FightingAsync(target);
                 // The knockback or pull of a hit that left the target alive, as the same skill moves a monster.
                 if (hp > 0 && currentSource() && CurrentPlayerHit(source, target, attackerRole, targetRole, sceneId))
-                    await DisplacePlayerAsync(source, target, row, skillId);
+                    await DisplacePlayerAsync(source, target, row, skillId, center);
                 if (hp == 0)
                 {
                     if (!ReferenceEquals(target.Role, targetRole)) continue;
