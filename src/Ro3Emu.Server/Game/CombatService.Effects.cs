@@ -428,6 +428,9 @@ public sealed partial class CombatService
             ["PinpointAttack"] = (DisplaceKind.CasterForward, 3),
             ["ArrowRepel"] = (DisplaceKind.TargetPush, 3),
             ["PileBunker"] = (DisplaceKind.TargetPush, 5),
+            ["Spear_Stab"] = (DisplaceKind.TargetPush, 3),
+            ["Sightrasher"] = (DisplaceKind.TargetPush, 4),
+            ["Jupitel_Thunder"] = (DisplaceKind.TargetPush, 3),
             ["PhantomThrust"] = (DisplaceKind.TargetPull, -1),
             ["PetSkill_2_2_BuChongJin"] = (DisplaceKind.TargetPush, 3),
             ["Pet_AncientTree_23452"] = (DisplaceKind.TargetPull, -1),
@@ -508,6 +511,31 @@ public sealed partial class CombatService
             MoveTimeMs = move.Ms > 0 ? move.Ms : 300,
         });
         await _world.MoveUnitAsync(target, new MovementChangeNtf { Uid = target.Uid, MovementInfo = target.CurrentMovement(Now) });
+    }
+
+    /// <summary>Displace a player target on knockback or pull, calculating walkable NavGrid arrival and sending 31112.</summary>
+    internal async Task DisplacePlayerAsync(GameSession s, GameSession target, JsonElement row)
+    {
+        if (target.Dead || target.SceneLoading || target.Role is not { } targetRole || target.WorldScene != s.WorldScene) return;
+        if (Displacement(row) is not { Kind: DisplaceKind.TargetPush or DisplaceKind.TargetPull } move) return;
+        float dx = target.Position.X - s.Position.X, dz = target.Position.Z - s.Position.Z;
+        float length = MathF.Sqrt(dx * dx + dz * dz);
+        if (length < 0.001f) return;
+        float distance = move.Kind == DisplaceKind.TargetPush ? move.Distance : -(length - move.Distance);
+        if (move.Kind == DisplaceKind.TargetPull && length <= move.Distance) return;
+        var start = target.Position.Clone();
+        var end = WalkableEnd(target.SceneEntry, start, dx / length * distance, dz / length * distance);
+        int moveMs = move.Ms > 0 ? move.Ms : 300;
+        await ToPlayerAndViewersAsync(target, SkillMove, new SkillStartMoveNotify
+        {
+            EntityID = (ulong)targetRole.Id, StartPos = start, EndPos = end, SkillConfigId = (int)GameData.Int(row, "_iID"),
+            EffectId = move.EffectId, MoveType = 2, StartTimestampMs = Now, Face = target.Face,
+            MoveTimeMs = moveMs,
+        });
+        target.PreviousPosition = start;
+        target.Position = end;
+        target.Walking = false;
+        await _world.MoveAsync(target, new WalkReq { Pos = end, Dir = target.Face, Face = target.Face, BStop = true }, forceTeleport: true);
     }
 
     private Vec3 WalkableEnd(long sceneId, Vec3 start, float dx, float dz)

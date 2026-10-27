@@ -99,6 +99,8 @@ public sealed partial class CombatService
                 if (!ReferenceEquals(target.Role, targetRole)) continue;
                 if (CurrentPlayerHit(source, target, attackerRole, targetRole, sceneId)) await FightingAsync(source);
                 await FightingAsync(target);
+                if (hp > 0 && CurrentPlayerHit(source, target, attackerRole, targetRole, sceneId))
+                    await DisplacePlayerAsync(source, target, row);
                 if (hp == 0)
                 {
                     if (!ReferenceEquals(target.Role, targetRole)) continue;
