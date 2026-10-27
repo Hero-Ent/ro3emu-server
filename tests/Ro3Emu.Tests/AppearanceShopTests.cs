@@ -248,7 +248,7 @@ public sealed class AppearanceShopTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GiftIsRefusedWithoutChargeOrDelivery()
+    public async Task GiftToAnUnknownTargetIsRefusedWithoutChargeOrDelivery()
     {
         await using var bot = await Enter();
         long crystals = Crystals;
@@ -260,7 +260,7 @@ public sealed class AppearanceShopTests : IAsyncLifetime
         });
         var reply = await Next(bot, ShopService.CommodityPresent, CommodityPresentResp.Parser);
         // Non-zero: LC_DAL_Shop.CommodityPresentResp (the "gift sent" tip and chat card) never runs.
-        Assert.Equal(ErrorCodes.ShopGiftNotAllowed, reply.Result);
+        Assert.Equal(ErrorCodes.Parameter, reply.Result);
         Assert.Equal(crystals, Crystals);
         Assert.Empty(Alice.Shop!.Bought);
         Assert.False(Alice.Wardrobe!.AllLightUpAppearances.ContainsKey(TeaPartySuit));
@@ -307,6 +307,89 @@ public sealed class AppearanceShopTests : IAsyncLifetime
         var good = await Buy(bot, Macaron, price: 480);
         Assert.Equal(0, good.Result);
         Assert.Equal(crystals - 480, Crystals);
+    }
+
+    // ---- gifting (82335/82336/82337/82339) ----
+
+    private async Task<(BotClient Bot, long RoleId)> EnterRecipient(string account, string name)
+    {
+        var bot = new BotClient(_http, File.ReadAllText(Path.Combine(_directory, "gate_rsa_public.pem")));
+        await bot.LoginAsync(account, "pw"); await bot.EnterGateAsync();
+        long role = (await bot.CreateRoleAsync(name)).RoleBaseInfo.Id;
+        await bot.EnterWorldAsync(role);
+        await Next(bot, ShopService.ShopSync, DBShopInfoIncrement.Parser);
+        await Next(bot, WardrobeService.WardrobeSync, DBWardRobeInfoIncrement.Parser);
+        return (bot, role);
+    }
+
+    private static Task<CommodityPresentResp> Present(BotClient bot, long targetId, int commodity, string content = "") =>
+        PresentRaw(bot, targetId, new BuyCommodityReq { CommodityId = commodity, Count = 1 }, content);
+
+    private static async Task<CommodityPresentResp> PresentRaw(BotClient bot, long targetId, BuyCommodityReq buy, string content)
+    {
+        await bot.SendGameAsync(ShopService.CommodityPresent, new CommodityPresentReq { TargetId = targetId, BuyReq = buy, GiftContent = content });
+        return await Next(bot, ShopService.CommodityPresent, CommodityPresentResp.Parser);
+    }
+
+    private static async Task<CommodityPickResp> Pick(BotClient bot, long orderId)
+    {
+        await bot.SendGameAsync(ShopService.CommodityPick, new CommodityPickReq { OrderId = orderId });
+        return await Next(bot, ShopService.CommodityPick, CommodityPickResp.Parser);
+    }
+
+    [ClientDataFact]
+    public async Task GiftedAppearanceChargesTheSenderAndUnlocksOnlyAfterTheRecipientPicksIt()
+    {
+        await using var alice = await Enter();
+        var (bob, bobId) = await EnterRecipient("fashionbob", "FashionBob");
+        await using var bobDispose = bob;
+        await Service<FriendStore>().LinkAsync(Alice.Role!.Id, bobId);
+        long crystals = Crystals;
+
+        var sent = await Present(alice, bobId, TeaParty, "enjoy!");
+        Assert.Equal((0, TeaParty, bobId), (sent.Result, sent.CommodityId, sent.TargetId));
+        Assert.NotEqual(0, sent.OrderId);
+        Assert.Equal(crystals - 1880, Crystals); // paid on send, not on pick
+        var sentList = await Next(bob, ShopService.CommodityPresentListNtf, CommodityPresentListNtf.Parser,
+            n => n.Orders.Any(o => o.OrderId == sent.OrderId));
+        var order = Assert.Single(sentList.Orders, o => o.OrderId == sent.OrderId);
+        Assert.Equal((Alice.Role!.Id, Alice.Role!.Name, TeaPartySuit, "enjoy!", 1), (order.SenderId, order.SenderName, order.AppranceId, order.GiftContent, order.State));
+
+        var picked = await Pick(bob, sent.OrderId);
+        Assert.Equal(0, picked.Result);
+        var unlocked = await Next(bob, WardrobeService.WardrobeSync, DBWardRobeInfoIncrement.Parser, i => i.AllLightUpAppearances.ContainsKey(TeaPartySuit));
+        Assert.True(unlocked.AllLightUpAppearances.ContainsKey(TeaPartyHat));
+        Assert.Equal(crystals - 1880, Crystals); // the recipient pays nothing
+
+        var updated = await Next(alice, ShopService.SentGiftsListNtf, SentGiftsListNtf.Parser,
+            n => n.SentGifts.Any(o => o.OrderId == sent.OrderId && o.State == 2)); // AlreadyTake, not the earlier WaitTake push
+        Assert.Single(updated.SentGifts, o => o.OrderId == sent.OrderId);
+
+        // Picking again finds nothing left to pick.
+        Assert.Equal(ErrorCodes.ShopGiftOrderMissing, (await Pick(bob, sent.OrderId)).Result);
+    }
+
+    [ClientDataFact]
+    public async Task GiftRefusalsChargeNothing()
+    {
+        await using var alice = await Enter();
+        var (bob, bobId) = await EnterRecipient("fashionbobrefuse", "FashionBobRefuse");
+        await using var bobDispose = bob;
+        long crystals = Crystals;
+
+        Assert.Equal(ErrorCodes.ShopGiftFriendsOnly, (await Present(alice, bobId, TeaParty)).Result);
+        Assert.Equal(ErrorCodes.ShopGiftSelf, (await Present(alice, Alice.Role!.Id, TeaParty)).Result);
+        Assert.Equal(ErrorCodes.ShopGiftNotAllowed, (await Present(alice, bobId, Potions)).Result); // not a Fashion commodity
+        Assert.Equal(ErrorCodes.ShopGiftOrderMissing, (await Pick(alice, 123456789)).Result);
+
+        await Service<FriendStore>().LinkAsync(Alice.Role!.Id, bobId);
+        Assert.Equal(ErrorCodes.ShopGiftMessageLength, (await Present(alice, bobId, TeaParty, new string('x', 21))).Result);
+        var first = await Present(alice, bobId, TeaParty);
+        Assert.Equal(0, first.Result);
+        // A second, still-unclaimed gift of the same appearance to the same recipient is refused.
+        Assert.Equal(ErrorCodes.ShopGiftDuplicate, (await Present(alice, bobId, TeaParty)).Result);
+
+        Assert.Equal(crystals - 1880, Crystals); // only the one accepted gift was paid
     }
 
     private static string RepoRoot()
