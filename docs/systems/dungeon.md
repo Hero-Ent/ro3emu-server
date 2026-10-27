@@ -180,6 +180,11 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
     from the raid Pharaoh's tip 4370002 'Pharaoh is unleashing Cleansing Light! Quickly, hide behind the Pyramid!': every
     20 s of the fight the tip goes out, Pharaoh holds still for 4 s, then his strongest skill 5340301 (whose effect the
     client draws as a cross of light) hits everyone outside the Pyramid's shadow (a step `shelter`, DungeonService.Shelter).
+  - Culvert (1015051): wave 1 Chonchons at points 22 and 23, wave 2 Thief Bugs at 24-26, and wave 3 Golden Thief Bug
+    (5300002) at point 33 with friendly story adventurers (5300007 warrior, 5300009 priest, 5300070 hunter, 5300008 mage)
+    at points 27-30.
+  - Prontera North Gate (1011301): stage 1 investigate the fork point 22, stage 2 defeat Baphomet (5300003) at point 20
+    with allied support at points 21-22.
 
 
 - The last three main-story blockers of the story walk: the ant nest vortex and egg passage (1000201, task 10104290),

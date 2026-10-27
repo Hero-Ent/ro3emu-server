@@ -633,6 +633,84 @@
           "seek": { "rounds": 2, "searchedRadius": 8, "opening": [5310011, 5310012, 5310013], "round": 5310005, "countdown": 5310010, "longer": 5310006, "won": 5310007, "found": 5310014, "why": "the round structure built from the game's ChatConfig lines (inferred)" }
         }
       ]
+    },
+    "1015051": {
+      "name": "Culvert Floor 1: Golden Thief Bug",
+      "confidence": "high",
+      "evidence": [
+        "DungeonQuestConfig: quest 1 'Clear out the nearby Chonchons' [5,0,1], quest 2 'Continue investigating deeper', quest 3 'Defeat Golden Thief Bug' [5,0,1].",
+        "Editor sc_prt_sewb1_001_pl01: Chonchons (5000005) at points 22 and 23, Thief Bugs (5000015) at points 24-26, friendly story adventurers (5300007 warrior, 5300009 priest, 5300070 hunter, 5300008 mage) at points 27-30, Golden Thief Bug 5300002 (labeled MVP黄金虫) at point 33.",
+        "NPCConfig: 5300002 story Golden Thief Bug (L21, MainStory_HuangJinChong); 5300007/5300009/5300070/5300008 story adventurers in camp 1."
+      ],
+      "guessed": [
+        "Stage 2 completes on clearing Thief Bugs before Golden Thief Bug appears in the inner chamber.",
+        "The story adventurers are positioned at points 27-30 to assist the player."
+      ],
+      "steps": [
+        {
+          "quest": 1,
+          "stage": "Clear out the nearby Chonchons",
+          "fight": [
+            { "point": 22, "npc": 5000005, "why": "Chonchon at 22" },
+            { "point": 23, "npc": 5000005, "why": "Chonchon at 23" }
+          ]
+        },
+        {
+          "quest": 2,
+          "stage": "Continue investigating deeper",
+          "fight": [
+            { "point": 24, "npc": 5000015, "why": "Thief Bug at 24" },
+            { "point": 25, "npc": 5000015, "why": "Thief Bug at 25" },
+            { "point": 26, "npc": 5000015, "why": "Thief Bug at 26" }
+          ]
+        },
+        {
+          "quest": 3,
+          "stage": "Defeat Golden Thief Bug",
+          "actors": [
+            { "npc": 5300007, "point": 27, "why": "Warrior adventurer" },
+            { "npc": 5300009, "point": 28, "why": "Priest adventurer" },
+            { "npc": 5300070, "point": 29, "why": "Hunter adventurer" },
+            { "npc": 5300008, "point": 30, "why": "Mage adventurer" }
+          ],
+          "fight": [
+            { "point": 33, "npc": 5300002, "why": "MVP黄金虫 Golden Thief Bug" }
+          ]
+        }
+      ]
+    },
+    "1011301": {
+      "name": "Prontera North Gate: Baphomet",
+      "confidence": "high",
+      "evidence": [
+        "DungeonQuestConfig: quest 1 'Investigate the fork in the road' [5,0,1], quest 2 'Encounter Baphomet at Prontera's North Gate / Defeat Baphomet' [5,0,1].",
+        "Editor sc_prt_fild01_001_pl01: born point 20 (facing south), standoff fork point 22, Baphomet 5300003 at point 20, story adventurers at points 21-22.",
+        "NPCConfig: 5300003 story Baphomet (L40, MainStory_BaFengTe); 5300007/5300009 story adventurers in camp 1."
+      ],
+      "guessed": [
+        "Stage 1 completes upon reaching the fork point 22 (radius 4 m).",
+        "Baphomet appears at point 20 once stage 2 starts."
+      ],
+      "steps": [
+        {
+          "quest": 1,
+          "stage": "Investigate the fork in the road",
+          "complete": [
+            { "point": 22, "radius": 4, "why": "the fork in the road" }
+          ]
+        },
+        {
+          "quest": 2,
+          "stage": "Defeat Baphomet",
+          "actors": [
+            { "npc": 5300007, "point": 21, "why": "Warrior adventurer" },
+            { "npc": 5300009, "point": 22, "why": "Priest adventurer" }
+          ],
+          "fight": [
+            { "point": 20, "npc": 5300003, "why": "story Baphomet (L40)" }
+          ]
+        }
+      ]
     }
   }
 }
