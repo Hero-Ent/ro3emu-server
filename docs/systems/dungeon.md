@@ -180,7 +180,7 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
     from the raid Pharaoh's tip 4370002 'Pharaoh is unleashing Cleansing Light! Quickly, hide behind the Pyramid!': every
     20 s of the fight the tip goes out, Pharaoh holds still for 4 s, then his strongest skill 5340301 (whose effect the
     client draws as a cross of light) hits everyone outside the Pyramid's shadow (a step `shelter`, DungeonService.Shelter).
-  - Prontera North Gate (1011301): stage 1 investigate the fork point 22 (radius 4 m), stage 2 defeat Baphomet (5300003) at point 20.
+  - Prontera North Gate (1011301): stage 1 'Investigate the fork in the road' completes within 17 m of Baphomet's point 20, which takes in the end of the client's guide line 24 but not the born point (inferred), then stage 2 is Baphomet (5300003) at point 20.
 
 
 - The last three main-story blockers of the story walk: the ant nest vortex and egg passage (1000201, task 10104290),
