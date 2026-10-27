@@ -99,6 +99,9 @@ public sealed partial class CombatService
                 if (!ReferenceEquals(target.Role, targetRole)) continue;
                 if (CurrentPlayerHit(source, target, attackerRole, targetRole, sceneId)) await FightingAsync(source);
                 await FightingAsync(target);
+                // The knockback or pull of a hit that left the target alive, as the same skill moves a monster.
+                if (hp > 0 && currentSource() && CurrentPlayerHit(source, target, attackerRole, targetRole, sceneId))
+                    await DisplacePlayerAsync(source, target, row, skillId);
                 if (hp == 0)
                 {
                     if (!ReferenceEquals(target.Role, targetRole)) continue;

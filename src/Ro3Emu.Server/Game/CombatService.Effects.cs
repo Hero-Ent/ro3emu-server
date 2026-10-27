@@ -428,10 +428,25 @@ public sealed partial class CombatService
             ["PinpointAttack"] = (DisplaceKind.CasterForward, 3),
             ["ArrowRepel"] = (DisplaceKind.TargetPush, 3),
             ["PileBunker"] = (DisplaceKind.TargetPush, 5),
+            ["Spear_Stab"] = (DisplaceKind.TargetPush, 3),
+            ["Sightrasher"] = (DisplaceKind.TargetPush, 4),
+            ["Jupitel_Thunder"] = (DisplaceKind.TargetPush, 3),
             ["PhantomThrust"] = (DisplaceKind.TargetPull, -1),
             ["PetSkill_2_2_BuChongJin"] = (DisplaceKind.TargetPush, 3),
             ["Pet_AncientTree_23452"] = (DisplaceKind.TargetPull, -1),
         };
+
+    /// <summary>
+    /// Knockbacks whose description names the distance but whose show has no displacement EffectData (Spear Stab 11109,
+    /// Sightrasher 12101; their hit effects carry no knockback either). The client moves a unit only on a 31112 that
+    /// names an effect, and looks it up by id alone (LC_PerformEffect_Agent.SkillStartMove), so these borrow the show
+    /// of a like knockback: Pile Bunker's flat 200 ms push (16314 -> 1631405). Which curve the original sent is (inferred).
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<string, long> BorrowedMovementShows = new Dictionary<string, long>
+    {
+        ["Spear_Stab"] = 16314,
+        ["Sightrasher"] = 16314,
+    };
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<long, (int Id, int Ms)> _movementEffects = new();
 
@@ -460,8 +475,10 @@ public sealed partial class CombatService
 
     private (DisplaceKind Kind, float Distance, int EffectId, int Ms)? Displacement(JsonElement row)
     {
-        if (!Displacements.TryGetValue(Script(row), out var rule)) return null;
+        string script = Script(row);
+        if (!Displacements.TryGetValue(script, out var rule)) return null;
         var (effect, ms) = MovementEffect(GameData.Int(row, "_iScriptShow"));
+        if (effect == 0 && BorrowedMovementShows.TryGetValue(script, out long borrowed)) (effect, ms) = MovementEffect(borrowed);
         if (effect == 0) return null;
         float distance = rule.DescIndex < 0 ? 1 // (inferred) "pulling them in front of you": 1 m ahead of the caster
             : (float)Numbers(row, "_kDescData").ElementAtOrDefault(rule.DescIndex);
@@ -508,6 +525,37 @@ public sealed partial class CombatService
             MoveTimeMs = move.Ms > 0 ? move.Ms : 300,
         });
         await _world.MoveUnitAsync(target, new MovementChangeNtf { Uid = target.Uid, MovementInfo = target.CurrentMovement(Now) });
+    }
+
+    /// <summary>A PvP hit's knockback or pull of the player it struck, as the same skill moves a monster.</summary>
+    private Task DisplacePlayerAsync(GameSession s, GameSession target, JsonElement row, int skillId) =>
+        target.WorldScene == s.WorldScene && Displacement(row) is { Kind: DisplaceKind.TargetPush or DisplaceKind.TargetPull } move
+            ? KnockPlayerAsync(target, s.Position.X, s.Position.Z, move.Kind == DisplaceKind.TargetPush ? move.Distance : -move.Distance,
+                skillId, move.EffectId, move.Ms > 0 ? move.Ms : 300)
+            : Task.CompletedTask;
+
+    /// <summary>
+    /// A knockback or pull of a player along the line from (<paramref name="fromX"/>, <paramref name="fromZ"/>): a push of
+    /// <paramref name="go"/> m away, or with a negative value a pull that stops that far in front of the source (31112,
+    /// MoveType 2, on the effect's curve). Shared by boss skills and PvP hits.
+    /// </summary>
+    private async Task KnockPlayerAsync(GameSession p, float fromX, float fromZ, float go, int skillId, int effectId, int ms)
+    {
+        if (p.Dead || p.SceneLoading || p.Role is not { } role) return;
+        float dx = p.Position.X - fromX, dz = p.Position.Z - fromZ, length = MathF.Sqrt(dx * dx + dz * dz);
+        if (length < 0.001f || go < 0 && length <= -go) return;
+        float distance = go >= 0 ? go : -(length + go);
+        var start = p.Position.Clone();
+        var end = WalkableEnd(p.SceneEntry, start, dx / length * distance, dz / length * distance);
+        await ToPlayerAndViewersAsync(p, SkillMove, new SkillStartMoveNotify
+        {
+            EntityID = (ulong)role.Id, StartPos = start, EndPos = end, SkillConfigId = skillId, EffectId = effectId,
+            MoveType = 2, StartTimestampMs = Now, Face = p.Face, MoveTimeMs = Math.Max(1, ms),
+        });
+        p.PreviousPosition = start;
+        p.Position = end;
+        p.Walking = false;
+        await _world.MoveAsync(p, new WalkReq { Pos = end, Dir = p.Face, Face = p.Face, BStop = true }, forceTeleport: true);
     }
 
     private Vec3 WalkableEnd(long sceneId, Vec3 start, float dx, float dz)
