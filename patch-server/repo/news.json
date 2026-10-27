@@ -3,8 +3,8 @@
     {
       "tag": "PATCH 1.1.3",
       "color": "green",
-      "title": "Patch Notes v1.1.3 - Novo logo",
-      "text": "• Novo logo do Hero Saga na tela de login do jogo, no atualizador e no site.\n• Atualizador 1.1.3.",
+      "title": "Patch Notes v1.1.3 - Novo logo, combate e correções",
+      "text": "• Novo logo do Hero Saga na tela de login do jogo, no atualizador e no site.\n• Auto-ataque: ao clicar num monstro de longe, o personagem chega e continua atacando sem parar.\n• Empurrões e puxões: agora toda habilidade cuja descrição fala em empurrar ou puxar faz isso de verdade (Investida Destemida, Abalo Sísmico, Chicote Giratório, Barreira de Fogo, Lua Crescente, Tornado de Machado, Gravitational Impact, Tetra Vortex, Golpe de Lança, Sightrasher, Júpiter Trovejante e outras). No PvP, elas também movem o outro jogador.\n• Dungeon do Ladrão de Ovos: as ondas que saem dos portais perseguem o jogador e a dungeon não trava mais.\n• Novas dungeons de história: Culvert e Portão Norte de Prontera (com o Bafomé no final).\n• Kafra: destinos de teleporte em terreno bloqueado levam ao chão andável mais próximo, sem deixar o personagem preso.\n• Roleta Dodo: a roda para no prêmio que você realmente ganhou.\n• Reviver pago: se a conexão cair durante o reviver, o pagamento e a ressurreição não se perdem.\n• Profissões: recursos de coleta que exigem nível de profissão são liberados na hora em que o nível sobe.\n• Poções automáticas: as configurações vêm preenchidas no primeiro login e aceitam espaço vazio.\n• Guilda: tarefas de evento (Escolta, Fortaleza, Capital, Guerra da Cidade Real) completam ao participar; agora é possível destituir um líder inativo e fundir guildas.\n• Loja de Moda: dá para presentear roupas e aparências para amigos (o presente expira em 24 h e quem enviou recebe o reembolso por correio).\n• Survivor Battle: visual da classe, pouso em equipe, espectar o companheiro, lojas, Dado Mágico, roda de emotes e tarefas semanais.\n• Batalha Simulada: o resultado da partida fica salvo no histórico.\n• Leilão mais rápido.\n• Atualizador 1.1.3.",
       "date": "2026-10-27"
     },
     {
