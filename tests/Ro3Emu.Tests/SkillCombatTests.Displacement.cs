@@ -29,10 +29,17 @@ public sealed partial class SkillCombatTests
         Assert.Equal((0, 0), Combat.MovementEffect(15112));            // Disguise: _bMovement 1, no displacement
         var data = _app.Services.GetRequiredService<GameData>();
         var skills = data.Table("SkillConfig").Values.ToList();
-        // Every displacement rule meets a skill whose show has its effect and whose description has the distance.
+        Assert.Equal((1210210, 70), Combat.MovementEffect(12102));     // Jupitel Thunder knockback
+        // Every displacement rule meets a skill whose show (or the show it borrows) has its effect.
         foreach (var (script, _) in CombatService.Displacements)
             Assert.Contains(skills, r => Script(r) == script
-                && Combat.MovementEffect(GameData.Int(r, "_iScriptShow")).Id != 0);
+                && Combat.MovementEffect(CombatService.BorrowedMovementShows.GetValueOrDefault(script, GameData.Int(r, "_iScriptShow"))).Id != 0);
+        // A show is borrowed only for a rule whose own show has no displacement effect (Spear Stab, Sightrasher).
+        foreach (var (script, _) in CombatService.BorrowedMovementShows)
+        {
+            Assert.True(CombatService.Displacements.ContainsKey(script));
+            Assert.All(skills.Where(r => Script(r) == script), r => Assert.Equal(0, Combat.MovementEffect(GameData.Int(r, "_iScriptShow")).Id));
+        }
         // The skills the old reading moved (Stasis, Choral, VolleyArrows, ShieldsProtection...) are no rules.
         var unlocked = skills.Where(r => GameData.Int(r, "_bMovement") == 1).Select(r => Script(r)).ToHashSet();
         Assert.True(unlocked.Count > 40);
@@ -88,5 +95,48 @@ public sealed partial class SkillCombatTests
         Assert.InRange(pushed, 0.1f, 6.01f); // _kDescData[3] = 6 m knockback
         Assert.True(MonsterService.Distance(start.X, start.Z, moved.EndPos.X, moved.EndPos.Z) > 2f);
         await Loop.InvokeAsync(() => { Assert.Equal(moved.EndPos, target.Pos); return Task.CompletedTask; });
+    }
+
+    /// <summary>A PvP hit moves the player it struck as it moves a monster: 31112 MoveType 2 to the target and its
+    /// viewers, and the server position follows. Sightrasher has no effect of its own and borrows Pile Bunker's.</summary>
+    [ClientDataTheory]
+    [InlineData(3100, 13005, 1300501, 1300504, 6f)] // Arrow Repel: its own 1300504, _kDescData[3] = 6 m
+    [InlineData(2200, 12101, 1210101, 1631405, 2f)] // Sightrasher: borrowed 1631405, _kDescData[4] = 2 m
+    public async Task APvpHitKnocksThePlayerBack(int job, int group, int skill, int effect, float metres)
+    {
+        await using var alice = await InWorld("Alice");
+        await using var bob = await InWorld("Bob");
+        await Gm("alice", $"!job {job}"); await Teach("alice", group);
+        await Gm("bob", "!lvl 99"); // a full HP pool that a low-level hit leaves standing
+        var source = Session("alice");
+        var victim = Session("bob");
+        var nav = _app.Services.GetRequiredService<WorldData>().Map(source.SceneEntry)!.Nav;
+        var start = source.Position.Clone();
+        // The victim 2 m away with walkable ground behind it.
+        var (dx, dz) = new[] { (2f, 0f), (-2f, 0f), (0f, 2f), (0f, -2f) }.First(o => nav == null
+            || nav.CanWalk(start.X, start.Y, start.Z, start.X + o.Item1 * 4, start.Z + o.Item2 * 4));
+        await Loop.InvokeAsync(() =>
+        {
+            victim.Position = new Vec3 { X = start.X + dx, Y = start.Y, Z = start.Z + dz };
+            Combat.PlayerHostile = (a, b) => a == source && b == victim;
+            return Task.CompletedTask;
+        });
+        var before = victim.Position.Clone();
+        await alice.SendGameAsync(CombatService.UseSkill, new CastSkillReq
+        {
+            SkillId = skill, TargetId = victim.Role!.Id, TargetPos = before,
+            Face = MonsterService.Angle(start.X, start.Z, before.X, before.Z),
+        });
+        Assert.Equal(0, (await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser)).Result);
+        var moved = await Next(bob, CombatService.SkillMove, SkillStartMoveNotify.Parser, m => m.EntityID == (ulong)victim.Role.Id);
+        Assert.Equal(effect, moved.EffectId);
+        Assert.Equal(2, moved.MoveType); // enum_SkillMoveType.Repel
+        Assert.Equal(skill, moved.SkillConfigId);
+        Assert.Equal(before, moved.StartPos);
+        Assert.InRange(MonsterService.Distance(before.X, before.Z, moved.EndPos.X, moved.EndPos.Z), 0.1f, metres + 0.01f);
+        Assert.True(MonsterService.Distance(start.X, start.Z, moved.EndPos.X, moved.EndPos.Z) > 2f); // away from the caster
+        // The caster, a viewer of the target, sees the same move.
+        await Next(alice, CombatService.SkillMove, SkillStartMoveNotify.Parser, m => m.EntityID == (ulong)victim.Role.Id);
+        await Loop.InvokeAsync(() => { Assert.Equal(moved.EndPos, victim.Position); return Task.CompletedTask; });
     }
 }
