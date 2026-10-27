@@ -17,11 +17,13 @@ namespace Ro3Emu.Server.Game;
 ///
 /// (inferred) The order record itself (everything but the recipient's sender/message display, which is the wire
 /// DBBattlePassInfo.pendingGiftMap) is not specified by any client-visible field, so it is kept as a role blob
-/// ("gifts") on both sender and recipient. Settlement of an expired order is lazy and one-sided: it only runs
-/// against the role whose own session is acting (present, pick or login), since WardrobeService's family-economy
-/// transaction (and a plain blob write outside one) only ever lets this code touch the acting session's own role
-/// state; mailing the refund is the one part allowed to reach the other side, the same way guild mail already
-/// reaches an offline role.
+/// ("gifts") on both sender and recipient. Settlement of an expired order can be triggered by either side (the
+/// recipient on present/pick, as a stale order it never picked; the sender on present/pick, as its own sent order
+/// nobody picked), each reserving the other role's "gifts" part for the duration
+/// (Ownership.ReservationKey.Role). MailService.SendTemplateOnceAsync keyed "gift-refund/{orderId}" both removes
+/// the order from the recipient and marks the sender's own copy OutTime in the one transaction that also writes the
+/// mail: whichever side gets there first is the only one that does it, the same way guild mail already reaches an
+/// offline role (GuildCaravanService.RolloverAsync).
 /// </summary>
 public sealed partial class ShopService
 {
@@ -68,13 +70,25 @@ public sealed partial class ShopService
 
     private bool Expired(GiftOrder order) => Now - order.CreatedUtc > GiftOrderLifetime.TotalSeconds;
 
+    /// <summary>The other roles this role's own stale orders need settled this call: any received order nobody
+    /// picked (to refund its sender) and any sent order nobody picked (to refund this role itself), plus one more
+    /// specific role the caller already needs (present's target, or pick's peeked sender).</summary>
+    private Ownership.ReservationKey[] SettlementKeys(long myId, long specific = 0)
+    {
+        var mine = LoadGifts(myId);
+        var ids = mine.Received.Values.Where(o => o.State == WaitTake && Expired(o)).Select(o => o.SenderId)
+            .Concat(mine.Sent.Values.Where(o => o.State == WaitTake && Expired(o)).Select(o => o.RecipientId));
+        if (specific > 0) ids = ids.Append(specific);
+        return ids.Distinct().Where(id => id != myId).Select(id => Ownership.ReservationKey.Role(id)).ToArray();
+    }
+
     /// <summary>82335 COMMODITY_PRESENT: buy a Fashion commodity as a gift for a friend. Nothing is granted now; the
     /// recipient picks it up with 82336.</summary>
     public async Task PresentAsync(GameSession session, CommodityPresentReq req)
     {
         long recipientId = req.TargetId;
-        using var guard = await CharacterService.Lock(session, [Ownership.ReservationKey.Role(recipientId, "gifts")]);
-        SettleExpiredLocked(session); // this role's own stale received orders, unrelated to this present
+        using var guard = await CharacterService.Lock(session, SettlementKeys(session.Role!.Id, recipientId));
+        await SettleMineLockedAsync(session);
         var (code, orderId) = await PresentLockedAsync(session, req, recipientId);
         await session.SendGameAsync(CommodityPresent, new CommodityPresentResp
         {
@@ -138,16 +152,14 @@ public sealed partial class ShopService
         && (owned.OverdueTimeMs == 0 || owned.OverdueTimeMs > _clock.GetUtcNow().ToUnixTimeMilliseconds());
 
     /// <summary>82336 COMMODITY_PICK: the recipient claims a gift order and unlocks its appearance (and the
-    /// commodity's own bonus award, same as buying it directly). The sender's own copy only needs a lock (and a
-    /// write) when an order is genuinely found and picked.</summary>
+    /// commodity's own bonus award, same as buying it directly).</summary>
     public async Task PickAsync(GameSession session, CommodityPickReq req)
     {
-        // A peek (unlocked, stale is fine) just to know which sender's "gifts" part to reserve; PickLockedAsync
-        // re-reads everything fresh once the lock (and that reservation) is held.
+        // A peek (unlocked, stale is fine) just to know which sender's "gifts" part to reserve too; PickLockedAsync
+        // re-reads everything fresh once the lock is held.
         long senderId = LoadGifts(session.Role!.Id).Received.GetValueOrDefault(req.OrderId)?.SenderId ?? 0;
-        var keys = senderId > 0 ? new[] { Ownership.ReservationKey.Role(senderId, "gifts") } : [];
-        using var guard = await CharacterService.Lock(session, keys);
-        SettleExpiredLocked(session); // may remove req.OrderId itself if it just expired; the pick below then misses it
+        using var guard = await CharacterService.Lock(session, SettlementKeys(session.Role!.Id, senderId));
+        await SettleMineLockedAsync(session); // may remove req.OrderId itself if it just expired; the pick below then misses it
         int code = await PickLockedAsync(session, req.OrderId);
         await session.SendGameAsync(CommodityPick, new CommodityPickResp { Result = code });
     }
@@ -188,40 +200,50 @@ public sealed partial class ShopService
         return 0;
     }
 
-    /// <summary>
-    /// This role's own expired, still-unclaimed received orders: removed and persisted immediately (so a later
-    /// failure in whatever triggered this cannot make the same order "expire" twice), then refunded to each sender
-    /// by mail (ErrorCodeConfig.PresentRefundMailId), the same way guild mail already reaches an offline role. Only
-    /// ever touches the acting session's own role state directly; the mail is the one part allowed to reach another.
-    /// </summary>
-    private void SettleExpiredLocked(GameSession session)
+    /// <summary>Settles every one of this role's own stale orders the current lock (<see cref="SettlementKeys"/>)
+    /// now covers: a received order it never picked pays its sender back; a sent order the recipient never picked
+    /// pays this role back.</summary>
+    private async Task SettleMineLockedAsync(GameSession session)
     {
-        var own = LoadGifts(session.Role!.Id);
-        var stale = own.Received.Values.Where(o => o.State == WaitTake && Expired(o)).ToList();
-        if (stale.Count == 0) return;
-        foreach (var order in stale) own.Received.Remove(order.OrderId);
-        _roles.SaveGifts(session.Role!.Id, JsonSerializer.SerializeToUtf8Bytes(own));
-        foreach (var order in stale) _ = RefundExpiredAsync(order);
+        long myId = session.Role!.Id;
+        var mine = LoadGifts(myId);
+        foreach (var order in mine.Received.Values.Where(o => o.State == WaitTake && Expired(o)).ToList())
+            await RefundExpiredAsync(order, mailTo: order.SenderId, recipientId: myId);
+        foreach (var order in mine.Sent.Values.Where(o => o.State == WaitTake && Expired(o)).ToList())
+            await RefundExpiredAsync(order, mailTo: myId, recipientId: order.RecipientId);
     }
 
-    private async Task RefundExpiredAsync(GiftOrder order)
+    /// <summary>One order, atomically: the recipient's copy is removed, the sender's copy marked OutTime, and the
+    /// sender mailed the payment back, all in MailService's own transaction, keyed so only the first side to settle
+    /// an order does anything (neither a sender nor a recipient settling the same order twice, nor each settling it
+    /// once apiece, can refund it more than once).</summary>
+    private async Task RefundExpiredAsync(GiftOrder order, long mailTo, long recipientId)
     {
         try
         {
             var attachments = order.CurrencyId > 0 && order.CurrencyCount > 0
                 ? new[] { new MailService.Attachment(order.CurrencyId, order.CurrencyCount) } : [];
-            if (attachments.Length > 0) await _mail.SendTemplateAsync(order.SenderId, GiftRefundMailTemplate, attachments);
+            await _mail.SendTemplateOnceAsync(mailTo, GiftRefundMailTemplate, attachments, $"gift-refund/{order.OrderId}",
+                tx =>
+                {
+                    var received = LoadGifts(recipientId);
+                    received.Received.Remove(order.OrderId);
+                    tx.RoleBlob(recipientId, "gifts", JsonSerializer.SerializeToUtf8Bytes(received));
+                    var sent = LoadGifts(order.SenderId);
+                    if (sent.Sent.TryGetValue(order.OrderId, out var copy)) copy.State = OutTime;
+                    tx.RoleBlob(order.SenderId, "gifts", JsonSerializer.SerializeToUtf8Bytes(sent));
+                }, _loop.Owners?.Current);
             _log.LogInformation("Gift {Order} from {Sender} to {Recipient} expired unclaimed: refunded by mail",
                 order.OrderId, order.SenderId, order.RecipientId);
         }
         catch (Exception e)
         {
-            _log.LogWarning(e, "Gift {Order} from {Sender} expired, but the refund mail failed", order.OrderId, order.SenderId);
+            _log.LogWarning(e, "Gift {Order} from {Sender} expired, but settling it failed", order.OrderId, order.SenderId);
         }
     }
 
     /// <summary>Drops this role's own old resolved (picked or expired) sent gifts so the blob does not grow forever.
-    /// Never touches a received order: those are only ever removed by <see cref="SettleExpiredLocked"/> or a pick.</summary>
+    /// Never touches a received order: those are only ever removed by a pick or <see cref="SettleMineLockedAsync"/>.</summary>
     private void PruneSentHistory(GiftState state)
     {
         foreach (long id in state.Sent.Values.Where(o => o.State != WaitTake && Now - o.CreatedUtc > GiftHistoryRetention.TotalSeconds)
@@ -260,7 +282,7 @@ public sealed partial class ShopService
     };
 
     /// <summary>Effective state at read time: an unclaimed order past its lifetime displays OutTime even in the rare
-    /// window before the recipient's own session settles (and refunds) it.</summary>
+    /// window before either side's own session settles (and refunds) it.</summary>
     private SentGiftInfo ToSentGiftInfo(GiftOrder o) => new()
     {
         OrderId = o.OrderId, RecipientId = o.RecipientId, RecipientName = o.RecipientName, AppranceId = o.AppearanceId,

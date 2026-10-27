@@ -30,6 +30,7 @@ public sealed class AppearanceShopTests : IAsyncLifetime
     private const int Potions = 12105, PotionItem = 1003100;          // [1,1000], cd13a/shop-buy.
     private const int BigPoringLook = 5000038, BigPoring = 60030010;  // class 50202 [3,980]; WardRobeConfig type 6 -> MountsConfig.
     private readonly string _directory = Path.Combine(RepoRoot(), ".loadtest-temp", "fashion-shop-" + Guid.NewGuid().ToString("N"));
+    private readonly ManualClock _clock = new();
     private WebApplication _app = null!;
     private string _http = "";
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);
@@ -41,13 +42,14 @@ public sealed class AppearanceShopTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
+        _clock.Set("2026-10-09 12:00:00");
         var (web, micro, game) = TestPorts.FreePorts();
         _app = ServerHost.Create([], o =>
         {
             o.DataDir = _directory; o.GameDataDir = Path.Combine(RepoRoot(), "data");
             o.HttpPort = web; o.MicroGatePort = micro; o.GameGatePort = game;
             o.PlayBook = 101;
-        });
+        }, _clock);
         await _app.StartAsync();
         _http = $"http://127.0.0.1:{web}";
     }
@@ -409,6 +411,48 @@ public sealed class AppearanceShopTests : IAsyncLifetime
 
         Assert.Equal(ErrorCodes.ShopAppearanceOwned, (await Present(alice, bobId, Macaron)).Result);
         Assert.Equal(crystals, Crystals); // refused before any payment
+    }
+
+    private const int GiftRefundMailTemplate = 1115; // PublicParamConfig.PresentRefundMailId
+
+    /// <summary>A mailbox never written to is an empty (not null) blob, not valid JSON.</summary>
+    private MailService.Mailbox Mailbox(long roleId) =>
+        Service<RoleStore>().LoadMailbox(roleId) is { Length: > 0 } bytes
+            ? JsonSerializer.Deserialize<MailService.Mailbox>(bytes)! : new MailService.Mailbox();
+
+    [ClientDataFact]
+    public async Task ExpiredGiftIsSettledAndRefundedByMailWhenEitherSideNextActs()
+    {
+        await using var alice = await Enter();
+        var (bob, bobId) = await EnterRecipient("fashionbobexpire", "FashionBobExpire");
+        await using var bobDispose = bob;
+        await Service<FriendStore>().LinkAsync(Alice.Role!.Id, bobId);
+        long crystals = Crystals;
+
+        var sent = await Present(alice, bobId, TeaParty);
+        Assert.Equal(0, sent.Result);
+        Assert.Equal(crystals - 1880, Crystals);
+        _clock.Advance(TimeSpan.FromHours(25)); // past PublicParamConfig.OrderExpireTime (24h)
+
+        // Bob's own next action (an unrelated, refused present) still settles the stale order and mails Alice her
+        // payment back: PresentAsync settles everything the lock covers before even validating this request.
+        // The attachment sits in her mailbox until claimed; it does not touch her live currency by itself.
+        Assert.NotEqual(0, (await Present(bob, 424242, Stroll)).Result); // whatever it refuses on first; bob never leveled up
+        Assert.Equal(crystals - 1880, Crystals);
+        var refund = Assert.Single(Mailbox(Alice.Role!.Id).Letters, l => l.TemplateId == GiftRefundMailTemplate);
+        Assert.Equal((Fashion, 1880), (Assert.Single(refund.Attachments).Entry, refund.Attachments[0].Count));
+
+        // Picking the now-settled order finds nothing left: it cannot be settled, and so refunded, a second time.
+        Assert.Equal(ErrorCodes.ShopGiftOrderMissing, (await Pick(bob, sent.OrderId)).Result);
+    }
+
+    private sealed class ManualClock : TimeProvider
+    {
+        private long _seconds;
+        public override DateTimeOffset GetUtcNow() => DateTimeOffset.FromUnixTimeSeconds(Interlocked.Read(ref _seconds));
+        public void Set(string value) => Interlocked.Exchange(ref _seconds,
+            DateTimeOffset.Parse(value + "Z", null, global::System.Globalization.DateTimeStyles.AssumeUniversal).ToUnixTimeSeconds());
+        public void Advance(TimeSpan by) => Interlocked.Add(ref _seconds, (long)by.TotalSeconds);
     }
 
     private static string RepoRoot()
