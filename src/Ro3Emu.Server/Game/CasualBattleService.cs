@@ -36,7 +36,8 @@ namespace Ro3Emu.Server.Game;
 /// personal score of at least 25 (DungeonAwardModule ScoreCondition [2,3,25]) earns DropPool 85201, the winners also
 /// 85202 (the losers' 85203 is not in DropPoolConfig); assists are the hits on the victim in its last 10 s.
 /// Not built: the arena's monsters and boss (their spawn script is not in the client), the 40-player virtual team
-/// (30441 with a team id, 30442-30451), the history details of 30128 and the pre-start notices 5711/5712.
+/// (30441 with a team id, 30442-30451) and the pre-start notices 5711/5712. A settled match's result is also kept in
+/// the role's ordinary 30128 history (DungeonService.StoreExternalResultAsync), the same as a boss dungeon's clear.
 /// </summary>
 public sealed class CasualBattleService : IGameTicker
 {
@@ -65,6 +66,7 @@ public sealed class CasualBattleService : IGameTicker
     private readonly GameLoop _loop;
     private readonly RoleStore _roles;
     private readonly AccountStore _accounts;
+    private readonly DungeonService _dungeons;
     private readonly ILogger<CasualBattleService> _log;
 
     private sealed record Group(GameSession[] Members, long Window);
@@ -120,7 +122,7 @@ public sealed class CasualBattleService : IGameTicker
         this._data = data; this._activityClock = activityClock; this._time = time; this._functions = functions; this._teams = teams;
         this._sessions = sessions; this._instances = instances; this._scene = scene; this._worldData = worldData;
         this._character = character; this._rewards = rewards; this._timedBattles = timedBattles; this._praise = praise;
-        this._loop = loop; this._roles = roles; this._accounts = accounts; this._log = log;
+        this._loop = loop; this._roles = roles; this._accounts = accounts; this._dungeons = dungeons; this._log = log;
         _obligations = new RoleObligations<CasualBattleObligationRow>("Mock Battle payout", accounts, loop, time, Online,
             s => s.TimedBattle != null && s.Progress != null, PayAsync, ObligationRetry.TickWithBackoff, log);
         scene.Loaded.Add(LoadedAsync);
@@ -491,8 +493,11 @@ public sealed class CasualBattleService : IGameTicker
             if (s?.TimedBattle == null || s.Progress == null) { _obligations.Forget(row.SourceKey); continue; } // paid at login
             await _obligations.TryPayAsync(s, row);
             if (s.Role?.Id == row.RoleId && match.Notices.TryGetValue(row.RoleId, out var notice))
+            {
+                await _dungeons.StoreExternalResultAsync(s, notice);
                 try { await s.SendGameAsync(ResultNotify, notice); }
                 catch (Exception e) when (e is IOException or ObjectDisposedException) { }
+            }
         }
     }
 

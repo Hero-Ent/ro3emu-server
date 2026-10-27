@@ -212,6 +212,43 @@ public sealed partial class GroupContentTests
         Assert.Equal(1, CasualReceipts(match, (long)alice.Self!.Uuid));
     }
 
+    /// <summary>A settled match lands in the role's ordinary 30128 history, the same as a boss dungeon's clear
+    /// (DungeonService.StoreExternalResultAsync), and an outsider's query for it stays empty.</summary>
+    [ClientDataFact]
+    public async Task MockBattleResultIsQueryableFrom30128AfterSettlement()
+    {
+        await using var alice = await InWorld("Alice");
+        await using var bob = await InWorld("Bob");
+        long match = await PlayMockBattle(alice, bob);
+        string matchId = match.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        _clock.Advance(TimeSpan.FromSeconds(600));
+        await Tick();
+        await Next(alice, CasualBattleService.ResultNotify, DungeonResultNotify.Parser);
+        await Next(bob, CasualBattleService.ResultNotify, DungeonResultNotify.Parser);
+
+        await alice.SendGameAsync(DungeonService.QueryResult, new QueryDungeonResultReq { ResultIds = { matchId } });
+        var result = Assert.Single((await Next(alice, DungeonService.QueryResult, QueryDungeonResultResp.Parser)).Results);
+        Assert.Equal(matchId, result.ResultId);
+        Assert.Equal(1, result.WinCamp);
+        var snapshot = Assert.Single(result.Snapshots);
+        Assert.Equal(2, Assert.Single(snapshot.SceneStatistics).Value.RoleStatistics.Count);
+
+        await using (var outsider = await InWorld("Outsider"))
+        {
+            await outsider.SendGameAsync(DungeonService.QueryResult, new QueryDungeonResultReq { ResultIds = { matchId } });
+            Assert.Empty((await Next(outsider, DungeonService.QueryResult, QueryDungeonResultResp.Parser)).Results);
+        }
+        // Still there after a restart: the history is in the role's own persisted state, not match memory.
+        await _app.StopAsync();
+        await _app.DisposeAsync();
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        await InitializeAsync();
+        await using var aliceAgain = await LogIn("Alice");
+        await aliceAgain.SendGameAsync(DungeonService.QueryResult, new QueryDungeonResultReq { ResultIds = { matchId } });
+        Assert.Equal(matchId, Assert.Single((await Next(aliceAgain, DungeonService.QueryResult,
+            QueryDungeonResultResp.Parser)).Results).ResultId);
+    }
+
     [ClientDataFact]
     public async Task MockBattlePayoutRefusedUntilRestartIsPaidOnceAtLogin()
     {
