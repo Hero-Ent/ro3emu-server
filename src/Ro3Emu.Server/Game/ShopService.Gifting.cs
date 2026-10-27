@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Romsg;
 using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 
 namespace Ro3Emu.Server.Game;
 
@@ -27,6 +28,22 @@ namespace Ro3Emu.Server.Game;
 /// </summary>
 public sealed partial class ShopService
 {
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "{Name} gifts appearance {Appearance} (commodity {Commodity}) to {Recipient}: order {Order}")]
+    private static partial void LogGifted(ILogger logger, string name, long appearance, int commodity, string recipient, long order);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Gift {Order} award {Award} did not resolve")]
+    private static partial void LogGiftAwardMissing(ILogger logger, Exception error, long order, long award);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "{Name} picks gift {Order} from {Sender}: appearance {Appearance}")]
+    private static partial void LogPicked(ILogger logger, string name, long order, string sender, long appearance);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Gift {Order} from {Sender} to {Recipient} expired unclaimed: refunded by mail")]
+    private static partial void LogGiftRefunded(ILogger logger, long order, long sender, long recipient);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Gift {Order} from {Sender} expired, but settling it failed")]
+    private static partial void LogGiftRefundFailed(ILogger logger, Exception error, long order, long sender);
+
     public const uint CommodityPick = 82336, CommodityPresentListNtf = 82337, SentGiftsListNtf = 82339;
 
     public sealed class GiftOrder
@@ -50,9 +67,9 @@ public sealed partial class ShopService
     public sealed class GiftState
     {
         /// <summary>Orders this role must still pick, keyed by order id.</summary>
-        public Dictionary<long, GiftOrder> Received { get; set; } = new();
+        public Dictionary<long, GiftOrder> Received { get; set; } = [];
         /// <summary>Orders this role sent, kept for its own sent-gifts list until pruned.</summary>
-        public Dictionary<long, GiftOrder> Sent { get; set; } = new();
+        public Dictionary<long, GiftOrder> Sent { get; set; } = [];
     }
 
     private const int WaitTake = 1, AlreadyTake = 2, OutTime = 3;
@@ -79,7 +96,7 @@ public sealed partial class ShopService
         var ids = mine.Received.Values.Where(o => o.State == WaitTake && Expired(o)).Select(o => o.SenderId)
             .Concat(mine.Sent.Values.Where(o => o.State == WaitTake && Expired(o)).Select(o => o.RecipientId));
         if (specific > 0) ids = ids.Append(specific);
-        return ids.Distinct().Where(id => id != myId).Select(id => Ownership.ReservationKey.Role(id)).ToArray();
+        return [.. ids.Distinct().Where(id => id != myId).Select(id => Ownership.ReservationKey.Role(id))];
     }
 
     /// <summary>82335 COMMODITY_PRESENT: buy a Fashion commodity as a gift for a friend. Nothing is granted now; the
@@ -103,13 +120,16 @@ public sealed partial class ShopService
         if (buy == null || buy.Count != 1) return (ErrorCodes.Parameter, 0);
         if (recipientId == session.Role!.Id) return (ErrorCodes.ShopGiftSelf, 0);
         if ((req.GiftContent?.Length ?? 0) > GiftMessageMaxLength) return (ErrorCodes.ShopGiftMessageLength, 0);
-        if (_data.Row("ShopCommodityConfig", buy.CommodityId) is not { } row) return (ErrorCodes.ShopNoConfig, 0);
-        long appearance = GameData.Int(row, "_iAppearanceId");
+        // The target needs no client data, unlike the commodity below: checked first so a bare CI build (no game
+        // data at all) still exercises this refusal instead of always hitting ShopNoConfig first.
+        if (await _roles.GetAsync(recipientId) is not { } recipient) return (ErrorCodes.Parameter, 0);
+        if (ShopCommodityConfig.Get(_data, buy.CommodityId) is not { } commodity) return (ErrorCodes.ShopNoConfig, 0);
+        var row = commodity.Row;
+        long appearance = commodity.AppearanceId;
         if (appearance <= 0) return (ErrorCodes.ShopGiftNotAllowed, 0);
         if (Unavailable(session, row) is { } unavailable) return (unavailable.Code, 0);
         int unit = UnitPrice(session, row), currency = PaymentItem(row);
         if (Malformed(row, (int)appearance, 1, unit) is { } malformed) return (malformed.Code, 0);
-        if (await _roles.GetAsync(recipientId) is not { } recipient) return (ErrorCodes.Parameter, 0);
         if (!await _friends.AreFriendsAsync(session.Role.Id, recipientId)) return (ErrorCodes.ShopGiftFriendsOnly, 0);
         if (await RecipientOwnsAsync(recipientId, (int)appearance)) return (ErrorCodes.ShopAppearanceOwned, 0);
 
@@ -121,7 +141,7 @@ public sealed partial class ShopService
         {
             OrderId = NewOrderId(), SenderId = session.Role.Id, SenderName = session.Role.Name,
             RecipientId = recipientId, RecipientName = recipient.Name, CommodityId = buy.CommodityId,
-            AppearanceId = appearance, AppearanceAwardId = GameData.Int(row, "_iAppearanceAwardId"),
+            AppearanceId = appearance, AppearanceAwardId = commodity.AppearanceAwardId,
             CurrencyId = currency, CurrencyCount = unit, GiftContent = req.GiftContent ?? "",
             CreatedUtc = Now, State = WaitTake,
         };
@@ -137,8 +157,7 @@ public sealed partial class ShopService
         }, asyncCommit: true);
         if (paid == null) return (_character.ShortageOf(session, cost), 0);
 
-        _log.LogInformation("{Name} gifts appearance {Appearance} (commodity {Commodity}) to {Recipient}: order {Order}",
-            session.Role.Name, appearance, buy.CommodityId, recipient.Name, order.OrderId);
+        LogGifted(_log, session.Role.Name, appearance, buy.CommodityId, recipient.Name, order.OrderId);
         await PushSentAsync(session);
         PushReceivedIfOnline(recipientId);
         return (0, order.OrderId);
@@ -174,7 +193,7 @@ public sealed partial class ShopService
         try { bonus = _awards.Resolve(session, order.AppearanceAwardId, (int)(session.SeasonState?.PlayBookId ?? _seasons.PlayBook)); }
         catch (Exception e) when (e is AwardResolutionException or OverflowException)
         {
-            _log.LogWarning(e, "Gift {Order} award {Award} did not resolve", orderId, order.AppearanceAwardId);
+            LogGiftAwardMissing(_log, e, orderId, order.AppearanceAwardId);
             return ErrorCodes.ShopRewardMissing;
         }
 
@@ -193,8 +212,7 @@ public sealed partial class ShopService
         if (sender.Sent.TryGetValue(orderId, out var sent)) sent.State = AlreadyTake;
         _roles.SaveGifts(order.SenderId, JsonSerializer.SerializeToUtf8Bytes(sender));
 
-        _log.LogInformation("{Name} picks gift {Order} from {Sender}: appearance {Appearance}",
-            session.Role.Name, orderId, order.SenderName, order.AppearanceId);
+        LogPicked(_log, session.Role.Name, orderId, order.SenderName, order.AppearanceId);
         await PushReceivedAsync(session);
         PushSentIfOnline(order.SenderId);
         return 0;
@@ -233,12 +251,11 @@ public sealed partial class ShopService
                     if (sent.Sent.TryGetValue(order.OrderId, out var copy)) copy.State = OutTime;
                     tx.RoleBlob(order.SenderId, "gifts", JsonSerializer.SerializeToUtf8Bytes(sent));
                 }, _loop.Owners?.Current);
-            _log.LogInformation("Gift {Order} from {Sender} to {Recipient} expired unclaimed: refunded by mail",
-                order.OrderId, order.SenderId, order.RecipientId);
+            LogGiftRefunded(_log, order.OrderId, order.SenderId, order.RecipientId);
         }
         catch (Exception e)
         {
-            _log.LogWarning(e, "Gift {Order} from {Sender} expired, but settling it failed", order.OrderId, order.SenderId);
+            LogGiftRefundFailed(_log, e, order.OrderId, order.SenderId);
         }
     }
 
