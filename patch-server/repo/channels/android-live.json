@@ -1,16 +1,16 @@
 {
   "channel": "android-live",
-  "version": "1.1.2-android2",
-  "manifest": "manifests/1.1.2-android2.json.zst",
-  "manifestSha256": "90c3639aab0bcd9ae5ba8e5c775e20a87a2875eda5576a1785ea72456808881b",
-  "published": "2026-10-26T05:04:47.4104028+00:00",
+  "version": "1.1.2-android3",
+  "manifest": "manifests/1.1.2-android3.json.zst",
+  "manifestSha256": "2c59a3cf5ecfaccd726b1d44c771e8433ce1964fbebaccb0209af1aa1011dc30",
+  "published": "2026-10-27T05:29:54.8337913+00:00",
   "apk": {
-    "version": "1.0.3",
-    "minVersion": "1.0.2",
-    "url": "apk/1.0.3/HeroSaga.apk",
-    "sha256": "c37ddcb899eaa5bec60c1aa74675c3290e33b906084da2e22155c39dbc2f3a9a",
-    "size": 71675023,
+    "version": "1.0.4",
+    "minVersion": "1.0.4",
+    "url": "apk/1.0.4/HeroSaga.apk",
+    "sha256": "c1f986e08e1ad076a3a8826178fed9194d6251b5c39c2ea8254f840dc8a20aeb",
+    "size": 72362554,
     "pcVersion": "1.1.2"
   },
-  "signature": "DdFdd9Q1/w0d2/\u002BjtiNn6vmNHS/WliPmZUeh9rT0Tvh7aSyRiixvwec61aoX85RKJg58tYZPXxlE4w8L/DhOSo\u002BdAfpBk8Uyd\u002B2EV98lR8lgguZGdmCuEXpNH1xBfsCeZp6Yk6srYbpXEE7D68kjnekOkMvE5UkiDxfcjdxdrcb3Cq1AvctYMfA7qwyJJStxSpXUu/g4IdXcJqCBOX2tIvQKiRnJJ2DWPzw9ckcFnuElFvw9YOmMzb6Mii6g8qkPP62ZJt5WIWrK\u002B3Y7/lCWvE90eASQ8pwvnHnEu3BFQQh1LNINn5jRtpSwmWGPrLKwoXDTmKQOLxMgk4Ys245pskJQTlzvpW6oM55hDW55OFLoDXuXlEfhF9PA0lDCIawidbXgn3/GZFOddjkZpGqcI9eUJjmVN4jfRb4bzb6NKhq1pssyp1eA6GyNoi2B4RULPmPrBuqoAkqNIxAjSbUK5bg0WZnLMj2sMT9Hob8XR4051A/WokPgUvL/uTxNr7aw"
+  "signature": "a2RX\u002BDdxQ0c3HcOUrTrrNOOOKIXcPK0V\u002B4xSfcggFHUiV0o4wbRLRixIGDGTfsUaPGKL/qeIrzE6CvuTB3aJDgEpkyi6t/ZfmFWHu68VlbXXS62z8eFJg64AHdPt0OBijdGvHfQbXf8R6Zhb5VYGvQQttQE9wf2i9kR\u002BGqur5uaXI4YEnuBbX06CKzylJ48Pb0x3ZD\u002BwaBPyGuB38OqhbnO88sVTEZcjcP98UGfRMQLFlaySEjl3RClx0F1cPGiZH4JjkY82YH2dJKGS/dLmJ7iI1PRAPPwvYZ6QRZzus\u002BcF86BZ2QJStLqq4tVV5cmdzb/t3cHnR9z1uCgTSNrZzNdiy52o4j8EzkMATaVS4nVO1XSj\u002BKjyYoOzAwIDuRNwO/wfrN2Lc59nVlWTqequL1vBAzXUZBO5kZbIU5GNKfZuME3qzxqwpF6vJAOTvYbacvw1YxBd0HX0X3cUQPUF50\u002BlKM3M3Unu88mlceiK3vQRYS542r7k9lzuGREpIgIu"
 }
