@@ -17,6 +17,10 @@ namespace Ro3Emu.Server.Game;
 /// </summary>
 public sealed partial class DungeonService
 {
+    private const long EggThiefDungeon = 1021301;
+    private const int EggThiefWaveSpeedCm = 550;
+    private const float EggThiefWaveLeash = 100f;
+
     public const uint Sync = 5062, Enter = 30400, BaseInfo = 30401, Leave = 30402, Result = 30403, Event = 30404,
         Confirm = 30406, ClientEvent = 30106, CreateResult = 30107, EnterSceneResult = 30108,
         Reset = 30124, ReadyQueue = 42033, TeamInfo = 30441, ConfirmReminder = 42047, ConfirmReminderNotify = 42046,
@@ -631,12 +635,27 @@ public sealed partial class DungeonService
     }
 
     /// <summary>
+    /// (inferred) The missing original encounter script sent the Egg Thief's three portal waves toward the player. The
+    /// reconstructed first-wave Pupa is immobile and all three authored portals lie outside its normal 20 m home leash,
+    /// so ordinary field AI leaves two actors off-camera forever. Use the 550 cm/s pace already carried by this
+    /// encounter's Boa/Willow waves and a room-sized leash for this scene only.
+    /// </summary>
+    private MonsterTemplate? WaveTemplate(Attempt a, DungeonCatalog.Spawn spawn) =>
+        a.Plan.SceneEntry == EggThiefDungeon && _monsters.Template(spawn.NpcId) is { } template
+            ? template with
+            {
+                SpeedCm = Math.Max(template.SpeedCm, EggThiefWaveSpeedCm),
+                LeashDistance = Math.Max(template.LeashDistance, EggThiefWaveLeash),
+            }
+            : null;
+
+    /// <summary>
     /// One monster of the wave: spawned and counted, seen from afar on a cannon step, its scripted extras
     /// (DungeonService.Cues), then engaged. False when the run ended meanwhile or the spawn failed (a lost run).
     /// </summary>
     private async Task<bool> PlaceFightAsync(Attempt a, DungeonCatalog.Spawn spawn)
     {
-        var monster = await _instances.SpawnAsync(a.Room, spawn.NpcId, spawn.Point);
+        var monster = await _instances.SpawnAsync(a.Room, spawn.NpcId, spawn.Point, customTemplate: WaveTemplate(a, spawn));
         if (a.Settled || a.Room.Closed)
         {
             a.Spawning = false;
@@ -748,7 +767,7 @@ public sealed partial class DungeonService
         a.RevivesUsed[s.Role.Id] = a.RevivesUsed.GetValueOrDefault(s.Role.Id) + 1;
     }
 
-    public Task PublishExternalReviveAsync(GameSession s) => Active(s) is { } a
+    public Task PublishExternalReviveAsync(GameSession s) => s.Role != null && Active(s) is { } a
         ? SendReviveInfoAsync(s, a) : Task.CompletedTask;
 
     private async Task PlayerDiedAsync(GameSession s)
@@ -878,6 +897,10 @@ public sealed partial class DungeonService
         else if (!a.Settled && Defeated(a)) await SettleAsync(a, false);
     }
 
+    // A scripted scene logs each walk/interaction step as it completes; its last fight step ends here, at the clear.
+    [LoggerMessage(Level = LogLevel.Information, Message = "Dungeon {Scene} instance {Instance} settled (cleared: {Cleared}) at step {Step}/{Steps}")]
+    private static partial void LogSettled(ILogger logger, long scene, long instance, bool cleared, int step, int steps);
+
     /// <summary>
     /// All configured actors dead before timeout wins (inferred predicate). Reserve once before any await.
     /// Each role's earned personal award and allowance are one SQLite transaction; disconnect is not a clear.
@@ -907,6 +930,9 @@ public sealed partial class DungeonService
         await FreezeAsync(a, won);
         won = a.FrozenWin;
         a.Settled = true;
+        long scene = a.Plan.SceneEntry, instance = a.Room.Id;
+        int steps = a.Plan.Waves.Count, step = Math.Min(a.Wave + 1, steps);
+        LogSettled(_log, scene, instance, won, step, steps);
         var participants = Present(a).Where(a.Loaded.Contains).Select(s => (Session: s, Role: s.Role!.Id)).ToArray();
         await DismountAllAsync(a, interrupt: false); // off the cannons before the room's actors go
         var notifications = new List<Func<Task>>();

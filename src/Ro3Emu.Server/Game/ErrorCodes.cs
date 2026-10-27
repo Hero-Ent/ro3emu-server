@@ -230,6 +230,16 @@ public static class ErrorCodes
     public const int GuildIconLocked = 10003, GuildFrameLocked = 10004, GuildJoinLevel = 10008;
     public const int GuildTextLength = 10027;
     public const int GuildMailDaily = 10025, GuildMailContent = 10026; // group mail: today's letters used, empty text
+    // Impeaching the master: on cooldown, no grounds, requirements unmet, the master itself, cancel state, responded twice,
+    // in progress, not in progress.
+    public const int ImpeachCooldown = 472, ImpeachNoGrounds = 473, ImpeachRequirements = 474, ImpeachSelf = 475;
+    public const int ImpeachCancelState = 476, ImpeachRepeat = 477, ImpeachInProgress = 478, ImpeachNotInProgress = 479;
+    // Merging guilds (ErrorCodeConfig 10050-10078): expired, the other's received invitations full, ours sent full, too
+    // many members, invited already, bad announcement, no invitation, impeachment here / there, no merge possible,
+    // cooldown here / there.
+    public const int MergeExpired = 10050, MergeTheirInvitesFull = 10051, MergeOurInvitesFull = 10052, MergeTooMany = 10053;
+    public const int MergeRepeat = 10055, MergeAnnounce = 10056, MergeNoInvite = 10057, MergeOurImpeach = 10060;
+    public const int MergeImpossible = 10061, MergeOurCooldown = 10063, MergeTheirImpeach = 10075, MergeTheirCooldown = 10078;
     public const int GuildFundsShort = 484, GuildContributeShort = 10040, GuildBuildBusy = 485, GuildHallLow = 486, GuildBuildMax = 487;
     // Guild voice channels (ErrorCodeConfig 97001-97032, Localization_en): not in a guild, invalid channel, on the
     // channel's block list, already / not in the channel, not leader nor GuildVoice right, the leader cannot be kicked,
@@ -306,11 +316,16 @@ public static class ErrorCodes
     public const int NotForSale = 2303;         // "Item is not currently available for purchase"
     public const int PurchaseLimit = 2304;      // "Item purchase limit reached"
     public const int PurchaseRequirements = 2311; // "Purchase requirements not met"
+    public const int ShopGiftFriendsOnly = 2312;   // "Gifts can only be sent to friends"
+    public const int ShopGiftOrderMissing = 2314;  // "Order does not exist"
     public const int ShopAppearanceMissing = 2315; // "Appearance does not exist"
     public const int ShopAppearanceOwned = 2316;   // "Appearance already unlocked"
     public const int ShopGiftNotAllowed = 2317;    // "This shop does not allow gifts"
+    public const int ShopGiftDuplicate = 2318;     // "You already have an unclaimed gift containing the same appearance"
     public const int ShopMissing = 2323;        // "Shop Configuration not found."
     public const int ShopRewardMissing = 2324;  // "Reward Configuration not found."
+    public const int ShopGiftSelf = 2325;          // "You cannot send gifts to yourself"
+    public const int ShopGiftMessageLength = 2327;  // "Invalid gift message length"
 
     // Soul Echo (the client's name for emblems; exact operation mapping inferred).
     public const int FunctionLocked = 2057;       // "Function locked"

@@ -199,8 +199,7 @@
       "why": "'Deals @{1} hits of ... PATK * «50»% to up to «5» enemies within a «5»-meter radius ... You can Move while casting': P1 5000 is per hit; the template has three attack points (0.13, 0.58, 1.12 s) and the sibling EatChicken_2006 row says '@{3} times' with _kDescData 318 = 3 x its P1 10600, so three hits around the caster's current position, 5 m (_kRange 650 = 6.5 m; mode 1 also says «5»). 'Pulls the targets closer' gives no distance: each hit draws them toward the caster, up to the 5 m radius, stopping 1 m short (inferred).",
       "hits": { "points": [0, 1, 2] },
       "anchor": "caster",
-      "shape": { "circle": 5 },
-      "pull": 5
+      "shape": { "circle": 5 }
     },
     "11636": {
       "name": "Powerful Shield Bash",

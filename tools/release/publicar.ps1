@@ -137,7 +137,7 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Fail 'Git nao encont
 $env:PATH = "$env:PATH;C:\Program Files\dotnet"
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { Fail '.NET SDK nao encontrado (instale o .NET 10 SDK).' }
 if (-not (Test-Path (Join-Path $clientDir 'ro3.exe'))) { Fail "Cliente nao encontrado em $clientDir (falta ro3.exe)." }
-if (-not (Test-Path (Join-Path $clientDir 'ro3emu-backup'))) { Fail "Falta $clientDir\ro3emu-backup (DLLs originais). Rode o jogo uma vez pelo start.cmd ou tools\patch-client.ps1." }
+if (-not (Test-Path (Join-Path $clientDir 'ro3emu-backup'))) { Fail "Falta $clientDir\ro3emu-backup (DLLs originais). Rode o jogo uma vez pelo scripts\start.cmd ou tools\patch-client.ps1." }
 if (-not (Test-Path $gateKey)) { Fail "Chave do gate nao encontrada: $gateKey" }
 
 # --- O que mudou? ----------------------------------------------------------------------------------------------------

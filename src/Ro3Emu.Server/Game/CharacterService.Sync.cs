@@ -124,7 +124,7 @@ public sealed partial class CharacterService
         }
         info.QuickUseInfos.Add(preferences.QuickUseInfos);
         info.ShortcutBarInfos.Add(FullShortcutBar(preferences.ShortcutBarInfos));
-        info.MedicinesAutoUse = preferences.MedicinesAutoUse?.Clone();
+        info.MedicinesAutoUse = WithMedicineDefaults(preferences.MedicinesAutoUse);
         info.CurrentArrowID = preferences.CurrentArrowID;
         info.ItemCds = preferences.ItemCds?.Clone();
         info.ShareCds = preferences.ShareCds?.Clone();

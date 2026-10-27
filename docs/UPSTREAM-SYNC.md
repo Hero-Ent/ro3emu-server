@@ -16,6 +16,34 @@ compartilhado. Integramos as novidades deles por **merge** (nunca cherry-pick), 
 | 2026-10-12 | fork inicial ..`6befb4b` | tudo | - | import do projeto |
 | 2026-10-22 | `6befb4b..9f3c04d8` (145 commits, PRs #10-#61) | tudo, em 4 etapas (`de99453e`, `9cd23f33`, `249a72be`, `9f3c04d8`) | nenhum revertido; ajustes abaixo | ver "Sync 2026-10-22" |
 
+## Sync 2026-10-27
+
+Faixa `bbc9e3b2..7122af4f` (38 commits, PRs #85 a #117), todos os grupos aplicados: correcoes (Ladrao de Ovos, reviver,
+Kafra, profissoes, roleta Dodo, pocoes automaticas, leilao), guilda (tarefas de eventos, destituir lider, fundir
+guildas), Survivor Battle, presentes da Loja de Moda, empurroes e puxoes, dungeons de historia (Culvert, Portao Norte),
+historico da Batalha Simulada, docs e dependencias. Sem mudanca no cliente.
+
+Decisoes do usuario: empurroes e puxoes do upstream, o nosso so como reserva; auto-ataque do upstream com a nossa
+tolerancia de 500 ms.
+
+Como os conflitos foram resolvidos:
+
+- **Auto-ataque ao clicar de longe** (`0ebcf773`): `AttackLoop` e `PlayerMoved` do upstream, com
+  `AttackStopGraceMs` = 500 ms. O cast continua sem ser interrompido nem movido por andar; o `ApproachAttackTests` do
+  upstream foi ajustado para isso.
+- **Empurroes e puxoes** (`0840592c`): tabela `Displacements` do upstream. O nosso `SkillMechanics` knockback/pull
+  ficou so como reserva (`MechanicDisplacement`, hoje so a Defesa com Escudo), com os efeitos emprestados 1631405 e
+  1234212. Sairam das nossas JSON os duplicados: Golpe de Lanca, Sightrasher, Jupiter Trovejante e o puxao da Lua
+  Crescente. A Investida Destemida continua movendo o personagem 12 m (`CasterCharges`) e empurra a partir de onde a
+  investida comecou. Mantidos `ConfirmSkillMoveEnd`, o `DashAsync` e a busca do efeito de movimento em show*1000.
+- **Ladrao de Ovos** (`ae6790ac`): o template das ondas foi para o `PlaceFightAsync` (`WaveTemplate`), que agora
+  atende tambem as chegadas roteirizadas.
+- **README**: o nosso. O `publicar.ps1` passou a citar o `scripts\start.cmd`.
+
+Pendencias:
+
+- `ConfigViewTests.FieldNamesOutsideViews` = 2691 do upstream + 70 nossas.
+- Testes com dados reais que falham por ambiente: os de EXP (bonus do servidor), FirstHeart, Mapa, Dracula, Daily.
 ## Sync 2026-10-23
 
 Faixa `9f3c04d8..bbc9e3b2` (29 commits, PRs #62 a #84). Decisoes do usuario: D1 furtividade do upstream

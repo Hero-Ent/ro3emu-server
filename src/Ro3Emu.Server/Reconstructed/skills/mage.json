@@ -23,16 +23,6 @@
       "why": "'Creates an «4»-second [Ember Zone] that deals ... Magic ATK * «5»%+«45» to up to «5» enemies within the area every «0.5» seconds': 8 ticks (_kLogicData [500, 4000, 550]: every 500 ms for 4 s) from attack point 0, each P1 500 + 45. Talent proc row: only applies when something casts it.",
       "hits": { "everyMs": { "from": 0, "to": 4000, "count": 8 }, "afterPoint": 0 }
     },
-    "12101": {
-      "name": "Sightrasher",
-      "why": "'dealing Magic ATK*«100»%+«180» Fire ranged magic damage to up to «5» enemies within a «5»-meter radius, and knocking them back «2» meters': the script Sightrasher has no displacement rule and no movement EffectData, so the 2 m push is missing.",
-      "knockback": 2
-    },
-    "12102": {
-      "name": "Jupitel Thunder",
-      "why": "'dealing MATK * «150»% + «100» Wind ranged Magic DMG to a designated ST enemy within «12» m and knocking them back «3» m': _kBuff2 only carries 1210101 ('Jupitel Thunder' stun effect, 1 s); the script Jupitel_Thunder has no displacement rule, so the 3 m push is missing.",
-      "knockback": 3
-    },
     "12302": {
       "name": "Soul Expansion",
       "why": "'Launching «2» bursts of soul energy at the designated ST enemy ... dealing @{1} instances of Ghost-property ranged magic damage equal to Magic ATK *«85»%': 85% is per burst (_kDamageParam1 [8500, 8500], _kShowDmg empty), two bursts at the first two attack points (0.53, 0.83 s) = 170%. The generic path dealt only one 85% hit.",

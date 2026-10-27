@@ -165,8 +165,8 @@ public sealed partial class CombatService
             {
                 Target = target, SkillId = loopSkill,
                 NextSwingMs = Now + SkillMs(s, row.Value) + ChantMs(s, row.Value) + 1,
-                StartX = s.Position.X, StartZ = s.Position.Z,
-                StartedWalking = s.Walking, StartedMs = Now, WalkFromUtc = s.LastWalkUtc,
+                StartX = s.Position.X, StartZ = s.Position.Z, StartedWalking = s.Walking, StartMs = Now,
+                ArrivalSpeed = s.Speed / 100f, WalkFromUtc = s.LastWalkUtc
             };
         }
         else s.Attack = null;
@@ -817,15 +817,13 @@ public sealed partial class CombatService
             && MonsterService.Distance(eventAttack.StartX, eventAttack.StartZ, s.Position.X, s.Position.Z) > 1.5f) _eventAttacks.Remove(s);
         if (s.Attack is { } a && MonsterService.Distance(a.StartX, a.StartZ, s.Position.X, s.Position.Z) > 0.1f)
         {
-            // A left click on a monster out of range: the client casts the normal attack on reaching range and stops a
-            // moment later a little further on (in-game 22.10, any class). That stop is where the attack started, within
-            // the distance the walk can have covered; ending the loop there left one swing per click. Upstream treats a
-            // cast's first stop the same way (ca040898).
-            if (a.StartedWalking && !s.Walking && Now - a.StartedMs <= AttackStopGraceMs
-                && MonsterService.Distance(a.StartX, a.StartZ, s.Position.X, s.Position.Z) <= s.Speed / 100.0 * WalkedSeconds(a.WalkFromUtc) + 0.5)
+            // Clicking an enemy from afar: the client attacks on reaching range and stops a few ms later (in-game
+            // 11.10), so that first stop is where the auto-attack starts, not a step away that ends it. Hero Saga: the
+            // grace is AttackStopGraceMs (500 ms, tested in game 22.10) instead of upstream's 300 ms (inferred).
+            if (a.StartedWalking && !s.Walking && Now - a.StartMs <= AttackStopGraceMs
+                && MonsterService.Distance(a.StartX, a.StartZ, s.Position.X, s.Position.Z) <= a.ArrivalSpeed * WalkedSeconds(a.WalkFromUtc) + 0.5)
             {
-                a.StartX = s.Position.X;
-                a.StartZ = s.Position.Z;
+                a.StartX = s.Position.X; a.StartZ = s.Position.Z;
                 a.StartedWalking = false;
             }
             else s.Attack = null;

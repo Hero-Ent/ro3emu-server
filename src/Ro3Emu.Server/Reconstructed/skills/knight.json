@@ -50,11 +50,6 @@
       "shape": { "circle": 4 },
       "maxTargets": 3
     },
-    "11109": {
-      "name": "Spear Stab",
-      "why": "'... to the designated ST enemy within «5» meters and applying [Knockback] for «1» meters': no Spear_Stab displacement rule exists, push the target 1 m away from the caster.",
-      "knockback": 1
-    },
     "11110:1": {
       "name": "Spear Throw (talent: extra spear)",
       "why": "Talent 16120008 'When casting [Spear Throw], you throw one Extra Spear that Deals DMG equal to PATK * «50»% + «220» as Extra Neutral Ranged Physical damage': mode 1 P1 [8000, 5000], P2 [80, 220], _kShowDmg [3, 1], attack points [0.07, 0.23]: the normal throw (branch 0, 3 segments) at point 0 and the extra spear (branch 1) at point 1; generic dealt only branch 0.",

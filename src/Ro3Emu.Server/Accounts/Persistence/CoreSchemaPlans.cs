@@ -164,6 +164,8 @@ internal sealed class RoleSchemaPlan : DbPlan
         SchemaSql.AddColumn(db, tx, "role", "social_outfit", "BLOB");
         // Serialized romsg.DBEmojiInfo (chat emoticons unlocked by items; AUTO_SYNC 5041, EmojiService).
         SchemaSql.AddColumn(db, tx, "role", "emoji_info", "BLOB");
+        // Serialized ShopService.GiftState (82335/82336 Fashion-commodity gift orders sent and received).
+        SchemaSql.AddColumn(db, tx, "role", "gifts", "BLOB");
         // Unix seconds of a deletion; deleted roles are kept (items, progress) but no longer listed or selectable.
         SchemaSql.AddColumn(db, tx, "role", "deleted_time", "INTEGER NOT NULL DEFAULT 0");
         SchemaSql.Execute(db, tx, """
@@ -367,6 +369,7 @@ internal sealed class AuctionSchemaPlan : DbPlan
         cmd.ExecuteNonQuery();
         SchemaSql.AddColumn(db, tx, "auction_prebuy", "requested_id", "INTEGER NOT NULL DEFAULT 0");
         SchemaSql.AddColumn(db, tx, "auction_prebuy", "paused", "INTEGER NOT NULL DEFAULT 0");
+        AuctionItemColumns.Migrate(db, tx);
         SchemaSql.Execute(db, tx, """
             INSERT OR IGNORE INTO owner_revision(kind,id,part,revision)
                 SELECT 'auction_item',source_key,'state',0 FROM auction_item;
