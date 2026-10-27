@@ -5,7 +5,9 @@
 #   - luaopen_cmsgpack / luaopen_cmsgpack_safe are linked in, and the Lua allocation-profiling hooks are no-ops.
 # Sources are cloned into android\build\third_party (gitignored); the result goes to android\build\native-prebuilt,
 # where setup-project.ps1 picks it up.
-param([string]$Unity = 'C:\Dev\Unity\Editors\2022.3.62f3\Editor\Unity.exe')
+# -X64: x86_64 for the PC's Android emulator, into build\native-prebuilt\x86_64.
+param([string]$Unity = 'C:\Dev\Unity\Editors\2022.3.62f3\Editor\Unity.exe', [switch]$X64)
+$abi = if ($X64) { 'x86_64' } else { 'arm64-v8a' }
 $ErrorActionPreference = 'Stop'
 $android = Split-Path $PSScriptRoot -Parent
 $third = Join-Path $android 'build\third_party'
@@ -213,9 +215,9 @@ set (THIRDPART_SRC ${THIRDPART_SRC} cmsgpack/lua_cmsgpack.c ro3_chunk.c ro3_stub
 
 # cmake writes warnings to stderr, which Windows PowerShell turns into terminating errors under 'Stop'.
 $ErrorActionPreference = 'Continue'
-$out = Join-Path $src 'build.android.arm64-v8a'
+$out = Join-Path $src "build.android.$abi"
 # Quoted: Windows PowerShell splits a bare -DLUA_VERSION=5.4.1 into "-DLUA_VERSION=5" and ".4.1".
-& cmake -Wno-dev -G 'Unix Makefiles' "-DCMAKE_MAKE_PROGRAM=$make" "-H$src" "-B$out" '-DLUA_VERSION=5.4.1' '-DANDROID_ABI=arm64-v8a' `
+& cmake -Wno-dev -G 'Unix Makefiles' "-DCMAKE_MAKE_PROGRAM=$make" "-H$src" "-B$out" '-DLUA_VERSION=5.4.1' "-DANDROID_ABI=$abi" `
   '-DANDROID_PLATFORM=android-26' "-DCMAKE_TOOLCHAIN_FILE=$ndk\build\cmake\android.toolchain.cmake" '-DCMAKE_BUILD_TYPE=Release' 2>&1 | Out-Host
 if ($LASTEXITCODE) { throw 'cmake configure failed' }
 & cmake --build $out --config Release -- -j8 2>&1 | Out-Host
@@ -223,6 +225,7 @@ if ($LASTEXITCODE) { throw 'cmake build failed' }
 $ErrorActionPreference = 'Stop'
 
 $prebuilt = Join-Path $android 'build\native-prebuilt'
+if ($X64) { $prebuilt = Join-Path $prebuilt 'x86_64' }
 New-Item -ItemType Directory -Force $prebuilt | Out-Null
 Copy-Item -Force (Join-Path $out 'libxlua.so') $prebuilt
 Write-Host "built $prebuilt\libxlua.so"

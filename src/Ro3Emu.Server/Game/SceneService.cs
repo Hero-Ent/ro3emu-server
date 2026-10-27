@@ -26,6 +26,15 @@ public sealed partial class SceneService(IOptions<ServerOptions> options, World 
     /// <summary>How far the player may stand from an NPC it talks to (NPCConfig._iInteractDistance is 2-4; client positions lag).</summary>
     private const float InteractSlack = 8f;
 
+    /// <summary>
+    /// (inferred) How long a 70010 handoff waits for the client's 30005 before the server forces a reconnect
+    /// (<see cref="ExpireLineLoad"/>). The client gives up on its own: LC_TransitionBase.m_iSceneLoadTimeout (30 s) ends in
+    /// LoadNewSceneAsyncFailToLastScene. Its timer starts only when its transition shows the loading screen, after this
+    /// one, so an equal bound let the server win on a slow device (a 31 s load on the PC's Android emulator stayed at 95%
+    /// for good). This is a backstop for a client that never answers, three times the client's own timeout.
+    /// </summary>
+    public const int LoadDeadlineSeconds = 90;
+
     /// <summary>Dungeon owners clean up on every exit and start combat only after the loaded-scene handshake.</summary>
     public List<Func<GameSession, Task>> Leaving { get; } = new();
     /// <summary>Reconcile destination-dependent appearance before ENTITYSELF and the first AOI snapshot.</summary>
@@ -135,7 +144,7 @@ public sealed partial class SceneService(IOptions<ServerOptions> options, World 
             throw;
         }
         var destination = reservation?.Map ?? RuntimeMapKey.Private(scene, instanceId);
-        var handoff = new SceneHandoff(++s.SceneGeneration, destination, clock.GetUtcNow().AddSeconds(30), reservation)
+        var handoff = new SceneHandoff(++s.SceneGeneration, destination, clock.GetUtcNow().AddSeconds(LoadDeadlineSeconds), reservation)
         { AdmissionValid = transfer?.Valid };
         s.Handoff = handoff;
         bool CurrentTransfer() => s.Handoff == handoff && !s.SceneRecoveryRequired

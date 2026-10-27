@@ -62,6 +62,21 @@ float3x4 BoneMatrix(int index)
                     LOAD_TEXTURE2D(_GlobalBoneMatricesTexture, texel + int2(1, 0)),
                     LOAD_TEXTURE2D(_GlobalBoneMatricesTexture, texel + int2(2, 0)));
 }
+
+// The weights as the original vertex program sums them (BattleBase GPUSKIN_ON, p0_vs_005): x always, y above 0.001,
+// z and w only while x + y is under 0.999, each above 0.001. Meshes store 1 to 4 weights (some hair 2, heads none),
+// and a missing component reads as the default (x, y, 0, 1): summing all four would add a whole bone matrix to them.
+float3x4 SkinMatrix(int first, uint4 indices, float4 weights)
+{
+    float3x4 skin = BoneMatrix(first + indices.x) * weights.x;
+    if (weights.y > 0.001) skin += BoneMatrix(first + indices.y) * weights.y;
+    if (weights.x + weights.y < 0.999)
+    {
+        if (weights.z > 0.001) skin += BoneMatrix(first + indices.z) * weights.z;
+        if (weights.w > 0.001) skin += BoneMatrix(first + indices.w) * weights.w;
+    }
+    return skin;
+}
 #endif
 
 struct Attributes
@@ -92,9 +107,7 @@ Varyings CharacterVert (Attributes v)
 #ifdef GPUSKIN_ON
     if (unity_LightmapST.y < 0.5 && _GlobalBoneMatricesTextureSize.w > 0 && dot(v.weights, 1) > 0.001)
     {
-        int first = (int)unity_LightmapST.x;
-        float3x4 skin = BoneMatrix(first + v.indices.x) * v.weights.x + BoneMatrix(first + v.indices.y) * v.weights.y
-                      + BoneMatrix(first + v.indices.z) * v.weights.z + BoneMatrix(first + v.indices.w) * v.weights.w;
+        float3x4 skin = SkinMatrix((int)unity_LightmapST.x, v.indices, v.weights);
         position = mul(skin, float4(position, 1));
         normal = mul((float3x3)skin, normal);
     }

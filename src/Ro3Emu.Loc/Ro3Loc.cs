@@ -63,6 +63,11 @@ namespace Ro3Emu.Loc
             return value;
         }
 
+        /// <summary>Overrides written "=text": only the whole string is replaced, never a part of a longer one ("=BASE"
+        /// changes the HUD's level label, not "BASE:0%" under the experience bar). Declared first: static fields start in
+        /// order, and the loader below fills it.</summary>
+        private static readonly HashSet<string> ExactOnly = new HashSet<string>(StringComparer.Ordinal);
+
         /// <summary>English the client ships that we replace (en_overrides.tsv): exact strings, checked before the CJK fast path.</summary>
         private static readonly Dictionary<string, string> EnglishOverrides = LoadEnglishOverrides();
 
@@ -74,27 +79,12 @@ namespace Ro3Emu.Loc
                 using (var stream = typeof(Ro3Loc).Assembly.GetManifestResourceStream("en_overrides.tsv"))
                 using (var reader = stream == null ? null : new StreamReader(stream, Encoding.UTF8))
                 {
-                    string line;
-                    while (reader != null && (line = reader.ReadLine()) != null)
-                    {
-                        int tab = line.IndexOf('\t');
-                        if (line.Length == 0 || line[0] == '#' || tab <= 0) continue;
-                        map[Unescape(line.Substring(0, tab)).TrimStart(new[] { '﻿' })] = Unescape(line.Substring(tab + 1));
-                    }
+                    if (reader != null) ReadOverrides(reader, map);
                 }
                 string disk = Path.Combine(AppDomain.CurrentDomain.BaseDirectory ?? ".", "ro3emu", "en_overrides.tsv");
                 if (File.Exists(disk))
                 {
-                    using (var reader = new StreamReader(disk, Encoding.UTF8))
-                    {
-                        string line;
-                        while ((line = reader.ReadLine()) != null)
-                        {
-                            int tab = line.IndexOf('\t');
-                            if (line.Length == 0 || line[0] == '#' || tab <= 0) continue;
-                            map[Unescape(line.Substring(0, tab)).TrimStart(new[] { '﻿' })] = Unescape(line.Substring(tab + 1));
-                        }
-                    }
+                    using (var reader = new StreamReader(disk, Encoding.UTF8)) ReadOverrides(reader, map);
                 }
             }
             catch
@@ -103,6 +93,23 @@ namespace Ro3Emu.Loc
             }
             ApplyVersion(map);
             return map;
+        }
+
+        private static void ReadOverrides(TextReader reader, Dictionary<string, string> map)
+        {
+            string line;
+            while ((line = reader.ReadLine()) != null)
+            {
+                int tab = line.IndexOf('\t');
+                if (line.Length == 0 || line[0] == '#' || tab <= 0) continue;
+                string key = Unescape(line.Substring(0, tab)).TrimStart(new[] { '﻿' });
+                if (key.Length > 1 && key[0] == '=')
+                {
+                    key = key.Substring(1);
+                    ExactOnly.Add(key);
+                }
+                map[key] = Unescape(line.Substring(tab + 1));
+            }
         }
 
         /// <summary>
@@ -139,7 +146,7 @@ namespace Ro3Emu.Loc
                 if (EnglishOverrides.TryGetValue(text, out var replaced)) return replaced;
                 foreach (var kvp in EnglishOverrides)
                 {
-                    if (kvp.Key.Length > 3 && text.Contains(kvp.Key, StringComparison.Ordinal))
+                    if (kvp.Key.Length > 3 && !ExactOnly.Contains(kvp.Key) && text.Contains(kvp.Key, StringComparison.Ordinal))
                     {
                         text = text.Replace(kvp.Key, kvp.Value);
                     }

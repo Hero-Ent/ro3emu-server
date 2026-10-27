@@ -186,7 +186,11 @@ public sealed class MapLineTests : IAsyncLifetime
         var old = a.Handoff!;
         await OnLoop(() =>
         {
+            // A load past the client's own 30 s timeout is still the client's to end (LC_TransitionBase.m_iSceneLoadTimeout).
             _clock.Offset = TimeSpan.FromSeconds(31);
+            Service<SceneService>().ExpireLineLoad(a);
+            Assert.False(a.SceneRecoveryRequired);
+            _clock.Offset = TimeSpan.FromSeconds(SceneService.LoadDeadlineSeconds + 1);
             Service<SceneService>().ExpireLineLoad(a);
             Assert.True(a.SceneRecoveryRequired);
             Assert.Null(Service<PublicLineManager>().Reserved(a));

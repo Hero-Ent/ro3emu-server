@@ -61,7 +61,7 @@ public sealed partial class SceneService
         lines.Release(s);
     }
 
-    /// <summary>(inferred) Bounded 30-second load timeout; reconnect chooses a new valid line.
+    /// <summary>(inferred) Bounded load timeout (<see cref="LoadDeadlineSeconds"/>); reconnect chooses a new valid line.
     /// Never reuse a cancelled same-config handshake: 30005 cannot identify its old line.</summary>
     public void ExpireLineLoad(GameSession s)
     {

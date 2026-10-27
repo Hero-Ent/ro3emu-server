@@ -1,4 +1,5 @@
 # English text the client already ships in English, replaced as drawn (Ro3Loc.MapFrom). "client text\tour text".
+# A key longer than 3 characters also replaces that part of longer text; "=client text" replaces only the whole string.
 # Loading-screen tips (LoadingInfoConfig 4 / 5 -> Localization 10460000000 with @{1}=3, 10460000001).
 Welcome to RO Ragnarok Online 3!	Welcome to Ragnarok Online 3!
 Goodbye, imitators! Only the real RO can fight!	Adventure awaits across Rune-Midgard!
@@ -19,3 +20,19 @@ Closed Beta de Ragnarok Online 3.	Closed Beta do Hero Saga RO3
 Closed Beta de Ragnarok Online 3	Closed Beta do Hero Saga RO3
 https://discord.com/invite/ro3global	https://discord.com/invite/herosagammo
 ro3global	herosagammo
+# HUD mobile (Android): textos em português que não cabem nas caixas do layout, feito para o chinês.
+# Entrada de função da HUD (UI_Sys_Main_FunctionItemWidget NameFunction_TTxt, 114x53): quebrava em duas linhas e cortava.
+Prelúdio da Deusa	Prelúdio
+# Rótulo do nível Base ao lado do retrato (UI_Sys_Main_AvatarInfoWidget Txt_Base, 59 px; "BASE" precisava de 87 px e
+# ficava sob o "99"). Só o texto exato: o "BASE:0%" da barra de experiência continua igual.
+=BASE	Lv.
+# Textos que o cliente mostra em chinês na HUD mobile e na janela de habilidades (sem tradução no cliente).
+背包	Mochila
+菜单	Menu
+角色属性	Atributos
+剩余点数	Pontos livres
+更换流派	Trocar estilo
+基础	Básico
+# Aviso com o UID no rodapé (UITestText): a frase passava por cima do "BASE:0%" e do FPS; fica só o UID. A chave leva o
+# "UID:" porque espaço no fim da linha não sobrevive ao editor.
+Nunca compartilhe suas credenciais. UID:	UID:

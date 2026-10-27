@@ -119,6 +119,9 @@ só a VFS do jogo continua no D:, por junction (o build não a lê, ela já est�
 `-Server` precisa ser um endereço que o **celular** alcance: o IP do PC na rede local (servidor em modo `host`) ou
 a VPS. `127.0.0.1` no celular é o próprio celular.
 
+`-VerboseLogs` liga o `GS_Debug.ShowLog` do jogo (os logs de debug do C# e do Lua no logcat). Só para diagnosticar:
+com ele o jogo loga cada mensagem de rede e cada passo do Lua com traceback, o que custa frames em combate.
+
 ## Teste no celular
 
 1. Ative a **Depuração USB** no celular (Opções do desenvolvedor) e conecte no PC.
@@ -131,6 +134,28 @@ a VPS. `127.0.0.1` no celular é o próprio celular.
 6. Janela desenhada errado (vazia, sobreposta, sem clique): com ela aberta,
    `adb shell touch /sdcard/Android/data/com.ro3emu.client/files/ui-dump`; em até 2 s o log ganha uma linha
    `[Ro3Android] ui graphic` por elemento da UI (caminho, tamanho, alpha, toque, shader, material, textura).
+
+## Teste no emulador do PC (sem celular)
+
+O emulador oficial do Android (só as ferramentas do SDK, sem o Android Studio) fica em `E:\Android`: `sdk` (emulador,
+platform-tools e a imagem Android 14 x86_64 "Google APIs", que roda o APK ARM64 por tradução) e `avd\ro3` (2340x1080,
+8 GB de RAM, 64 GB de disco). Precisa da "Plataforma do Hipervisor do Windows" ativada.
+
+- **Gráficos**: o Vulkan acelerado do emulador trava numa AMD e o Unity recusa o Vulkan por software, então o APK de
+  teste leva GLES3 (`build-apk.ps1 -Gles`; o dos jogadores continua só Vulkan) e o emulador sobe com GLES na GPU do PC:
+  `emulator -avd ro3 -gpu host -feature -Vulkan -dns-server 1.1.1.1,8.8.8.8`. O DNS público é necessário: com o padrão
+  do emulador, o host inexistente dos avisos do jogo leva ~23 s para falhar e a abertura parece travada.
+- **Servidor local**: `RODAR_LOCAL.cmd semcliente` e, no emulador, `adb reverse tcp:5380 tcp:5380` (idem 20000 e 33100):
+  o `127.0.0.1` do Android vira o do PC. APK: `setup-project.ps1 -Server http://127.0.0.1:5380` (sem `-PatchRepo`) e
+  `build-apk.ps1 -Gles`. Antes do próximo APK de produção, rode o `setup-project.ps1` com os argumentos de produção.
+- **Dados**: copie o `StreamingAssets` do cliente de PC com `adb root` (o Android 14 bloqueia o adb em `Android/data`),
+  uma pasta por `adb push` e sem `--sync`; apague `VFS/Videos`, copie `build\vfs-android` por cima e passe os arquivos
+  para o usuário do app (`chown -R` em `/data/media/0/Android/data/com.ro3emu.client/files/StreamingAssets`). O
+  atualizador dentro do emulador é inviável: a descompactação por tradução ARM dá ~0,4 MB/s.
+- **Idioma**: com o Android em inglês o jogo abre em inglês; o emulador fica em pt-BR (`setprop persist.sys.locale pt-BR`).
+- **Conta de teste local**: `emuteste`, com a senha padrão do `flow-login.ps1`; personagem "Emuteste". O servidor local
+  cria a conta no primeiro login (`AllowInGameRegistration`).
+- A abertura até o login leva uns 3 minutos e o jogo roda a ~8 FPS: serve para testar telas, não desempenho.
 
 ## Atualização automática (auto patcher)
 

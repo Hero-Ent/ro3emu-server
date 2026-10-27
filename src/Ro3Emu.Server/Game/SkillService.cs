@@ -180,7 +180,7 @@ public sealed class SkillService
         foreach (int group in skillData.SkillList)
             plan.SkillAssigns[group] = new SkillData { SkillId = group, SkillLevel = Level(p, group) };
         plan.SkillQueue[0] = new SkillData(); // the client pairs() it unguarded
-        plan.ManualLoadSkill.Add(new SkillData()); // repeated load lists are read by the client even when empty
+        PadManualLoads(plan); // repeated load lists are read by the client even when empty
         plan.AutoLoadSkill.Add(new SkillData());
         foreach (var (rank, points) in SkillPoints(p)) plan.SkillPoints[rank] = Math.Max(0, points);
         skillData.SkillAssignPlans.Add(plan);
@@ -194,7 +194,7 @@ public sealed class SkillService
                     SkillLevel = group == atkGroup ? 1 : Initial(p, group)
                 };
             blank.SkillQueue[0] = new SkillData(); // paired by the client even in a fresh plan.
-            blank.ManualLoadSkill.Add(new SkillData());
+            PadManualLoads(blank);
             blank.AutoLoadSkill.Add(new SkillData());
             var blankProgress = CharacterService.GenreCloneProgress(p);
             blankProgress.Skills.Clear();
@@ -417,7 +417,7 @@ public sealed class SkillService
             plan.SkillPoints.Clear();
             foreach (var (rank, points) in SkillPoints(preview)) plan.SkillPoints[rank] = Math.Max(0, points);
             if (plan.SkillQueue.Count == 0) plan.SkillQueue[0] = new SkillData();
-            if (plan.ManualLoadSkill.Count == 0) plan.ManualLoadSkill.Add(new SkillData());
+            PadManualLoads(plan);
             if (plan.AutoLoadSkill.Count == 0) plan.AutoLoadSkill.Add(new SkillData());
         }
         state.CurrentAtkSkillId = generated.CurrentAtkSkillId;
@@ -691,6 +691,17 @@ public sealed class SkillService
                 }
         }
         return true;
+    }
+
+    /// <summary>
+    /// One manual load entry per default wheel slot, empty ones zero. The mobile client reads them unguarded:
+    /// LC_System_Skill._refreshSkillRedDotLoad (every UI mode but PCMode) indexes manualLoadSkill from
+    /// PBSkillWheelSlotType.SkillWheelNormal1 to SkillWheelNormal6 and reads .skillId; a shorter list threw at login and
+    /// left the skill data half loaded (the skill window's points, options tab and close button failed on Android).
+    /// </summary>
+    internal static void PadManualLoads(SkillPlan plan)
+    {
+        while (plan.ManualLoadSkill.Count < DefaultBarSlots) plan.ManualLoadSkill.Add(new SkillData());
     }
 
     private void PruneLoads(SkillPlan plan, RoleProgress progress)

@@ -82,6 +82,21 @@ Shader "Hidden/Ro3Android/Fallback3D"
                                 LOAD_TEXTURE2D(_GlobalBoneMatricesTexture, texel + int2(1, 0)),
                                 LOAD_TEXTURE2D(_GlobalBoneMatricesTexture, texel + int2(2, 0)));
             }
+
+            // The weights as the game's character programs sum them (BattleBase GPUSKIN_ON, p0_vs_005): x always, y above
+            // 0.001, z and w only while x + y is under 0.999. A mesh with fewer than 4 weights (some hair has 2) reads the
+            // missing ones as the default (x, y, 0, 1): summing all four would add a whole bone matrix.
+            float3x4 SkinMatrix(int first, uint4 indices, float4 weights)
+            {
+                float3x4 skin = BoneMatrix(first + indices.x) * weights.x;
+                if (weights.y > 0.001) skin += BoneMatrix(first + indices.y) * weights.y;
+                if (weights.x + weights.y < 0.999)
+                {
+                    if (weights.z > 0.001) skin += BoneMatrix(first + indices.z) * weights.z;
+                    if (weights.w > 0.001) skin += BoneMatrix(first + indices.w) * weights.w;
+                }
+                return skin;
+            }
             #endif
 
             struct Attributes
@@ -115,11 +130,7 @@ Shader "Hidden/Ro3Android/Fallback3D"
                 // Without weights or before the first upload the mesh keeps its bind pose.
                 if (unity_LightmapST.y < 0.5 && _GlobalBoneMatricesTextureSize.w > 0 && dot(input.weights, 1) > 0.001)
                 {
-                    int first = (int)unity_LightmapST.x;
-                    float3x4 skin = BoneMatrix(first + input.indices.x) * input.weights.x
-                                  + BoneMatrix(first + input.indices.y) * input.weights.y
-                                  + BoneMatrix(first + input.indices.z) * input.weights.z
-                                  + BoneMatrix(first + input.indices.w) * input.weights.w;
+                    float3x4 skin = SkinMatrix((int)unity_LightmapST.x, input.indices, input.weights);
                     position = mul(skin, float4(position, 1));
                     normal = mul((float3x3)skin, normal);
                 }

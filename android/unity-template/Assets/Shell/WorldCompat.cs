@@ -162,13 +162,24 @@ namespace Ro3Android
             return path;
         }
 
-        private float _nextRoleShadowCheck;
+        private float _nextRoleShadowCheck, _roleShadowFastUntil;
+        private int _lastMainCamera;
 
         private void FixRoleShadowCamera()
         {
-            // FindObjectsOfType walks every object: once every 15 s is enough to catch a new manager after a scene change.
-            if (RoleShadowCamera == null || Camera.main == null || Time.realtimeSinceStartup < _nextRoleShadowCheck) return;
-            _nextRoleShadowCheck = Time.realtimeSinceStartup + 15;
+            // FindObjectsOfType walks every object: once every 15 s, but every second for the 10 s after the main camera
+            // changes (a scene change, when a new manager starts throwing every frame).
+            var main = Camera.main;
+            if (RoleShadowCamera == null || main == null) return;
+            float now = Time.realtimeSinceStartup;
+            if (main.GetInstanceID() != _lastMainCamera)
+            {
+                _lastMainCamera = main.GetInstanceID();
+                _roleShadowFastUntil = now + 10;
+                _nextRoleShadowCheck = now;
+            }
+            if (now < _nextRoleShadowCheck) return;
+            _nextRoleShadowCheck = now + (now < _roleShadowFastUntil ? 1 : 15);
             foreach (var manager in FindObjectsOfType(RoleShadows))
                 if ((RoleShadowCamera.GetValue(manager) as Camera) == null)
                 {

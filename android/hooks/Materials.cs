@@ -32,6 +32,7 @@ namespace Ro3Android.Hooks
             {
                 if (asset is Material material) { Fix(material); return; }
                 if (!(asset is GameObject prefab)) return;
+                Clicks.EnableDeadClickTargets(prefab);
                 foreach (var renderer in prefab.GetComponentsInChildren<Renderer>(true))
                     foreach (var m in renderer.sharedMaterials) Fix(m);
                 if (Graphic == null || GraphicMaterial == null) return;

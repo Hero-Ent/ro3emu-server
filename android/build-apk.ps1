@@ -10,6 +10,11 @@ param(
   [switch]$ScriptsOnly,
   # A release player: no "Development Build" mark (screenshots, players). Switching between the two needs a full build.
   [switch]$Release,
+  # GLES3 as well as Vulkan, first: the test APK for the PC's Android emulator (its Vulkan does not work there). Players'
+  # APKs stay Vulkan only (half the shader build time).
+  [switch]$Gles,
+  # x86_64 instead of ARM64: the emulator's test APK (run setup-project.ps1 -X64 first). Never for players.
+  [switch]$X64,
   # The app version (PlayerSettings.bundleVersion): publish-android.ps1 -ApkMin forces phones below it to update.
   [string]$Version = '1.0.0',
   # Release signing key (android\new-keystore.ps1 makes it; never committed). Players can only update an app signed by
@@ -29,6 +34,8 @@ $unityArgs = @('-batchmode', '-nographics', '-quit', '-buildTarget', 'Android',
   '-projectPath', "`"$Project`"", '-executeMethod', 'Ro3Android.Editor.BuildAndroid.Build', '-logFile', "`"$log`"")
 if ($ScriptsOnly) { $unityArgs += '-ro3ScriptsOnly' }
 if ($Release) { $unityArgs += '-ro3Release' }
+if ($Gles) { $unityArgs += '-ro3Gles' }
+if ($X64) { $unityArgs += '-ro3X64' }
 $unityArgs += '-ro3Version', $Version
 if (Test-Path $Keystore) { $unityArgs += '-ro3Keystore', "`"$Keystore`"", '-ro3KeystorePass', "`"$Keystore.pass`"" }
 elseif ($Release) { Write-Warning "no ${Keystore}: this release is signed with the debug key, which players cannot update from later" }

@@ -85,7 +85,12 @@ namespace Ro3Android.Editor
             }
             Debug.Log($"[Ro3Android] signing: {(PlayerSettings.Android.useCustomKeystore ? PlayerSettings.Android.keystoreName : "debug key")}");
             PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android, ScriptingImplementation.IL2CPP);
-            PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+            // -ro3X64 (build-apk.ps1 -X64): x86_64 for the PC's Android emulator, which otherwise translates every ARM
+            // instruction of the game on the CPU. Needs the natives built for it (setup-project.ps1 -X64).
+            PlayerSettings.Android.targetArchitectures = Array.IndexOf(args, "-ro3X64") >= 0
+                ? AndroidArchitecture.X86_64
+                : AndroidArchitecture.ARM64;
+            Debug.Log($"[Ro3Android] architecture: {PlayerSettings.Android.targetArchitectures}");
             PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel26;
             PlayerSettings.SetApiCompatibilityLevel(BuildTargetGroup.Android, ApiCompatibilityLevel.NET_Unity_4_8);
             // Minimal is the lowest IL2CPP allows; the generated link.xml keeps every game assembly whole.
@@ -94,8 +99,13 @@ namespace Ro3Android.Editor
             PlayerSettings.allowUnsafeCode = true;
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
             // Vulkan only: every shader variant is compiled once per API, and the port's targets (current phones) all
-            // run Vulkan; GLES3 doubled the build's shader time.
-            PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan });
+            // run Vulkan; GLES3 doubled the build's shader time. -ro3Gles (build-apk.ps1 -Gles) adds GLES3, first, for the
+            // test APK of the PC's Android emulator: its accelerated Vulkan froze the emulator on an AMD GPU and Unity
+            // refuses its software Vulkan (SwiftShader), while its accelerated GLES works.
+            PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, Array.IndexOf(args, "-ro3Gles") >= 0
+                ? new[] { GraphicsDeviceType.OpenGLES3, GraphicsDeviceType.Vulkan }
+                : new[] { GraphicsDeviceType.Vulkan });
+            Debug.Log($"[Ro3Android] graphics APIs: {string.Join(", ", PlayerSettings.GetGraphicsAPIs(BuildTarget.Android))}");
             PlayerSettings.defaultInterfaceOrientation = UIOrientation.AutoRotation;
             PlayerSettings.allowedAutorotateToPortrait = false;
             PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;

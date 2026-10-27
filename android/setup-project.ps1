@@ -15,7 +15,12 @@ param(
   [string]$PatchRepo,
   [string]$PatchChannel = 'android-live',
   # Channel signing key (ClientTools android-key creates it; never committed): the app gets its public half.
-  [string]$PatchKey = (Join-Path (Split-Path $PSScriptRoot -Parent) 'android-signing-key.pem')
+  [string]$PatchKey = (Join-Path (Split-Path $PSScriptRoot -Parent) 'android-signing-key.pem'),
+  # Natives for x86_64 as well (the PC emulator's test APK, build-apk.ps1 -X64); libxlua from build-xlua.ps1 -X64.
+  [switch]$X64,
+  # GS_Debug.ShowLog always on: the game's C# and Lua debug logs reach logcat, for diagnosing the port. Off by default:
+  # the game then logs every network message and Lua step (with a traceback), which costs frames in combat.
+  [switch]$VerboseLogs
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -42,8 +47,9 @@ Copy-Item -Recurse (Join-Path $Client 'ro3_Data\Managed') (Join-Path $stage 'ro3
 $backup = Join-Path $Client 'ro3emu-backup'
 if (Test-Path $backup) { Copy-Item -Recurse $backup (Join-Path $stage 'ro3emu-backup') }
 New-Item -ItemType File (Join-Path $stage 'ro3.exe') | Out-Null  # the patcher only checks that it is a client folder
-# --verbose: GS_Debug.ShowLog always on, so the game's C# and Lua logs reach logcat while the port is young.
-& $tools patch $stage $Server.TrimEnd('/') $Pem --verbose
+$patchArgs = @('patch', $stage, $Server.TrimEnd('/'), $Pem)
+if ($VerboseLogs) { $patchArgs += '--verbose' }
+& $tools @patchArgs
 if ($LASTEXITCODE) { throw 'patch failed' }
 
 Write-Host '== Android rewrites (android\tools\AndroidPatch.cs)'
@@ -261,12 +267,11 @@ if ($PatchRepo) {
 Remove-Item -Force (Join-Path $Project 'Assets\Shell\GameInit.g.cs*') -ErrorAction SilentlyContinue
 
 # Our ARM64 replacements of the client's Windows natives: android\native\<lib>\*.c -> lib<lib>.so, built with the NDK
-# that came with Unity's Android module.
+# that came with Unity's Android module. -X64 builds them for x86_64 as well, next to the ARM64 ones; each build of
+# the APK takes only its architecture's (the CPU of the plugin's meta).
 $clang = Join-Path (Split-Path $Unity) 'Data\PlaybackEngines\AndroidPlayer\NDK\toolchains\llvm\prebuilt\windows-x86_64\bin\clang.exe'
 if (-not (Test-Path $clang)) { throw "NDK clang not found at $clang (install Android Build Support with the NDK, or pass -Unity)" }
-$natives = Join-Path $Project 'Assets\Plugins\Android\arm64-v8a'
-New-Item -ItemType Directory -Force $natives | Out-Null
-$nativeMeta = @'
+$nativeMeta = @"
 fileFormatVersion: 2
 guid: {0}
 PluginImporter:
@@ -285,7 +290,7 @@ PluginImporter:
     second:
       enabled: 1
       settings:
-        CPU: ARM64
+        CPU: {1}
   - first:
       Any:
     second:
@@ -294,23 +299,29 @@ PluginImporter:
   userData:
   assetBundleName:
   assetBundleVariant:
-'@
-foreach ($dir in Get-ChildItem (Join-Path $PSScriptRoot 'native') -Directory) {
-  $so = Join-Path $natives "lib$($dir.Name).so"
-  $sources = @((Get-ChildItem $dir.FullName -Filter *.c).FullName)
-  # 16 KB pages: Android 15+ warns about (and may refuse) libraries aligned for 4 KB only.
-  & $clang --target=aarch64-linux-android26 -shared -fPIC -O2 -Wall -fvisibility=hidden '-Wl,-z,max-page-size=16384' $sources -o $so -llog
-  if ($LASTEXITCODE) { throw "native $($dir.Name) failed" }
-  $guid = -join ($md5.ComputeHash([Text.Encoding]::UTF8.GetBytes("ro3android-native:" + $dir.Name)) | ForEach-Object { $_.ToString('x2') })
-  [IO.File]::WriteAllText("$so.meta", ($nativeMeta -f $guid) + "`n")
-  Write-Host "built lib$($dir.Name).so"
+"@
+$abis = @(@{ Dir = 'arm64-v8a'; Cpu = 'ARM64'; Target = 'aarch64-linux-android26'; Prebuilt = ''; Seed = 'ro3android-native:' })
+if ($X64) { $abis += @{ Dir = 'x86_64'; Cpu = 'X86_64'; Target = 'x86_64-linux-android26'; Prebuilt = 'x86_64'; Seed = 'ro3android-native-x86_64:' } }
+foreach ($abi in $abis) {
+  $natives = Join-Path $Project "Assets\Plugins\Android\$($abi.Dir)"
+  New-Item -ItemType Directory -Force $natives | Out-Null
+  foreach ($dir in Get-ChildItem (Join-Path $PSScriptRoot 'native') -Directory) {
+    $so = Join-Path $natives "lib$($dir.Name).so"
+    $sources = @((Get-ChildItem $dir.FullName -Filter *.c).FullName)
+    # 16 KB pages: Android 15+ warns about (and may refuse) libraries aligned for 4 KB only.
+    & $clang "--target=$($abi.Target)" -shared -fPIC -O2 -Wall -fvisibility=hidden '-Wl,-z,max-page-size=16384' $sources -o $so -llog
+    if ($LASTEXITCODE) { throw "native $($dir.Name) ($($abi.Dir)) failed" }
+    $guid = -join ($md5.ComputeHash([Text.Encoding]::UTF8.GetBytes($abi.Seed + $dir.Name)) | ForEach-Object { $_.ToString('x2') })
+    [IO.File]::WriteAllText("$so.meta", ($nativeMeta -f $guid, $abi.Cpu) + "`n")
+    Write-Host "built $($abi.Dir)\lib$($dir.Name).so"
+  }
+  # Natives with their own build (android\xlua\build-xlua.ps1 -> libxlua.so; -X64 -> native-prebuilt\x86_64).
+  foreach ($so in Get-ChildItem (Join-Path $PSScriptRoot "build\native-prebuilt\$($abi.Prebuilt)") -Filter *.so -ErrorAction SilentlyContinue) {
+    Copy-Item -Force $so.FullName $natives
+    $guid = -join ($md5.ComputeHash([Text.Encoding]::UTF8.GetBytes($abi.Seed + $so.BaseName)) | ForEach-Object { $_.ToString('x2') })
+    [IO.File]::WriteAllText((Join-Path $natives "$($so.Name).meta"), ($nativeMeta -f $guid, $abi.Cpu) + "`n")
+    Write-Host "installed $($abi.Dir)\$($so.Name)"
+  }
+  if (-not (Test-Path (Join-Path $natives 'libxlua.so'))) { Write-Warning "$($abi.Dir)\libxlua.so missing: run .\android\xlua\build-xlua.ps1$(if ($abi.Prebuilt) { ' -X64' }) (the game cannot run Lua without it)" }
 }
-# Natives with their own build (android\xlua\build-xlua.ps1 -> libxlua.so).
-foreach ($so in Get-ChildItem (Join-Path $PSScriptRoot 'build\native-prebuilt') -Filter *.so -ErrorAction SilentlyContinue) {
-  Copy-Item -Force $so.FullName $natives
-  $guid = -join ($md5.ComputeHash([Text.Encoding]::UTF8.GetBytes("ro3android-native:" + $so.BaseName)) | ForEach-Object { $_.ToString('x2') })
-  [IO.File]::WriteAllText((Join-Path $natives "$($so.Name).meta"), ($nativeMeta -f $guid) + "`n")
-  Write-Host "installed $($so.Name)"
-}
-if (-not (Test-Path (Join-Path $natives 'libxlua.so'))) { Write-Warning 'libxlua.so missing: run .\android\xlua\build-xlua.ps1 (the game cannot run Lua without it)' }
 Write-Host 'next: .\android\build-apk.ps1'
