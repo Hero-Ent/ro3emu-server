@@ -309,6 +309,49 @@ public sealed partial class GroupContentTests : IAsyncLifetime
         Assert.Equal(ErrorCodes.NoPermission, (await Next(alice, CasualBattleService.Transfer, DungeonTeamTransferResp.Parser)).Result);
     }
 
+    /// <summary>30448 DUNGEON_TEAM_FOLLOW: a camp member's own follow toggle reaches every present camp member as a
+    /// 30449 notice and is mirrored in the next 30441 roster's own DungeonTeamMemberInfo.followType.</summary>
+    [ClientDataFact]
+    public async Task MockBattleVirtualTeamFollowToggleReachesTheCampAndTheRoster()
+    {
+        await using var alice = await InWorld("Alice");
+        await using var carol = await InWorld("Carol");
+        await using var bob = await InWorld("Bob");
+        foreach (var bot in new[] { alice, carol, bob }) await Gm(bot, "!lvl 99");
+        await Party(alice, carol);
+        await Gm(alice, "!casual open");
+        Assert.Equal(0, (await SignUp(alice)).Result);
+        Assert.Equal(0, (await SignUp(bob)).Result);
+        await Gm(alice, "!casual start");
+        foreach (var bot in new[] { alice, carol, bob }) await Load(bot, CasualBattleService.Scene);
+        long carolId = (long)carol.Self!.Uuid;
+        await Next(alice, DungeonService.TeamInfo, DungeonTeamInfoNotify.Parser); // the roster from loading, consumed
+        await Next(carol, DungeonService.TeamInfo, DungeonTeamInfoNotify.Parser);
+        await Next(bob, DungeonService.TeamInfo, DungeonTeamInfoNotify.Parser);
+
+        // isFollow true with no followType named: refused.
+        await carol.SendGameAsync(CasualBattleService.Follow, new DungeonTeamFollowReq { IsFollow = true });
+        Assert.Equal(ErrorCodes.Parameter, (await Next(carol, CasualBattleService.Follow, DungeonTeamFollowResp.Parser)).Result);
+
+        // Carol follows her squad's leader: her squadmate and she herself both hear the 30449 notice.
+        var followSquad = (DungeonTeamFollowType)2;
+        await carol.SendGameAsync(CasualBattleService.Follow, new DungeonTeamFollowReq { FollowType = followSquad, IsFollow = true });
+        Assert.Equal(0, (await Next(carol, CasualBattleService.Follow, DungeonTeamFollowResp.Parser)).Result);
+        var heardByAlice = await Next(alice, CasualBattleService.FollowNotify, DungeonTeamFollowNotify.Parser);
+        Assert.Equal((carolId, followSquad, true), (heardByAlice.FollowerGuid, heardByAlice.FollowType, heardByAlice.IsFollow));
+        await Next(carol, CasualBattleService.FollowNotify, DungeonTeamFollowNotify.Parser);
+        var rosterFollowing = await Next(alice, DungeonService.TeamInfo, DungeonTeamInfoNotify.Parser,
+            m => m.Squads.Values.Single().Members[carolId].FollowType == followSquad);
+        Assert.Equal(followSquad, rosterFollowing.Squads.Values.Single().Members[carolId].FollowType);
+
+        // Carol stops following: the roster's own entry reverts to no follow.
+        await carol.SendGameAsync(CasualBattleService.Follow, new DungeonTeamFollowReq { FollowType = followSquad, IsFollow = false });
+        Assert.Equal(0, (await Next(carol, CasualBattleService.Follow, DungeonTeamFollowResp.Parser)).Result);
+        var rosterStopped = await Next(alice, DungeonService.TeamInfo, DungeonTeamInfoNotify.Parser,
+            m => m.Squads.Values.Single().Members[carolId].FollowType != followSquad);
+        Assert.Equal((DungeonTeamFollowType)0, rosterStopped.Squads.Values.Single().Members[carolId].FollowType);
+    }
+
     // ---- MVP likes ----
 
     private async Task Party(BotClient leader, params BotClient[] others)
