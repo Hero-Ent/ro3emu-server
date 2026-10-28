@@ -98,7 +98,7 @@ public sealed partial class CombatService
             if (Math.Max(s.SkillCds.GetValueOrDefault(group), s.SkillModeCds.GetValueOrDefault((group, mode))) > Now) error = ErrorCodes.SkillCooldown;
             // Preserve the established cooldown refusal for a repeated cast, including during its action tail.
             else if (s.SkillCast is { Cancelled: false } active && Now < active.StartMs + active.ChantMs + active.ActionMs
-                && (!new SkillConfig(row.Value).CancelCast || new SkillConfig(row.Value).IsNormalAtk == 1)) error = ErrorCodes.SkillBusy;
+                && (!new SkillConfig(row.Value).CancelCast || SwingInFlight(active, row.Value, req))) error = ErrorCodes.SkillBusy;
             else error = ValidateTarget(s, row.Value, req, origin, owned == null ? WalkSlack(s) : 0,
                 _data.Row("SkillConfig", request.SkillId) is { } askedRow ? Range(askedRow) : 0);
         }
@@ -186,6 +186,20 @@ public sealed partial class CombatService
             await s.SendGameAsync(SkillEnd, end);
         }
     }
+
+    /// <summary>
+    /// A normal attack (_bCancelCast 1) may cut a skill's action short, but not the swing before it at the same target:
+    /// otherwise a burst of clicks restarts the swing each time and hits at click speed (issue #121). Turning to another
+    /// target (the last one died) is left to the client, which plays the swing out anyway. The client paces swings at the same
+    /// ASPD-scaled action time (the normal attack shows' m_fInterruptTime is their whole length) from its own send, so
+    /// network jitter can bring a legitimate next swing a little early: <see cref="SwingJitterMs"/> of slack (inferred).
+    /// </summary>
+    private static bool SwingInFlight(ActiveSkillCast active, JsonElement row, CastSkillReq req) =>
+        req.TargetId != 0 && req.TargetId == active.Request.TargetId
+        && new Data.Config.SkillConfig(row).IsNormalAtk == 1 && new Data.Config.SkillConfig(active.Row).IsNormalAtk == 1
+        && Now < active.StartMs + active.ChantMs + active.ActionMs - SwingJitterMs;
+
+    internal const int SwingJitterMs = 150;
 
     private bool Learned(GameSession s, JsonElement row)
     {
