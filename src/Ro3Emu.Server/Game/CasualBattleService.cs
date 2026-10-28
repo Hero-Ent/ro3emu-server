@@ -35,8 +35,9 @@ namespace Ro3Emu.Server.Game;
 /// match ends at BattleMaxTime or when a camp reaches the 4500 bar; the higher camp score wins, a tie has no winner; a
 /// personal score of at least 25 (DungeonAwardModule ScoreCondition [2,3,25]) earns DropPool 85201, the winners also
 /// 85202 (the losers' 85203 is not in DropPoolConfig); assists are the hits on the victim in its last 10 s.
-/// Not built: the arena's monsters and boss (their spawn script is not in the client), the 40-player virtual team
-/// (30441 with a team id, 30442-30451) and the pre-start notices 5711/5712. A settled match's result is also kept in
+/// Not built: the arena's monsters and boss (their spawn script is not in the client) and the pre-start notices
+/// 5711/5712. Each camp gets the 40-player Virtual team roster (30441, TeamRoster), but its interactive squad
+/// commands (30442-30451: flag, rally, follow, swap, transfer) are not. A settled match's result is also kept in
 /// the role's ordinary 30128 history (DungeonService.StoreExternalResultAsync), the same as a boss dungeon's clear,
 /// for every player still online at settlement; one offline then is still paid at login (TryPayAsync's own retry)
 /// but gets no history entry, since nothing here revisits a login after the fact to write one.
@@ -281,6 +282,7 @@ public sealed class CasualBattleService : IGameTicker
         await s.SendGameAsync(DungeonService.BaseInfo, Info(match));
         if (_worldData.Map(Scene)?.Points.TryGetValue(CampPoints[match.Players[s].Camp - 1], out var start) == true)
             await _scene.TeleportInMapAsync(s, start);
+        await SendTeamRosterAsync(match, match.Players[s].Camp);
     }
 
     private Task LeavingAsync(GameSession s)
@@ -288,12 +290,56 @@ public sealed class CasualBattleService : IGameTicker
         // Leaving the public map on the way in is not leaving the match.
         if (!_active.TryGetValue(s, out var match) || match.Ending || s.InstanceId != match.Room.Id) return Task.CompletedTask;
         _active.Remove(s);
+        int camp = match.Players[s].Camp;
         match.Players[s].Left = true;
         s.EventFaction = 0;
         // A camp with nobody left loses (inferred).
         if (match.Stage > 0 && match.Players.Values.Where(p => !p.Left).Select(p => p.Camp).Distinct().Count() < 2)
             RequestSettle(match);
+        else _loop.PostLegacy(() => SendTeamRosterAsync(match, camp), "casual battle team roster");
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 30441 DungeonTeamInfoNotify, one camp of a match: the Virtual team UI a group this large needs instead of the
+    /// ordinary 5-person party HUD (LC_DAL_VirtualTeam). TeamId is the match's own room id, stable and nonzero for the
+    /// whole match (inferred: no client-visible value names a Mock Battle camp). Each squad is a camp member's own
+    /// real party (TeamService), a lone player its own one-member squad; the squad with the lowest index names the
+    /// notify's own leaderGuid. The interactive squad commands (30442-30451: flag, rally, follow, swap, transfer) are
+    /// not implemented: flags stay empty and a member's position is simply its order within the squad.
+    /// </summary>
+    private DungeonTeamInfoNotify TeamRoster(Match match, int camp)
+    {
+        var members = match.Players.Values.Where(p => p.Camp == camp && !p.Left).ToArray();
+        var squadOf = new Dictionary<long, int>();
+        int nextSquad = 1;
+        foreach (var p in members)
+        {
+            if (squadOf.ContainsKey(p.Id)) continue;
+            long teamId = _teams.TeamOf(p.Id).TeamId;
+            long[] mates = teamId > 0 ? [.. _teams.MembersOf(p.Id).Where(id => members.Any(m => m.Id == id))] : [p.Id];
+            int squad = nextSquad++;
+            foreach (long id in mates) squadOf[id] = squad;
+        }
+        var notify = new DungeonTeamInfoNotify { TeamId = match.Room.Id, TeamType = (DungeonTeamType)2 };
+        foreach (var group in squadOf.GroupBy(kv => kv.Value).OrderBy(g => g.Key))
+        {
+            long leader = _teams.TeamOf(group.First().Key).Leader is var l and > 0 && group.Any(kv => kv.Key == l) ? l : group.First().Key;
+            var squad = new DungeonTeamSquadInfo { SquadIdx = group.Key, SquadLeaderGuid = leader };
+            int position = 0;
+            foreach (var id in group.Select(kv => kv.Key).OrderBy(id => id == leader ? 0 : 1).ThenBy(id => id))
+                squad.Members[id] = new DungeonTeamMemberInfo { Guid = id, Position = position++ };
+            notify.Squads[group.Key] = squad;
+        }
+        notify.LeaderGuid = notify.Squads.Values.MinBy(s => s.SquadIdx)?.SquadLeaderGuid ?? 0;
+        return notify;
+    }
+
+    private Task SendTeamRosterAsync(Match match, int camp)
+    {
+        var notify = TeamRoster(match, camp);
+        return RoleFanout.EachAsync(match.Players.Values.Where(p => p.Camp == camp && !p.Left && match.Loaded.Contains(p.Session))
+            .Select(p => p.Session), s => s.SendGameAsync(DungeonService.TeamInfo, notify));
     }
 
     public bool CanFight(GameSession attacker, GameSession target) => Live(attacker) is { } m && Live(target) == m && m.Stage > 0

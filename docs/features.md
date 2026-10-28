@@ -61,7 +61,8 @@ show is playable from day one, without season or server-day gates ([details](gui
 **Not yet**
 - **Boss script mechanics:** the special skills are in, but mechanics that lived only in the original server's scripts
   (bubbles, bells, rhythm stages) are plain area attacks.
-- **Mock Battle extras:** the arena's monsters and the 40-player team frame.
+- **Mock Battle extras:** the arena's monsters, and the 40-player team frame's squad commands (flag, rally, follow,
+  swap, transfer).
 - **War of Emperium extras:** commander tools, siege weapons and vehicles.
 - **Smaller missing pieces:** some stages of the story dungeons
   that are still simplified.
