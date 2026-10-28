@@ -98,7 +98,7 @@ public sealed partial class CombatService
             if (Math.Max(s.SkillCds.GetValueOrDefault(group), s.SkillModeCds.GetValueOrDefault((group, mode))) > Now) error = ErrorCodes.SkillCooldown;
             // Preserve the established cooldown refusal for a repeated cast, including during its action tail.
             else if (s.SkillCast is { Cancelled: false } active && Now < active.StartMs + active.ChantMs + active.ActionMs
-                && GameData.Int(row.Value, "_bCancelCast") == 0) error = ErrorCodes.SkillBusy;
+                && (!new SkillConfig(row.Value).CancelCast || new SkillConfig(row.Value).IsNormalAtk == 1)) error = ErrorCodes.SkillBusy;
             else error = ValidateTarget(s, row.Value, req, origin, owned == null ? WalkSlack(s) : 0,
                 _data.Row("SkillConfig", request.SkillId) is { } askedRow ? Range(askedRow) : 0);
         }
