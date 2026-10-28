@@ -204,11 +204,15 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
   as a tower pet walks) until one does, never farther than `_iChaseDistance` from its point, and with no target it
   walks back to its point (`_iStayInPlace` 1 read as "goes back to its point", not "never moves"). Its casts show like a monster's (31100, 31101), deal the skill's damage through the shared
   formula and settle like a player's hit; a kill it makes counts for the run exactly like a player's (wave and step
-  completion, statistics), credited to the first present participant. A monster it hits answers it with its normal
-  attack once no player holds that monster (a player it already fights comes first; while it answers a companion it
-  does not look for another player until one hits it); at 0 HP the companion dies, its body leaves
+  completion, statistics), credited to the first present, loaded participant who is alive, or the first present, loaded
+  one when none is (so the run still completes). A monster it hits answers it with its normal attack once no player
+  holds that monster. A player comes first: one it already fights, and for an aggressive monster one it sees, as when
+  idle (the player scan keeps running while it answers a companion). A monster that cannot move stops answering a
+  companion out of its reach, so its player scan and return home run as when idle. At 0 HP the companion dies, its body leaves
   after the template's remain time, and it does not come back in that run (`_kRespawnSkill` unused). Players cannot
-  target it and area effects do not hit it (it is no monster), and it never counts in the run's spawned or killed
+  target it and players' area effects do not hit it (it is no monster); a boss special skill's area that hits tower
+  pets hits the companions inside it too, through the same damage path as a monster's swing (at the boss skills'
+  damage percent), and one it takes to 0 HP falls the same way. It never counts in the run's spawned or killed
   monsters. It is separate from the Pet Tower's pets, whose behaviour does not change. In Payon Forest the pair stand
   about 14 m from Eddga's point and reach 3.5-6 m, while Eddga's swing reaches 10 m: they walk up to him wherever the
   player fights him, so the solo tuning counts them as always in reach.

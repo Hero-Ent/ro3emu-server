@@ -5,7 +5,7 @@ namespace Ro3Emu.Server.Game;
 /// scene actors, at their scene-editor points, and fighting the step's monsters beside the participants (they walk up to
 /// a monster and back to their points, CompanionUnit). They are room
 /// props, not room monsters: they never count in Spawned or Killed. A kill of theirs is credited to the first present,
-/// loaded participant (inferred). One that falls stays down for the rest of the run (inferred: NPCConfig
+/// loaded participant, a living one first (inferred). One that falls stays down for the rest of the run (inferred: NPCConfig
 /// _kRespawnSkill is not used).
 /// </summary>
 public sealed partial class DungeonService
@@ -39,9 +39,13 @@ public sealed partial class DungeonService
         }
     }
 
-    /// <summary>(inferred) The participant a companion's hits and kills count for: the first present one who has loaded.</summary>
+    /// <summary>(inferred) The participant a companion's hits and kills count for: the first present, loaded one who is
+    /// alive, else the first present, loaded one (so a companion's kill still completes the run).</summary>
     private static GameSession? CompanionCredit(Attempt a) => a.Settled || a.Room.Closed ? null
-        : Present(a).FirstOrDefault(s => a.Loaded.Contains(s) && !s.SceneLoading);
+        : CompanionCreditAmong([.. Present(a).Where(s => a.Loaded.Contains(s) && !s.SceneLoading)]);
+
+    internal static GameSession? CompanionCreditAmong(IReadOnlyList<GameSession> loaded) =>
+        loaded.FirstOrDefault(s => !s.Dead) ?? loaded.FirstOrDefault();
 
     /// <summary>A companion fell: it is no longer the step's, and its body leaves after the template's remain time.</summary>
     private Task CompanionFellAsync(Attempt a, CompanionUnit fallen)
