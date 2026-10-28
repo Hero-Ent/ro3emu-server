@@ -1,0 +1,1571 @@
+{
+  "version": 1,
+  "about": "RO1 reference, NOT client evidence (inferred, docs/research/world-core-evidence.md). The server makes a field monster attack on sight when its NPCConfig _iAI is 20000004 (MonsterService.AggressiveAi, three field monsters); with the switch on, the monsters below attack on sight too because their Ragnarok Online 1 counterpart does. Source: rAthena's pre-renewal monster database https://raw.githubusercontent.com/rathena/rathena/master/db/pre-re/mob_db.yml and its mode reference https://raw.githubusercontent.com/rathena/rathena/master/doc/mob_db_mode_list.txt, both fetched 2026-10-28. A RO1 monster is aggressive when its Modes set Aggressive, otherwise when its Aegis Ai type maps to a mode with MD_AGGRESSIVE (0x4): 04, 05, 08, 09, 10, 11, 12, 13, 19, 20, 21, 26, 27. Field monsters are NPCConfig rows with _iNPCType 1 that a scene editor spawns (m_kWorldMonsterSpawnPoints / m_kWorldMonsterSpawnGroups) or that have _iWildMonsters 1. They are matched by English name (NPCConfig _kName in Localization_en), case-insensitive and exact, to exactly one RO1 entry; a name with several RO1 entries or none is listed under unmatched with the reason, not guessed. The renewal database (db/re/mob_db.yml) agrees with pre-renewal on every matched monster. Counts: 21 aggressive (monsters), 38 matched but not aggressive in RO1 (notAggressive), 164 unmatched. Switch: Ro3Emu:Ro1AggressiveMonsters (off by default). Never mixed into client data. A name with several rAthena entries counts when every entry is aggressive. Bosses and elites (NPCConfig _iNPCSubType other than 1) are left out (listed under bosses): their fights keep the client's own AI.",
+  "monsters": {
+    "4940001": {
+      "name": "Orc Baby",
+      "ro1": {
+        "id": 1686,
+        "aegisName": "ORC_BABY",
+        "name": "Orc Baby"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1686 ORC_BABY: Ai 04 = mode 0x3885, has MD_AGGRESSIVE (0x4)"
+    },
+    "4940005": {
+      "name": "Orc Warrior",
+      "ro1": {
+        "id": 1023,
+        "aegisName": "ORK_WARRIOR",
+        "name": "Orc Warrior"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1023 ORK_WARRIOR: Ai 04 = mode 0x3885, has MD_AGGRESSIVE (0x4)"
+    },
+    "4940006": {
+      "name": "Desert Wolf",
+      "ro1": {
+        "id": 1106,
+        "aegisName": "DESERT_WOLF (aggressive)",
+        "name": "Desert Wolf"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Desert Wolf is aggressive (1106 DESERT_WOLF (aggressive), 1220 M_DESERT_WOLF (aggressive), 1432 G_DESERT_WOLF (aggressive), 1821 EVENT_DESERT_WOLF (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940013": {
+      "name": "Orc Baby",
+      "ro1": {
+        "id": 1686,
+        "aegisName": "ORC_BABY",
+        "name": "Orc Baby"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1686 ORC_BABY: Ai 04 = mode 0x3885, has MD_AGGRESSIVE (0x4)"
+    },
+    "4940017": {
+      "name": "Orc Warrior",
+      "ro1": {
+        "id": 1023,
+        "aegisName": "ORK_WARRIOR",
+        "name": "Orc Warrior"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1023 ORK_WARRIOR: Ai 04 = mode 0x3885, has MD_AGGRESSIVE (0x4)"
+    },
+    "4940018": {
+      "name": "Desert Wolf",
+      "ro1": {
+        "id": 1106,
+        "aegisName": "DESERT_WOLF (aggressive)",
+        "name": "Desert Wolf"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Desert Wolf is aggressive (1106 DESERT_WOLF (aggressive), 1220 M_DESERT_WOLF (aggressive), 1432 G_DESERT_WOLF (aggressive), 1821 EVENT_DESERT_WOLF (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940025": {
+      "name": "Orc Baby",
+      "ro1": {
+        "id": 1686,
+        "aegisName": "ORC_BABY",
+        "name": "Orc Baby"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1686 ORC_BABY: Ai 04 = mode 0x3885, has MD_AGGRESSIVE (0x4)"
+    },
+    "4940028": {
+      "name": "Orc Lady",
+      "ro1": {
+        "id": 1273,
+        "aegisName": "ORC_LADY (aggressive)",
+        "name": "Orc Lady"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Orc Lady is aggressive (1273 ORC_LADY (aggressive), 1452 G_ORC_LADY (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940029": {
+      "name": "Orc Warrior",
+      "ro1": {
+        "id": 1023,
+        "aegisName": "ORK_WARRIOR",
+        "name": "Orc Warrior"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1023 ORK_WARRIOR: Ai 04 = mode 0x3885, has MD_AGGRESSIVE (0x4)"
+    },
+    "4940030": {
+      "name": "Desert Wolf",
+      "ro1": {
+        "id": 1106,
+        "aegisName": "DESERT_WOLF (aggressive)",
+        "name": "Desert Wolf"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Desert Wolf is aggressive (1106 DESERT_WOLF (aggressive), 1220 M_DESERT_WOLF (aggressive), 1432 G_DESERT_WOLF (aggressive), 1821 EVENT_DESERT_WOLF (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940032": {
+      "name": "Orc Zombie",
+      "ro1": {
+        "id": 1153,
+        "aegisName": "ORC_ZOMBIE (aggressive)",
+        "name": "Orc Zombie"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Orc Zombie is aggressive (1153 ORC_ZOMBIE (aggressive), 1463 G_ORC_ZOMBIE (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940040": {
+      "name": "Raydric",
+      "ro1": {
+        "id": 1163,
+        "aegisName": "RAYDRIC (aggressive)",
+        "name": "Raydric"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Raydric is aggressive (1163 RAYDRIC (aggressive), 1467 G_RAYDRIC (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940041": {
+      "name": "Hydra",
+      "ro1": {
+        "id": 1068,
+        "aegisName": "HYDRA (aggressive)",
+        "name": "Hydra"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Hydra is aggressive (1068 HYDRA (aggressive), 1579 G_HYDRA (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940042": {
+      "name": "Hydra",
+      "ro1": {
+        "id": 1068,
+        "aegisName": "HYDRA (aggressive)",
+        "name": "Hydra"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Hydra is aggressive (1068 HYDRA (aggressive), 1579 G_HYDRA (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940043": {
+      "name": "Hydra",
+      "ro1": {
+        "id": 1068,
+        "aegisName": "HYDRA (aggressive)",
+        "name": "Hydra"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Hydra is aggressive (1068 HYDRA (aggressive), 1579 G_HYDRA (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940044": {
+      "name": "Raydric Archer",
+      "ro1": {
+        "id": 1276,
+        "aegisName": "RAYDRIC_ARCHER (aggressive)",
+        "name": "Raydric Archer"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Raydric Archer is aggressive (1276 RAYDRIC_ARCHER (aggressive), 1453 G_RAYDRIC_ARCHER (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940048": {
+      "name": "Isis",
+      "ro1": {
+        "id": 1029,
+        "aegisName": "ISIS (aggressive)",
+        "name": "Isis"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Isis is aggressive (1029 ISIS (aggressive), 1421 G_ISIS (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940049": {
+      "name": "Isis",
+      "ro1": {
+        "id": 1029,
+        "aegisName": "ISIS (aggressive)",
+        "name": "Isis"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Isis is aggressive (1029 ISIS (aggressive), 1421 G_ISIS (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940050": {
+      "name": "Isis",
+      "ro1": {
+        "id": 1029,
+        "aegisName": "ISIS (aggressive)",
+        "name": "Isis"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Isis is aggressive (1029 ISIS (aggressive), 1421 G_ISIS (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940051": {
+      "name": "Archer Skeleton",
+      "ro1": {
+        "id": 1016,
+        "aegisName": "ARCHER_SKELETON (aggressive)",
+        "name": "Archer Skeleton"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Archer Skeleton is aggressive (1016 ARCHER_SKELETON (aggressive), 1420 G_ARCHER_SKELETON (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940052": {
+      "name": "Driller",
+      "ro1": {
+        "id": 1380,
+        "aegisName": "DRILLER",
+        "name": "Driller"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1380 DRILLER: Ai 04 = mode 0x3885, has MD_AGGRESSIVE (0x4)"
+    },
+    "4940053": {
+      "name": "Driller",
+      "ro1": {
+        "id": 1380,
+        "aegisName": "DRILLER",
+        "name": "Driller"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1380 DRILLER: Ai 04 = mode 0x3885, has MD_AGGRESSIVE (0x4)"
+    },
+    "4940054": {
+      "name": "Driller",
+      "ro1": {
+        "id": 1380,
+        "aegisName": "DRILLER",
+        "name": "Driller"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1380 DRILLER: Ai 04 = mode 0x3885, has MD_AGGRESSIVE (0x4)"
+    },
+    "4940055": {
+      "name": "Orc Skeleton",
+      "ro1": {
+        "id": 1152,
+        "aegisName": "ORC_SKELETON (aggressive)",
+        "name": "Orc Skeleton"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Orc Skeleton is aggressive (1152 ORC_SKELETON (aggressive), 1462 G_ORC_SKELETON (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940059": {
+      "name": "Sandman",
+      "ro1": {
+        "id": 1165,
+        "aegisName": "SAND_MAN (aggressive)",
+        "name": "Sandman"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Sandman is aggressive (1165 SAND_MAN (aggressive), 1558 G_SAND_MAN (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940060": {
+      "name": "Sandman",
+      "ro1": {
+        "id": 1165,
+        "aegisName": "SAND_MAN (aggressive)",
+        "name": "Sandman"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Sandman is aggressive (1165 SAND_MAN (aggressive), 1558 G_SAND_MAN (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940061": {
+      "name": "Sandman",
+      "ro1": {
+        "id": 1165,
+        "aegisName": "SAND_MAN (aggressive)",
+        "name": "Sandman"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Sandman is aggressive (1165 SAND_MAN (aggressive), 1558 G_SAND_MAN (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940062": {
+      "name": "Injustice",
+      "ro1": {
+        "id": 1257,
+        "aegisName": "INJUSTICE (aggressive)",
+        "name": "Injustice"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Injustice is aggressive (1257 INJUSTICE (aggressive), 1446 G_INJUSTICE (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940063": {
+      "name": "Kobold Archer",
+      "ro1": {
+        "id": 1282,
+        "aegisName": "KOBOLD_ARCHER (aggressive)",
+        "name": "Kobold Archer"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Kobold Archer is aggressive (1282 KOBOLD_ARCHER (aggressive), 1455 G_KOBOLD_ARCHER (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940064": {
+      "name": "Kobold Archer",
+      "ro1": {
+        "id": 1282,
+        "aegisName": "KOBOLD_ARCHER (aggressive)",
+        "name": "Kobold Archer"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Kobold Archer is aggressive (1282 KOBOLD_ARCHER (aggressive), 1455 G_KOBOLD_ARCHER (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940065": {
+      "name": "Kobold Archer",
+      "ro1": {
+        "id": 1282,
+        "aegisName": "KOBOLD_ARCHER (aggressive)",
+        "name": "Kobold Archer"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Kobold Archer is aggressive (1282 KOBOLD_ARCHER (aggressive), 1455 G_KOBOLD_ARCHER (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940066": {
+      "name": "Wind Ghost",
+      "ro1": {
+        "id": 1263,
+        "aegisName": "WIND_GHOST (aggressive)",
+        "name": "Wind Ghost"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Wind Ghost is aggressive (1263 WIND_GHOST (aggressive), 1450 G_WIND_GHOST (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000019": {
+      "name": "Familiar",
+      "ro1": {
+        "id": 1005,
+        "aegisName": "FARMILIAR (aggressive)",
+        "name": "Familiar"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Familiar is aggressive (1005 FARMILIAR (aggressive), 1419 G_FARMILIAR (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000022": {
+      "name": "Scorpion",
+      "ro1": {
+        "id": 1001,
+        "aegisName": "SCORPION (aggressive)",
+        "name": "Scorpion"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Scorpion is aggressive (1001 SCORPION (aggressive), 1559 G_SCORPION (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000025": {
+      "name": "Mandragora",
+      "ro1": {
+        "id": 1020,
+        "aegisName": "MANDRAGORA (aggressive)",
+        "name": "Mandragora"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Mandragora is aggressive (1020 MANDRAGORA (aggressive), 1589 G_MANDRAGORA (aggressive), 1859 E_MANDRAGORA (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000026": {
+      "name": "Thief Bug Male",
+      "ro1": {
+        "id": 1054,
+        "aegisName": "THIEF_BUG__ (aggressive)",
+        "name": "Thief Bug Male"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Thief Bug Male is aggressive (1054 THIEF_BUG__ (aggressive), 1608 G_THIEF_BUG__ (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000029": {
+      "name": "Poison Spore",
+      "ro1": {
+        "id": 1077,
+        "aegisName": "POISON_SPORE (aggressive)",
+        "name": "Poison Spore"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Poison Spore is aggressive (1077 POISON_SPORE (aggressive), 1428 G_POISON_SPORE (aggressive), 1855 E_POISONSPORE (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000046": {
+      "name": "Rotar Zairo",
+      "ro1": {
+        "id": 1392,
+        "aegisName": "ROTAR_ZAIRO (aggressive)",
+        "name": "Rotar Zairo"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Rotar Zairo is aggressive (1392 ROTAR_ZAIRO (aggressive), 1557 G_ROTAR_ZAIRO (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000047": {
+      "name": "Wraith",
+      "ro1": {
+        "id": 1192,
+        "aegisName": "WRAITH (aggressive)",
+        "name": "Wraith"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Wraith is aggressive (1192 WRAITH (aggressive), 1475 G_WRAITH (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000052": {
+      "name": "Soldier Skeleton",
+      "ro1": {
+        "id": 1028,
+        "aegisName": "SOLDIER_SKELETON (aggressive)",
+        "name": "Soldier Skeleton"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Soldier Skeleton is aggressive (1028 SOLDIER_SKELETON (aggressive), 1562 G_SOLDIER_SKELETON (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000053": {
+      "name": "Mummy",
+      "ro1": {
+        "id": 1041,
+        "aegisName": "MUMMY (aggressive)",
+        "name": "Mummy"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Mummy is aggressive (1041 MUMMY (aggressive), 1393 G_MUMMY (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000054": {
+      "name": "Zombie",
+      "ro1": {
+        "id": 1015,
+        "aegisName": "ZOMBIE (aggressive)",
+        "name": "Zombie"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Zombie is aggressive (1015 ZOMBIE (aggressive), 1394 G_ZOMBIE (aggressive), 1898 EVENT_ZOMBIE (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000058": {
+      "name": "Hydra",
+      "ro1": {
+        "id": 1068,
+        "aegisName": "HYDRA (aggressive)",
+        "name": "Hydra"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Hydra is aggressive (1068 HYDRA (aggressive), 1579 G_HYDRA (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000062": {
+      "name": "Skeleton Worker",
+      "ro1": {
+        "id": 1169,
+        "aegisName": "SKEL_WORKER (aggressive)",
+        "name": "Skeleton Worker"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Skeleton Worker is aggressive (1169 SKEL_WORKER (aggressive), 1469 G_SKEL_WORKER (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000063": {
+      "name": "Drainliar",
+      "ro1": {
+        "id": 1111,
+        "aegisName": "DRAINLIAR (aggressive)",
+        "name": "Drainliar"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Drainliar is aggressive (1111 DRAINLIAR (aggressive), 1434 G_DRAINLIAR (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000064": {
+      "name": "Pirate Skeleton",
+      "ro1": {
+        "id": 1071,
+        "aegisName": "PIRATE_SKEL",
+        "name": "Pirate Skeleton"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1071 PIRATE_SKEL: Ai 04 = mode 0x3885, has MD_AGGRESSIVE (0x4)"
+    },
+    "5000065": {
+      "name": "Choco",
+      "ro1": {
+        "id": 1214,
+        "aegisName": "CHOCO (aggressive)",
+        "name": "Choco"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Choco is aggressive (1214 CHOCO (aggressive), 1861 E_CHOCO (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000066": {
+      "name": "Archer Skeleton",
+      "ro1": {
+        "id": 1016,
+        "aegisName": "ARCHER_SKELETON (aggressive)",
+        "name": "Archer Skeleton"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Archer Skeleton is aggressive (1016 ARCHER_SKELETON (aggressive), 1420 G_ARCHER_SKELETON (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000068": {
+      "name": "Obeaune",
+      "ro1": {
+        "id": 1044,
+        "aegisName": "OBEAUNE (aggressive)",
+        "name": "Obeaune"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Obeaune is aggressive (1044 OBEAUNE (aggressive), 1425 G_OBEAUNE (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000070": {
+      "name": "Greatest General",
+      "ro1": {
+        "id": 1277,
+        "aegisName": "GREATEST_GENERAL (aggressive)",
+        "name": "Greatest General"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Greatest General is aggressive (1277 GREATEST_GENERAL (aggressive), 1541 G_GREATEST_GENERAL (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000071": {
+      "name": "Mimic",
+      "ro1": {
+        "id": 1191,
+        "aegisName": "MIMIC (aggressive)",
+        "name": "Mimic"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Mimic is aggressive (1191 MIMIC (aggressive), 1474 G_MIMIC (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000072": {
+      "name": "Frilldora",
+      "ro1": {
+        "id": 1119,
+        "aegisName": "FRILLDORA",
+        "name": "Frilldora"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1119 FRILLDORA: Ai 04 = mode 0x3885, has MD_AGGRESSIVE (0x4)"
+    },
+    "5000074": {
+      "name": "Matyr",
+      "ro1": {
+        "id": 1146,
+        "aegisName": "MATYR (aggressive)",
+        "name": "Matyr"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Matyr is aggressive (1146 MATYR (aggressive), 1460 G_MATYR (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000075": {
+      "name": "Minorous",
+      "ro1": {
+        "id": 1149,
+        "aegisName": "MINOROUS (aggressive)",
+        "name": "Minorous"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Minorous is aggressive (1149 MINOROUS (aggressive), 1461 G_MINOROUS (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000076": {
+      "name": "Flora",
+      "ro1": {
+        "id": 1118,
+        "aegisName": "FLORA (aggressive)",
+        "name": "Flora"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Flora is aggressive (1118 FLORA (aggressive), 1575 G_FLORA (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000078": {
+      "name": "Isis",
+      "ro1": {
+        "id": 1029,
+        "aegisName": "ISIS (aggressive)",
+        "name": "Isis"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Isis is aggressive (1029 ISIS (aggressive), 1421 G_ISIS (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000079": {
+      "name": "Bongun",
+      "ro1": {
+        "id": 1188,
+        "aegisName": "BON_GUN (aggressive)",
+        "name": "Bongun"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Bongun is aggressive (1188 BON_GUN (aggressive), 1472 G_BON_GUN (aggressive), 1611 A_BON_GUN (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000080": {
+      "name": "Sasquatch",
+      "ro1": {
+        "id": 1243,
+        "aegisName": "SASQUATCH (aggressive)",
+        "name": "Sasquatch"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Sasquatch is aggressive (1243 SASQUATCH (aggressive), 1442 G_SASQUATCH (aggressive), 1827 EVENT_SASQUATCH (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000087": {
+      "name": "Elder Willow",
+      "ro1": {
+        "id": 1033,
+        "aegisName": "ELDER_WILOW (aggressive)",
+        "name": "Elder Willow"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Elder Willow is aggressive (1033 ELDER_WILOW (aggressive), 1574 G_ELDER_WILOW (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000097": {
+      "name": "Orc Baby",
+      "ro1": {
+        "id": 1686,
+        "aegisName": "ORC_BABY",
+        "name": "Orc Baby"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1686 ORC_BABY: Ai 04 = mode 0x3885, has MD_AGGRESSIVE (0x4)"
+    },
+    "5000098": {
+      "name": "Orc Warrior",
+      "ro1": {
+        "id": 1023,
+        "aegisName": "ORK_WARRIOR",
+        "name": "Orc Warrior"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1023 ORK_WARRIOR: Ai 04 = mode 0x3885, has MD_AGGRESSIVE (0x4)"
+    },
+    "5000099": {
+      "name": "Orc Lady",
+      "ro1": {
+        "id": 1273,
+        "aegisName": "ORC_LADY (aggressive)",
+        "name": "Orc Lady"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Orc Lady is aggressive (1273 ORC_LADY (aggressive), 1452 G_ORC_LADY (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000103": {
+      "name": "Argos",
+      "ro1": {
+        "id": 1100,
+        "aegisName": "ARGOS (aggressive)",
+        "name": "Argos"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Argos is aggressive (1100 ARGOS (aggressive), 1430 G_ARGOS (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000106": {
+      "name": "Myst",
+      "ro1": {
+        "id": 1151,
+        "aegisName": "MYST (aggressive)",
+        "name": "Myst"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Myst is aggressive (1151 MYST (aggressive), 1553 G_MYST (aggressive), 1826 EVENT_MYST (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000111": {
+      "name": "Goblin Archer",
+      "ro1": {
+        "id": 1258,
+        "aegisName": "GOBLIN_ARCHER (aggressive)",
+        "name": "Goblin Archer"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Goblin Archer is aggressive (1258 GOBLIN_ARCHER (aggressive), 1577 G_GOBLIN_ARCHER (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000115": {
+      "name": "Swordfish",
+      "ro1": {
+        "id": 1069,
+        "aegisName": "SWORD_FISH",
+        "name": "Swordfish"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1069 SWORD_FISH: Ai 04 = mode 0x3885, has MD_AGGRESSIVE (0x4)"
+    },
+    "5000116": {
+      "name": "Orc Skeleton",
+      "ro1": {
+        "id": 1152,
+        "aegisName": "ORC_SKELETON (aggressive)",
+        "name": "Orc Skeleton"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Orc Skeleton is aggressive (1152 ORC_SKELETON (aggressive), 1462 G_ORC_SKELETON (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000118": {
+      "name": "Orc Zombie",
+      "ro1": {
+        "id": 1153,
+        "aegisName": "ORC_ZOMBIE (aggressive)",
+        "name": "Orc Zombie"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Orc Zombie is aggressive (1153 ORC_ZOMBIE (aggressive), 1463 G_ORC_ZOMBIE (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000119": {
+      "name": "Munak",
+      "ro1": {
+        "id": 1026,
+        "aegisName": "MUNAK (aggressive)",
+        "name": "Munak"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Munak is aggressive (1026 MUNAK (aggressive), 1610 A_MUNAK (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000120": {
+      "name": "Merman",
+      "ro1": {
+        "id": 1264,
+        "aegisName": "MERMAN (aggressive)",
+        "name": "Merman"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Merman is aggressive (1264 MERMAN (aggressive), 1451 G_MERMAN (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000122": {
+      "name": "Ghoul",
+      "ro1": {
+        "id": 1036,
+        "aegisName": "GHOUL (aggressive)",
+        "name": "Ghoul"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Ghoul is aggressive (1036 GHOUL (aggressive), 1423 G_GHOUL (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000123": {
+      "name": "Sandman",
+      "ro1": {
+        "id": 1165,
+        "aegisName": "SAND_MAN (aggressive)",
+        "name": "Sandman"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Sandman is aggressive (1165 SAND_MAN (aggressive), 1558 G_SAND_MAN (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000125": {
+      "name": "Hunter Fly",
+      "ro1": {
+        "id": 1035,
+        "aegisName": "HUNTER_FLY (aggressive)",
+        "name": "Hunter Fly"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Hunter Fly is aggressive (1035 HUNTER_FLY (aggressive), 1422 G_HUNTER_FLY (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000128": {
+      "name": "Mantis",
+      "ro1": {
+        "id": 1139,
+        "aegisName": "MANTIS (aggressive)",
+        "name": "Mantis"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Mantis is aggressive (1139 MANTIS (aggressive), 1457 G_MANTIS (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000129": {
+      "name": "Driller",
+      "ro1": {
+        "id": 1380,
+        "aegisName": "DRILLER",
+        "name": "Driller"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1380 DRILLER: Ai 04 = mode 0x3885, has MD_AGGRESSIVE (0x4)"
+    },
+    "5000131": {
+      "name": "Horong",
+      "ro1": {
+        "id": 1129,
+        "aegisName": "HORONG (aggressive)",
+        "name": "Horong"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Horong is aggressive (1129 HORONG (aggressive), 1578 G_HORONG (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000134": {
+      "name": "Side Winder",
+      "ro1": {
+        "id": 1037,
+        "aegisName": "SIDE_WINDER (aggressive)",
+        "name": "Side Winder"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Side Winder is aggressive (1037 SIDE_WINDER (aggressive), 1424 G_SIDE_WINDER (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000135": {
+      "name": "Zerom",
+      "ro1": {
+        "id": 1178,
+        "aegisName": "ZEROM (aggressive)",
+        "name": "Zerom"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Zerom is aggressive (1178 ZEROM (aggressive), 1470 G_ZEROM (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000136": {
+      "name": "Requiem",
+      "ro1": {
+        "id": 1164,
+        "aegisName": "REQUIEM",
+        "name": "Requiem"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1164 REQUIEM: Ai 04 = mode 0x3885, has MD_AGGRESSIVE (0x4)"
+    },
+    "5000137": {
+      "name": "Nine Tail",
+      "ro1": {
+        "id": 1180,
+        "aegisName": "NINE_TAIL (aggressive)",
+        "name": "Nine Tail"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Nine Tail is aggressive (1180 NINE_TAIL (aggressive), 1471 G_NINE_TAIL (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000138": {
+      "name": "Argiope",
+      "ro1": {
+        "id": 1099,
+        "aegisName": "ARGIOPE (aggressive)",
+        "name": "Argiope"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Argiope is aggressive (1099 ARGIOPE (aggressive), 1429 G_ARGIOPE (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000139": {
+      "name": "Orc Archer",
+      "ro1": {
+        "id": 1189,
+        "aegisName": "ORC_ARCHER (aggressive)",
+        "name": "Orc Archer"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Orc Archer is aggressive (1189 ORC_ARCHER (aggressive), 1473 G_ORC_ARCHER (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000140": {
+      "name": "Penomena",
+      "ro1": {
+        "id": 1216,
+        "aegisName": "PENOMENA (aggressive)",
+        "name": "Penomena"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Penomena is aggressive (1216 PENOMENA (aggressive), 1441 G_PENOMENA (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000143": {
+      "name": "Raggler",
+      "ro1": {
+        "id": 1254,
+        "aegisName": "RAGGLER (aggressive)",
+        "name": "Raggler"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Raggler is aggressive (1254 RAGGLER (aggressive), 1445 G_RAGGLER (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000151": {
+      "name": "Marduk",
+      "ro1": {
+        "id": 1140,
+        "aegisName": "MARDUK (aggressive)",
+        "name": "Marduk"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Marduk is aggressive (1140 MARDUK (aggressive), 1458 G_MARDUK (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000153": {
+      "name": "Pasana",
+      "ro1": {
+        "id": 1154,
+        "aegisName": "PASANA (aggressive)",
+        "name": "Pasana"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Pasana is aggressive (1154 PASANA (aggressive), 1464 G_PASANA (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000154": {
+      "name": "Wind Ghost",
+      "ro1": {
+        "id": 1263,
+        "aegisName": "WIND_GHOST (aggressive)",
+        "name": "Wind Ghost"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Wind Ghost is aggressive (1263 WIND_GHOST (aggressive), 1450 G_WIND_GHOST (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000156": {
+      "name": "Stem Worm",
+      "ro1": {
+        "id": 1215,
+        "aegisName": "STEM_WORM (aggressive)",
+        "name": "Stem Worm"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Stem Worm is aggressive (1215 STEM_WORM (aggressive), 1440 G_STEM_WORM (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000157": {
+      "name": "Petite",
+      "ro1": {
+        "id": 1155,
+        "aegisName": "PETIT (aggressive)",
+        "name": "Petite"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Petite is aggressive (1155 PETIT (aggressive), 1156 PETIT_ (aggressive), 1465 G_PETIT (aggressive), 1466 G_PETIT_ (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000158": {
+      "name": "Marionette",
+      "ro1": {
+        "id": 1143,
+        "aegisName": "MARIONETTE (aggressive)",
+        "name": "Marionette"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Marionette is aggressive (1143 MARIONETTE (aggressive), 1459 G_MARIONETTE (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000162": {
+      "name": "Desert Wolf",
+      "ro1": {
+        "id": 1106,
+        "aegisName": "DESERT_WOLF (aggressive)",
+        "name": "Desert Wolf"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Desert Wolf is aggressive (1106 DESERT_WOLF (aggressive), 1220 M_DESERT_WOLF (aggressive), 1432 G_DESERT_WOLF (aggressive), 1821 EVENT_DESERT_WOLF (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000163": {
+      "name": "Anubis",
+      "ro1": {
+        "id": 1098,
+        "aegisName": "ANUBIS",
+        "name": "Anubis"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1098 ANUBIS: Ai 21 = mode 0x3695, has MD_AGGRESSIVE (0x4)"
+    },
+    "5000165": {
+      "name": "Kobold Archer",
+      "ro1": {
+        "id": 1282,
+        "aegisName": "KOBOLD_ARCHER (aggressive)",
+        "name": "Kobold Archer"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Kobold Archer is aggressive (1282 KOBOLD_ARCHER (aggressive), 1455 G_KOBOLD_ARCHER (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000168": {
+      "name": "Ancient Mummy",
+      "ro1": {
+        "id": 1297,
+        "aegisName": "ANCIENT_MUMMY (aggressive)",
+        "name": "Ancient Mummy"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Ancient Mummy is aggressive (1297 ANCIENT_MUMMY (aggressive), 1522 G_ANCIENT_MUMMY (aggressive), 1593 A_ANCIENT_MUMMY (aggressive)); the entry without a variant prefix is shown"
+    },
+    "5000171": {
+      "name": "Creamy Fear",
+      "ro1": {
+        "id": 1293,
+        "aegisName": "CREMY_FEAR",
+        "name": "Creamy Fear"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1293 CREMY_FEAR: Ai 21 = mode 0x3695, has MD_AGGRESSIVE (0x4)"
+    },
+    "5000172": {
+      "name": "Leib Olmai",
+      "ro1": {
+        "id": 1306,
+        "aegisName": "LEIB_OLMAI",
+        "name": "Leib Olmai"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1306 LEIB_OLMAI: Ai 21 = mode 0x3695, has MD_AGGRESSIVE (0x4)"
+    },
+    "5000173": {
+      "name": "Killer Mantis",
+      "ro1": {
+        "id": 1294,
+        "aegisName": "KILLER_MANTIS",
+        "name": "Killer Mantis"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1294 KILLER_MANTIS: Ai 21 = mode 0x3695, has MD_AGGRESSIVE (0x4)"
+    }
+  },
+  "notAggressive": {
+    "5000007": "Willow: rAthena pre-re 1010 WILOW: Ai 01 = mode 0x0081, no MD_AGGRESSIVE (0x4)",
+    "5000010": "Rocker: rAthena pre-re 1052 ROCKER: Ai 01 = mode 0x0081, no MD_AGGRESSIVE (0x4)",
+    "5000011": "Roda Frog: rAthena pre-re 1012 RODA_FROG: Ai 01 = mode 0x0081, no MD_AGGRESSIVE (0x4)",
+    "5000013": "Ambernite: rAthena pre-re 1094 AMBERNITE: Ai 17 = mode 0x0091, no MD_AGGRESSIVE (0x4)",
+    "5000014": "Spore: rAthena pre-re 1014 SPORE: Ai 01 = mode 0x0081, no MD_AGGRESSIVE (0x4)",
+    "5000015": "Thief Bug: rAthena pre-re 1051 THIEF_BUG: Ai 07 = mode 0x108B, no MD_AGGRESSIVE (0x4)",
+    "5000018": "Tarou: rAthena pre-re 1175 TAROU: Ai 17 = mode 0x0091, no MD_AGGRESSIVE (0x4)",
+    "5000023": "Poporing: rAthena pre-re 1031 POPORING: Ai 02 = mode 0x0083, no MD_AGGRESSIVE (0x4)",
+    "5000024": "Thief Bug Female: rAthena pre-re 1053 THIEF_BUG_: Ai 07 = mode 0x108B, no MD_AGGRESSIVE (0x4)",
+    "5000030": "Horn: rAthena pre-re 1128 HORN: Ai 17 = mode 0x0091, no MD_AGGRESSIVE (0x4)",
+    "5000034": "Thief Bug Egg: rAthena pre-re 1048 THIEF_BUG_EGG: Ai 06 = mode 0x0000, no MD_AGGRESSIVE (0x4)",
+    "5000048": "Dustiness: rAthena pre-re 1114 DUSTINESS: Ai 17 = mode 0x0091, no MD_AGGRESSIVE (0x4)",
+    "5000049": "Eggyra: rAthena pre-re 1116 EGGYRA: Ai 17 = mode 0x0091, no MD_AGGRESSIVE (0x4)",
+    "5000051": "Hornet: rAthena pre-re 1004 HORNET: Ai 03 = mode 0x1089, no MD_AGGRESSIVE (0x4)",
+    "5000059": "Vitata: rAthena pre-re 1176 VITATA: Ai 17 = mode 0x0091, no MD_AGGRESSIVE (0x4)",
+    "5000061": "Giearth: rAthena pre-re 1121 GIEARTH: Ai 17 = mode 0x0091, no MD_AGGRESSIVE (0x4)",
+    "5000067": "Verit: rAthena pre-re 1032 VERIT: Ai 02 = mode 0x0083, no MD_AGGRESSIVE (0x4)",
+    "5000082": "Caramel: rAthena pre-re 1103 CARAMEL: Ai 17 = mode 0x0091, no MD_AGGRESSIVE (0x4)",
+    "5000083": "Peco Peco: rAthena pre-re 1019 PECOPECO: Ai 03 = mode 0x1089, no MD_AGGRESSIVE (0x4)",
+    "5000084": "Skeleton: rAthena pre-re 1076 SKELETON: Ai 17 = mode 0x0091, no MD_AGGRESSIVE (0x4)",
+    "5000091": "Kukre: rAthena pre-re 1070 KUKRE: Ai 02 = mode 0x0083, no MD_AGGRESSIVE (0x4)",
+    "5000095": "Wolf: rAthena pre-re 1013 WOLF: Ai 03 = mode 0x1089, no MD_AGGRESSIVE (0x4)",
+    "5000096": "Thara Frog: rAthena pre-re 1034 THARA_FROG: Ai 01 = mode 0x0081, no MD_AGGRESSIVE (0x4)",
+    "5000101": "Megalodon: rAthena pre-re 1064 MEGALODON: Ai 01 = mode 0x0081, no MD_AGGRESSIVE (0x4)",
+    "5000104": "Steel Chonchon: rAthena pre-re 1042 STEEL_CHONCHON: Ai 07 = mode 0x108B, no MD_AGGRESSIVE (0x4)",
+    "5000107": "Marine Sphere: rAthena pre-re 1142 MARINE_SPHERE: Ai 06 = mode 0x0000, no MD_AGGRESSIVE (0x4)",
+    "5000108": "Phen: rAthena pre-re 1158 PHEN: Ai 17 = mode 0x0091, no MD_AGGRESSIVE (0x4)",
+    "5000109": "Zenorc: rAthena pre-re 1177 ZENORC: Ai 02 = mode 0x0083, no MD_AGGRESSIVE (0x4)",
+    "5000110": "Beetle King: rAthena pre-re 1494 KIND_OF_BEETLE: Ai 03 = mode 0x1089, no MD_AGGRESSIVE (0x4)",
+    "5000112": "Metaller: rAthena pre-re 1058 METALLER: Ai 07 = mode 0x108B, no MD_AGGRESSIVE (0x4)",
+    "5000126": "Hode: rAthena pre-re 1127 HODE: Ai 01 = mode 0x0081, no MD_AGGRESSIVE (0x4)",
+    "5000127": "Sohee: rAthena pre-re 1170 SOHEE: Ai 17 = mode 0x0091, no MD_AGGRESSIVE (0x4)",
+    "5000130": "Goblin Steamrider: rAthena pre-re 1280 STEAM_GOBLIN: Ai 17 = mode 0x0091, no MD_AGGRESSIVE (0x4)",
+    "5000141": "Crab: rAthena pre-re 1073 CRAB: Ai 01 = mode 0x0081, no MD_AGGRESSIVE (0x4)",
+    "5000144": "Shellfish: rAthena pre-re 1074 SHELLFISH: Ai 17 = mode 0x0091, no MD_AGGRESSIVE (0x4)",
+    "5000145": "Aster: rAthena pre-re 1266 ASTER: Ai 17 = mode 0x0091, no MD_AGGRESSIVE (0x4)",
+    "5000146": "Grove: rAthena pre-re 1687 GREEN_IGUANA: Ai 02 = mode 0x0083, no MD_AGGRESSIVE (0x4)",
+    "5000147": "Alligator: rAthena pre-re 1271 ALLIGATOR: Ai 17 = mode 0x0091, no MD_AGGRESSIVE (0x4)"
+  },
+  "unmatched": {
+    "4940002": {
+      "name": "Baby Desert Wolf",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1107 DESERT_WOLF_B",
+        "1728 R_DESERT_WOLF_B"
+      ]
+    },
+    "4940003": {
+      "name": "Goblin (Dagger)",
+      "reason": "RO3 variant name; RO1 has \"Goblin\" but not this exact name"
+    },
+    "4940007": {
+      "name": "Goblin (Flail)",
+      "reason": "RO3 variant name; RO1 has \"Goblin\" but not this exact name"
+    },
+    "4940014": {
+      "name": "Baby Desert Wolf",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1107 DESERT_WOLF_B",
+        "1728 R_DESERT_WOLF_B"
+      ]
+    },
+    "4940015": {
+      "name": "Goblin (Dagger)",
+      "reason": "RO3 variant name; RO1 has \"Goblin\" but not this exact name"
+    },
+    "4940019": {
+      "name": "Goblin (Flail)",
+      "reason": "RO3 variant name; RO1 has \"Goblin\" but not this exact name"
+    },
+    "4940026": {
+      "name": "Baby Desert Wolf",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1107 DESERT_WOLF_B",
+        "1728 R_DESERT_WOLF_B"
+      ]
+    },
+    "4940027": {
+      "name": "Goblin (Dagger)",
+      "reason": "RO3 variant name; RO1 has \"Goblin\" but not this exact name"
+    },
+    "4940031": {
+      "name": "Goblin (Flail)",
+      "reason": "RO3 variant name; RO1 has \"Goblin\" but not this exact name"
+    },
+    "4940036": {
+      "name": "Furious Minorous",
+      "reason": "RO3 variant name; RO1 has \"Minorous\" but not this exact name"
+    },
+    "4940037": {
+      "name": "Mushroom",
+      "reason": "no RO1 entry with this name"
+    },
+    "4940038": {
+      "name": "Mushroom",
+      "reason": "no RO1 entry with this name"
+    },
+    "4940039": {
+      "name": "Mushroom",
+      "reason": "no RO1 entry with this name"
+    },
+    "4940058": {
+      "name": "Wander Man",
+      "reason": "no RO1 entry with this name"
+    },
+    "5000001": {
+      "name": "Poring",
+      "reason": "several RO1 entries with this name (they disagree)",
+      "candidates": [
+        "1002 PORING",
+        "1725 R_PORING",
+        "1847 EVENT_PORING (aggressive)",
+        "1973 E_PORING"
+      ]
+    },
+    "5000002": {
+      "name": "Lunatic",
+      "reason": "several RO1 entries with this name (they disagree)",
+      "candidates": [
+        "1063 LUNATIC",
+        "1591 A_LUNATIC (aggressive)",
+        "1726 R_LUNATIC"
+      ]
+    },
+    "5000003": {
+      "name": "Fabre",
+      "reason": "several RO1 entries with this name (they disagree)",
+      "candidates": [
+        "1007 FABRE",
+        "1184 FABRE_ (aggressive)",
+        "1229 META_FABRE"
+      ]
+    },
+    "5000004": {
+      "name": "Picky",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1049 PICKY",
+        "1050 PICKY_",
+        "1240 META_PICKY",
+        "1241 META_PICKY_"
+      ]
+    },
+    "5000005": {
+      "name": "Chonchon",
+      "reason": "several RO1 entries with this name (they disagree)",
+      "candidates": [
+        "1011 CHONCHON",
+        "1183 CHONCHON_ (aggressive)"
+      ]
+    },
+    "5000006": {
+      "name": "Super Picky",
+      "reason": "RO3 variant name; RO1 has \"Picky\" but not this exact name"
+    },
+    "5000008": {
+      "name": "Condor",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1009 CONDOR",
+        "1901 E_CONDOR"
+      ]
+    },
+    "5000009": {
+      "name": "Savage Babe",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1167 SAVAGE_BABE",
+        "1727 R_SAVAGE_BABE"
+      ]
+    },
+    "5000012": {
+      "name": "Worm Tail",
+      "reason": "no RO1 entry with this name"
+    },
+    "5000016": {
+      "name": "Creamy",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1018 CREAMY",
+        "1231 META_CREAMY"
+      ]
+    },
+    "5000017": {
+      "name": "Drops",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1113 DROPS",
+        "1572 G_DROPS"
+      ]
+    },
+    "5000020": {
+      "name": "Baby Desert Wolf",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1107 DESERT_WOLF_B",
+        "1728 R_DESERT_WOLF_B"
+      ]
+    },
+    "5000021": {
+      "name": "Yoyo",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1057 YOYO",
+        "1234 PROVOKE_YOYO"
+      ]
+    },
+    "5000027": {
+      "name": "Smokie",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1056 SMOKIE",
+        "1561 G_SMOKIE"
+      ]
+    },
+    "5000028": {
+      "name": "Boa",
+      "reason": "several RO1 entries with this name (they disagree)",
+      "candidates": [
+        "1025 SNAKE",
+        "1747 G_SNAKE (aggressive)"
+      ]
+    },
+    "5000031": {
+      "name": "Bigfoot",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1060 BIGFOOT",
+        "1603 G_BIGFOOT",
+        "1820 EVENT_BIGFOOT"
+      ]
+    },
+    "5000032": {
+      "name": "Coco",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1104 COCO",
+        "1860 E_COCO"
+      ]
+    },
+    "5000033": {
+      "name": "Peco Peco Egg",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1047 PECOPECO_EGG",
+        "1232 META_PECOPECO_EGG"
+      ]
+    },
+    "5000035": {
+      "name": "Pupa",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1008 PUPA",
+        "1230 META_PUPA"
+      ]
+    },
+    "5000050": {
+      "name": "Muka",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1055 MUKA",
+        "1854 E_MUKA"
+      ]
+    },
+    "5000055": {
+      "name": "Deniro",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1105 DENIRO",
+        "1239 META_DENIRO"
+      ]
+    },
+    "5000056": {
+      "name": "Piere",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1160 PIERE",
+        "1238 META_PIERE"
+      ]
+    },
+    "5000057": {
+      "name": "Andre",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1095 ANDRE",
+        "1237 META_ANDRE"
+      ]
+    },
+    "5000060": {
+      "name": "Martin",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1145 MARTIN",
+        "1862 E_MARTIN"
+      ]
+    },
+    "5000069": {
+      "name": "Magnolia",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1138 MAGNOLIA",
+        "1856 E_MAGNOLIA"
+      ]
+    },
+    "5000073": {
+      "name": "Baphomet Jr.",
+      "reason": "several RO1 entries with this name (they disagree)",
+      "candidates": [
+        "1101 BAPHOMET_ (aggressive)",
+        "1431 G_BAPHOMET_ (aggressive)",
+        "1729 R_BAPHOMET_"
+      ]
+    },
+    "5000077": {
+      "name": "Savage",
+      "reason": "several RO1 entries with this name (they disagree)",
+      "candidates": [
+        "1166 SAVAGE",
+        "1221 M_SAVAGE (aggressive)"
+      ]
+    },
+    "5000081": {
+      "name": "Ladybug",
+      "reason": "no RO1 entry with this name"
+    },
+    "5000085": {
+      "name": "Ant Egg",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1097 ANT_EGG",
+        "1236 META_ANT_EGG"
+      ]
+    },
+    "5000086": {
+      "name": "Furious Poporing",
+      "reason": "RO3 variant name; RO1 has \"Poporing\" but not this exact name"
+    },
+    "5000088": {
+      "name": "Marin",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1242 MARIN",
+        "1595 G_MARIN",
+        "1857 E_MARIN"
+      ]
+    },
+    "5000089": {
+      "name": "Plankton",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1161 PLANKTON",
+        "1858 E_PLANKTON"
+      ]
+    },
+    "5000090": {
+      "name": "Marina",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1141 MARINA",
+        "1972 E_MARINA"
+      ]
+    },
+    "5000092": {
+      "name": "Goblin (Axe)",
+      "reason": "RO3 variant name; RO1 has \"Goblin\" but not this exact name"
+    },
+    "5000093": {
+      "name": "Goblin (Flail)",
+      "reason": "RO3 variant name; RO1 has \"Goblin\" but not this exact name"
+    },
+    "5000094": {
+      "name": "Vadon",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1066 VADON",
+        "1971 E_VADON"
+      ]
+    },
+    "5000100": {
+      "name": "Whisper",
+      "reason": "several RO1 entries with this name (they disagree)",
+      "candidates": [
+        "1179 WHISPER (aggressive)",
+        "1185 WHISPER_",
+        "1927 WHISPER_H (aggressive)"
+      ]
+    },
+    "5000102": {
+      "name": "Marse",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1144 MARSE",
+        "1551 G_MARSE"
+      ]
+    },
+    "5000105": {
+      "name": "Goblin (Dagger)",
+      "reason": "RO3 variant name; RO1 has \"Goblin\" but not this exact name"
+    },
+    "5000113": {
+      "name": "Marc",
+      "reason": "several RO1 entries with this name (they disagree)",
+      "candidates": [
+        "1045 MARC (aggressive)",
+        "1426 G_MARC (aggressive)",
+        "1969 E_MARC"
+      ]
+    },
+    "5000114": {
+      "name": "Goblin (Mace)",
+      "reason": "RO3 variant name; RO1 has \"Goblin\" but not this exact name"
+    },
+    "5000117": {
+      "name": "Goblin (Hammer)",
+      "reason": "RO3 variant name; RO1 has \"Goblin\" but not this exact name"
+    },
+    "5000121": {
+      "name": "Deviace",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1108 DEVIACE",
+        "1571 G_DEVIACE"
+      ]
+    },
+    "5000124": {
+      "name": "Golem",
+      "reason": "several RO1 entries with this name (none aggressive)",
+      "candidates": [
+        "1040 GOLEM",
+        "1540 G_GOLEM"
+      ]
+    },
+    "5000132": {
+      "name": "Dokebi",
+      "reason": "several RO1 entries with this name (they disagree)",
+      "candidates": [
+        "1110 DOKEBI",
+        "1491 G_DOKEBI (aggressive)"
+      ]
+    },
+    "5000133": {
+      "name": "Nightmare",
+      "reason": "several RO1 entries with this name (they disagree)",
+      "candidates": [
+        "1061 NIGHTMARE (aggressive)",
+        "1427 G_NIGHTMARE (aggressive)",
+        "1964 NIGHTMARE_T"
+      ]
+    },
+    "5000148": {
+      "name": "Strouf",
+      "reason": "several RO1 entries with this name (they disagree)",
+      "candidates": [
+        "1065 STROUF (aggressive)",
+        "1968 E_STROUF"
+      ]
+    },
+    "5000149": {
+      "name": "Jakk",
+      "reason": "several RO1 entries with this name (they disagree)",
+      "candidates": [
+        "1130 JAKK (aggressive)",
+        "1436 G_JAKK (aggressive)",
+        "1722 EVENT_JAKK",
+        "1926 JAKK_H (aggressive)"
+      ]
+    },
+    "5000150": {
+      "name": "Wild Rose",
+      "reason": "several RO1 entries with this name (they disagree)",
+      "candidates": [
+        "1261 WILD_ROSE",
+        "1744 G_WILD_ROSE (aggressive)",
+        "1965 M_WILD_ROSE"
+      ]
+    },
+    "5000152": {
+      "name": "Sky Petite",
+      "reason": "RO3 variant name; RO1 has \"Petite\" but not this exact name"
+    },
+    "5000155": {
+      "name": "Cramp",
+      "reason": "several RO1 entries with this name (they disagree)",
+      "candidates": [
+        "1209 CRAMP (aggressive)",
+        "1570 G_CRAMP (aggressive)",
+        "2057 E_CRAMP"
+      ]
+    },
+    "5000159": {
+      "name": "Deviruchi",
+      "reason": "several RO1 entries with this name (they disagree)",
+      "candidates": [
+        "1109 DEVIRUCHI (aggressive)",
+        "1433 G_DEVIRUCHI (aggressive)",
+        "1730 R_DEVIRUCHI",
+        "1822 EVENT_DEVIRUCHI (aggressive)",
+        "1928 DEVIRUCHI_H (aggressive)"
+      ]
+    },
+    "5000160": {
+      "name": "Mace Kobold",
+      "reason": "RO3 variant name; RO1 has \"Kobold\" but not this exact name"
+    },
+    "5000161": {
+      "name": "Hammer Kobold",
+      "reason": "RO3 variant name; RO1 has \"Kobold\" but not this exact name"
+    },
+    "5000164": {
+      "name": "Axe Kobold",
+      "reason": "RO3 variant name; RO1 has \"Kobold\" but not this exact name"
+    },
+    "5000166": {
+      "name": "Squidgitte",
+      "reason": "no RO1 entry with this name"
+    },
+    "5000167": {
+      "name": "Sropho",
+      "reason": "no RO1 entry with this name"
+    },
+    "5000169": {
+      "name": "Pot Dofle",
+      "reason": "no RO1 entry with this name"
+    },
+    "5000170": {
+      "name": "King Dramoh",
+      "reason": "no RO1 entry with this name"
+    }
+  },
+  "bosses": {
+    "4940009": {
+      "name": "Minorous",
+      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1149 MINOROUS (aggressive), 1461 G_MINOROUS (aggressive))"
+    },
+    "4940011": {
+      "name": "Goblin Leader",
+      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1299 GOBLIN_LEADER (aggressive), 1539 G_GOBLIN_LEADER (aggressive))"
+    },
+    "4940021": {
+      "name": "Minorous",
+      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1149 MINOROUS (aggressive), 1461 G_MINOROUS (aggressive))"
+    },
+    "4940022": {
+      "name": "Chimera",
+      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1283 CHIMERA (aggressive), 1456 G_CHIMERA (aggressive))"
+    },
+    "4940023": {
+      "name": "Goblin Leader",
+      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1299 GOBLIN_LEADER (aggressive), 1539 G_GOBLIN_LEADER (aggressive))"
+    },
+    "4940033": {
+      "name": "Minorous",
+      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1149 MINOROUS (aggressive), 1461 G_MINOROUS (aggressive))"
+    },
+    "4940034": {
+      "name": "Chimera",
+      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1283 CHIMERA (aggressive), 1456 G_CHIMERA (aggressive))"
+    },
+    "4940035": {
+      "name": "Goblin Leader",
+      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1299 GOBLIN_LEADER (aggressive), 1539 G_GOBLIN_LEADER (aggressive))"
+    },
+    "4940045": {
+      "name": "Kobold Leader",
+      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1296 KOBOLD_LEADER (aggressive), 1548 G_KOBOLD_LEADER (aggressive))"
+    },
+    "4940046": {
+      "name": "Kobold Leader",
+      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1296 KOBOLD_LEADER (aggressive), 1548 G_KOBOLD_LEADER (aggressive))"
+    },
+    "4940047": {
+      "name": "Khalitzburg",
+      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000013): left to the client's own AI; every RO1 entry of this name is aggressive (1132 KHALITZBURG (aggressive), 1438 G_KHALITZBURG (aggressive))"
+    },
+    "4940057": {
+      "name": "Maya",
+      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; RO1 counterpart 1147 MAYA is aggressive"
+    },
+    "4940067": {
+      "name": "Gryphon",
+      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1259 GRYPHON (aggressive), 1447 G_GRYPHON (aggressive))"
+    },
+    "4940068": {
+      "name": "Gryphon",
+      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1259 GRYPHON (aggressive), 1447 G_GRYPHON (aggressive))"
+    },
+    "4940069": {
+      "name": "Rybio",
+      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1201 RYBIO (aggressive), 1483 G_RYBIO (aggressive))"
+    }
+  }
+}
