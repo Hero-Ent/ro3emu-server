@@ -66,6 +66,18 @@ These choices are implementation policy, not a claim of an observed original ser
 8. World supply starts with each exported spawn pool's minimum population, capped by its total; pickup reach is five meters and an over-cap pickup is refused whole. Normal supply respawns at the editor interval. Death-loss rates `[0,0.2,1]` are indexed by Peace/Free/Guild camp and loss is rounded upward; death drops persist until collected. World PvP is restricted to territory maps with configured PvP modes; Free/Guild can initiate against a non-guildmate and Peace cannot initiate. Supply donation converts 133 to guild Materials/126 one-for-one. AuctionMaterials/129 is the guild core treasury, kept distinct from that supply and escort stock; auction tests explicitly provision treasury fixtures.
 9. A land-activity killer receives the normal award, and an owner-guild killer in the configured owner radius also receives the extra award. Restrict recovery type 2 is interpreted as a UTC weekly limit (three claims for these rows), scoped to the epoch/activity. Map 30311 point 1000001 (named trap) and map 30336 point 10001 (named spawn) substitute for configured 100001; both are the second exported monster point alongside the black-hole point, matching the arrangement on the other maps. Six type-0 rows set map resource and point to 0; they are not attached to an invented map, and their exact scene binding is a remaining source-evidence boundary.
 
+## Commander tools (siege and territory battles)
+
+The commander's tools come from the client's own handlers (`LC_SceneCom_Command`, added only by the Siege and Territory Wars dungeon scenes). `TerritoryWarsService.Command` keeps them on the battle, so they end with it.
+
+| IDs | Behavior |
+|---|---|
+| 30407/30408 | Map marks on the siege map, up to 10 per type. Commander marks need guild right 12 (BattleFieldCommand) and are shared by the side; team-leader marks need the party leader and are shared by that party on the side. The client adds without an id and deletes by a global id (`(type - 1) * 10 + slot`, 0 = all of that type); 30408 is a full snapshot per type with slots 1-10. |
+| 30431 | Gather at a mark. The client drops the response and has no 30438 handler; the visible gather is system chat 4110041 (DungeonCollect) with a CHAT_PARAM_GATHER parameter [sender, mark type, slot], which raises the 3D guide on that mark. |
+| 30436/30437 | Command letters A-F on targets, right 12. Siege ids are dungeon point ids, territory ids are NPC config ids; 30437 is the side's six positional slots. |
+
+Loading into the battle sends the side's commander marks, the party's own marks and the letters. A full mark list answers `ErrorCodes.Parameter` **(inferred)**: the client stops at 10 itself. Checked in the client: a commander gets the Commander and Management buttons, a letter shows on the target with its 3D guide and the "New marker!" notice, and a commander mark shows on the siege map with "Can Mark: 1/10". Not yet: the commander skills (30439) and Emergency Call (30118-30122).
+
 ## Descriptor and runtime evidence boundaries
 
 The checked-in `MG_Guild.proto` defines `TerritoryWarsGuildData.occupyWarzone` and places auction fields inside `guildData`. `LC_DAL_TerritoryWars.lua:884-925,988-1008` reads `campDatas` and some wrapper-level auction fields instead. Implementation sends the supplied descriptor, plus the coherent modern 5013/84037 and deadline notifications; exact legacy panel decoding remains unverified. A new field number is not invented.
