@@ -11,7 +11,9 @@ public static partial class EconomySnapshotReader
     {
         private void ReadTerritoryRole(JsonElement state, long role, string key)
         {
-            Fields(state, "Epoch Seasons Camp LastCampChange Honor Valor Fatigue FatigueKills LastFatigue Donated Donations WorldLandClaims Pending Paid");
+            Fields(state, "Epoch Seasons Camp LastCampChange Honor Valor Fatigue FatigueKills LastFatigue Donated Donations WorldLandClaims Pending Paid Glory");
+            // Battle Merit: counters and claimed rank markers only; its points are currency 15 in the purse.
+            if (Try(state, "Glory", out var glory)) Fields(glory, "Epoch Points Rank Claimed Day DayGain Counts");
             if (!Try(state, "Pending", out var pending)) return;
             foreach (var grantSet in Properties(pending))
             {
