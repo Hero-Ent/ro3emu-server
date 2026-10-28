@@ -358,6 +358,7 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
             if (step.Shelter is { } shelter && (!step.Fight.Any(f => f.NpcId == shelter.Boss) || !step.Actors.Any(a => a.NpcId == shelter.Cover)
                     || data.Row("ChatConfig", shelter.Tip) == null || data.Row("SkillConfig", shelter.Skill) == null
                     || shelter.EveryMs <= shelter.WarnMs || shelter.WarnMs < 0 || shelter.Width <= 0 || shelter.Depth <= 0)) return [];
+            if (step.React is { } react && !ReactionResolves(step, react)) return [];
             foreach (var (interaction, skill, shots) in step.Strikes ?? [])
                 if (step.Fight.Count == 0 || shots < 0 || data.Row("SkillConfig", skill) == null
                     || !step.Actors.Any(a => Interactions(a.NpcId).Contains(interaction))) return [];
@@ -373,6 +374,18 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
         if (scene.Unplayed.Any(q => scene.Steps.Any(s => s.Quest == q) || !data.Table("DungeonQuestConfig").Values.Any(r =>
                 GameData.Int(r, "_iDungeonID") == scene.Scene && GameData.Int(r, "_iQuestID") == q))) return [];
         return waves;
+    }
+
+    /// <summary>A step's reactions: its speaker and every reacting actor are actors of the step, its lines ChatConfig rows
+    /// and its effects BuffConfig rows of a buff group.</summary>
+    private bool ReactionResolves(ReconstructedDungeons.ScriptedStep step, ReconstructedDungeons.Reaction react)
+    {
+        bool Shown(int npc) => step.Actors.Any(a => a.NpcId == npc);
+        bool Line(int chat) => data.Row("ChatConfig", chat) != null;
+        bool Resolves(ReconstructedDungeons.Response? r) => r == null
+            || (r.Say == 0 || Line(r.Say)) && (r.Buff == 0
+                || Shown(r.On) && Data.Config.BuffConfig.Get(data, r.Buff) is { BuffId: > 0 });
+        return Shown(react.Speaker) && react.Start.All(Line) && Resolves(react.Ignored) && Resolves(react.Complete);
     }
 
     /// <summary>
