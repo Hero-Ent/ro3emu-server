@@ -36,16 +36,16 @@ namespace Ro3Emu.Server.Game;
 /// personal score of at least 25 (DungeonAwardModule ScoreCondition [2,3,25]) earns DropPool 85201, the winners also
 /// 85202 (the losers' 85203 is not in DropPoolConfig); assists are the hits on the victim in its last 10 s.
 /// Not built: the arena's monsters and boss (their spawn script is not in the client) and the pre-start notices
-/// 5711/5712. Each camp gets the 40-player Virtual team roster (30441, TeamRoster) and its leadership transfer
-/// (30451, TransferAsync); the squad roster's other commands (30442-30450: flag, rally, follow, swap) are not. A
-/// settled match's result is also kept in
+/// 5711/5712. Each camp gets the 40-player Virtual team roster (30441, TeamRoster), its leadership transfer (30451,
+/// TransferAsync) and a member's own follow toggle (30448, FollowAsync); the roster's remaining commands (30442-30450:
+/// flag, rally, swap) are not. A settled match's result is also kept in
 /// the role's ordinary 30128 history (DungeonService.StoreExternalResultAsync), the same as a boss dungeon's clear,
 /// for every player still online at settlement; one offline then is still paid at login (TryPayAsync's own retry)
 /// but gets no history entry, since nothing here revisits a login after the fact to write one.
 /// </summary>
 public sealed class CasualBattleService : IGameTicker
 {
-    public const uint Sync = 5070, ResultNotify = 30132, Transfer = 30451;
+    public const uint Sync = 5070, ResultNotify = 30132, Follow = 30448, FollowNotify = 30449, Transfer = 30451;
     public const int ActivityId = 3304, Function = 5903, Scene = 2220104, TimeLimit = 1084;
     private const long PrepareSeconds = 60, MainSeconds = 540, BattleSeconds = 660, ExitSeconds = 30;
     private const long ScoreBar = 4500;
@@ -108,6 +108,9 @@ public sealed class CasualBattleService : IGameTicker
         /// <summary>A camp's Virtual team leader (30451 DUNGEON_TEAM_TRANSFER), by role id; 0 (the default, unset)
         /// defers to the lowest-indexed squad's own leader.</summary>
         public readonly Dictionary<int, long> TeamLeader = [];
+        /// <summary>A camp member's own Virtual team follow state (30448/30449 DUNGEON_TEAM_FOLLOW), by role id;
+        /// absent (the default) is None, mirrored into its own roster entry's DungeonTeamMemberInfo.followType.</summary>
+        public readonly Dictionary<long, DungeonTeamFollowType> Follow = [];
         public long Deadline => Open + BattleSeconds;
     }
 
@@ -310,8 +313,9 @@ public sealed class CasualBattleService : IGameTicker
     /// whole match (inferred: no client-visible value names a Mock Battle camp). Each squad is a camp member's own
     /// real party (TeamService), a lone player its own one-member squad. The notify's own leaderGuid is the explicit
     /// Transfer (30451) target if the camp has one and it is still present, else the lowest-indexed squad's own
-    /// leader (inferred default). The other squad commands (30442-30450: flag, rally, follow, swap) are not
-    /// implemented: flags stay empty and a member's position is simply its order within the squad.
+    /// leader (inferred default); a member's own followType mirrors its Follow (30448) state. The remaining squad
+    /// commands (30442-30450: flag, rally, swap) are not implemented: flags stay empty and a member's position is
+    /// simply its order within the squad.
     /// </summary>
     private DungeonTeamInfoNotify TeamRoster(Match match, int camp)
     {
@@ -333,7 +337,8 @@ public sealed class CasualBattleService : IGameTicker
             var squad = new DungeonTeamSquadInfo { SquadIdx = group.Key, SquadLeaderGuid = leader };
             int position = 0;
             foreach (var id in group.Select(kv => kv.Key).OrderBy(id => id == leader ? 0 : 1).ThenBy(id => id))
-                squad.Members[id] = new DungeonTeamMemberInfo { Guid = id, Position = position++ };
+                squad.Members[id] = new DungeonTeamMemberInfo
+                { Guid = id, Position = position++, FollowType = match.Follow.GetValueOrDefault(id) };
             notify.Squads[group.Key] = squad;
         }
         notify.LeaderGuid = TeamLeader(match, camp, members, notify);
@@ -380,6 +385,36 @@ public sealed class CasualBattleService : IGameTicker
         }
         await s.SendGameAsync(Transfer, new DungeonTeamTransferResp { Result = code });
         if (code == 0 && match != null) await SendTeamRosterAsync(match, camp);
+    }
+
+    /// <summary>
+    /// 30448 DUNGEON_TEAM_FOLLOW: a camp member toggles following its Virtual team's or squad's leader. Its own
+    /// roster entry (DungeonTeamMemberInfo.followType) and every other present camp member's 30449 notice mirror the
+    /// new state; it changes the match, not just the sender's role, so it keeps the default realm-wide admission
+    /// like Transfer (30451). No client-visible result mapping is named for this response; ErrorCodes.Parameter
+    /// (isFollow true with no followType named) is (inferred).
+    /// </summary>
+    public async Task FollowAsync(GameSession s, DungeonTeamFollowReq req)
+    {
+        int code;
+        Match? match = null;
+        int camp = 0;
+        if (s.Role == null || Live(s) is not { } m) code = ErrorCodes.SceneMissing;
+        else if (req.IsFollow && (int)req.FollowType == 0) code = ErrorCodes.Parameter;
+        else
+        {
+            match = m; camp = match.Players[s].Camp;
+            if (req.IsFollow) match.Follow[s.Role.Id] = req.FollowType; else match.Follow.Remove(s.Role.Id);
+            code = 0;
+        }
+        await s.SendGameAsync(Follow, new DungeonTeamFollowResp { Result = code });
+        if (code == 0 && match != null)
+        {
+            var notify = new DungeonTeamFollowNotify { FollowerGuid = s.Role!.Id, FollowType = req.FollowType, IsFollow = req.IsFollow };
+            await RoleFanout.EachAsync(match.Players.Values.Where(p => p.Camp == camp && !p.Left && match.Loaded.Contains(p.Session))
+                .Select(p => p.Session), sess => sess.SendGameAsync(FollowNotify, notify));
+            await SendTeamRosterAsync(match, camp);
+        }
     }
 
     public bool CanFight(GameSession attacker, GameSession target) => Live(attacker) is { } m && Live(target) == m && m.Stage > 0
