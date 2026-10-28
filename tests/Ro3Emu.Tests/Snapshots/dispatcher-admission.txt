@@ -1000,7 +1000,7 @@
 83304	session Realm:legacy: dispatcher/83304	refused
 83350	session Realm:legacy: dispatcher/unrouted	refused
 83351	economic dispatcher/economic request	refused
-83400	session Realm:legacy: dispatcher/unrouted	refused
+83400	economic dispatcher/economic request	refused
 83410	economic dispatcher/economic request	refused
 83421	session Realm:legacy: dispatcher/83421	refused
 83422	session Realm:legacy: dispatcher/83422	refused
