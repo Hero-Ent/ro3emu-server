@@ -36,6 +36,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
                 owner.Units.Remove(monster);
             return unit is MonsterUnit { BossSkills: not null } boss ? EndBossSkillsTask(boss, interrupt: false) ?? Task.CompletedTask : Task.CompletedTask;
         });
+        world.UnitRemoved.Add(ForgetCompanionTargets);
     }
 
     private const long UidBase = 1L << 41;
@@ -412,6 +413,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
             Fight(m, map, now);
             return;
         }
+        if (_companionTargets.Count > 0 && FightsCompanion(m, map, now)) return; // MonsterService.Companions
         if (m.Template.Aggressive && m.Viewers.Count > 0 && !m.Returning)
         {
             var near = NearestTarget(m);

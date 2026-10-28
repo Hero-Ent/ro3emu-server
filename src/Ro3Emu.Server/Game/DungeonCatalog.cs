@@ -322,8 +322,9 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
     /// <summary>
     /// A scripted scene's steps (ReconstructedDungeons.Scripted): one wave without monsters per step. Every reference
     /// must resolve in the client data and the scene's map, or the scene is refused like any unresolved encounter:
-    /// the quests the tracker shows, the actors' NPCConfig rows, points and buffs, the stories, regions and points,
-    /// and the interactions and dungeon messages the step's actors can actually send.
+    /// the quests the tracker shows, the actors' NPCConfig rows, points and buffs, the companions' rows (each one able to
+    /// fight beside the player), the stories, regions and points, and the interactions and dungeon messages the step's
+    /// actors can actually send.
     /// </summary>
     private IReadOnlyList<Wave> ScriptedWaves(ReconstructedDungeons.ScriptedScene scene, MapWorld map)
     {
@@ -336,6 +337,9 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
                 if (data.Row("NPCConfig", actor.NpcId) is not { } npc || GameData.Int(npc, "_iNPCType") is not (1 or 2)
                     || !map.Points.ContainsKey(actor.Point)
                     || actor.Buffs.Any(b => data.Row("BuffConfig", b) is not { } buff || GameData.Int(buff, "_iBuffID") <= 0)) return [];
+            // A companion is a client NPC that can fight beside the player (CompanionUnit.Build); it carries no buffs.
+            if (step.Companions.Any(c => !map.Points.ContainsKey(c.Point) || c.Buffs.Count > 0
+                    || CompanionUnit.Build(data, monsters, c.NpcId) == null)) return [];
             if (step.Story != 0 && data.Row("PlotInterpretation", step.Story) == null) return [];
             if (step.TeleportAfter != 0 && !map.Points.ContainsKey(step.TeleportAfter)) return [];
             foreach (var t in step.Complete.Concat(step.Ignore))

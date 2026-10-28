@@ -119,8 +119,9 @@ Reconstructed story encounters (`ReconstructedDungeons`, switch `Ro3Emu:Reconstr
 - Not reconstructed as monster waves (listed in the file): pure scripted scenes without a fight (ant nest
   exploration, Deniro ride, Louie's game, Moonlight Flower's hide-and-seek), the MVP party event, the Ring Test map and
   scenes without points. The four scenes are rebuilt as scripted scenes (below).
-  Allied NPC companions and the Goblin Forest transfer are not reproduced. The airship's cannons and the Professor's
-  rescue in Maya's nest are played as scripted stages (below).
+  Allied companions fight only where a scripted step marks them (Payon Forest's Boya and Wule, below); the Goblin
+  Forest transfer is not reproduced. The airship's cannons and the Professor's rescue in Maya's nest are played as
+  scripted stages (below).
 - The task widget: each reconstructed wave names the DungeonQuestConfig quest it plays. 30401 carries var 10001
   `PDungeonQuestIdList` (the scene's quests up to the current one; the widget shows the last one's title and goals)
   and var 10003 `PDungeonQuestGoalParamList` (the wave's kills and size, the goal's "(done/total)"). Seen live: the
@@ -136,12 +137,15 @@ Reconstructed story encounters (`ReconstructedDungeons`, switch `Ro3Emu:Reconstr
   attack, the elite Scorpion run ends in DungeonResSuccess, leaving returns to the field. The client shows no result
   window for these Plane scenes (as with Payon Forest).
 - Solo tuning: the story bosses were built for the original's allied NPC
-  companions (not reproduced); untuned, a level-matched player died in 3-36 s and needed 3-38 minutes to win.
+  companions (mostly not reproduced); untuned, a level-matched player died in 3-36 s and needed 3-38 minutes to win.
   `soloTuning` scales each story template's HP and attack (basis points) so a Swordman at the boss level, every stat
   point spent STR:VIT 2:1, no equipment, normal attacks only, kills it in about 90 s and would fall in about 1.4 times
   that. `CombatService.Duel` computes both sides' expected damage per second from the same formula as a real hit
   (its roll-free part was extracted, rolls unchanged). The airship's nine boarders come in three groups of three, their
-  attack at 20%. `DungeonTests.StoryBossTuning` keeps every boss and a boarder group inside the band. Live: the tuned
+  attack at 20%. A boss whose scripted step shows companions falls to them and the player together: Payon Forest's
+  Eddga (HP 1170 basis points) counts Boya's and Wule's expected damage per second standing in reach
+  (`CombatService.CompanionDps`, their rotation and the same formula as their hits), about a quarter of the total.
+  `DungeonTests.StoryBossTuning` keeps every boss and a boarder group inside the band. Live: the tuned
   Culvert Golden Thief Bug (4126 HP, hits of about 47) fell to a test character and the tracker showed (1/1).
 - `DungeonTests.Reconstructed` resolves every reconstructed plan, clears each dungeon wave by wave to a win with the
   tracker vars checked, counts a clear toward its 101018 quest, and switches off.
@@ -185,8 +189,8 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
     one of the three Cannons 5300022 fires 5365001 from the player at the nearest enemy airship (5300015 at point 24,
     5300053 at 61), and three boardings sink a ship at any level; sinking both ends the stage. The original's
     UpperCannon gameplay status (GameplayStatusConfig 12) has no abilities in the client data.
-  - Payon Forest (1022001): 'Cover Boya and Wule' (reach the standoff point 22 between them and Eddga), then Eddga.
-    Boya and Wule (5300086/5300087) are shown, not fighting.
+  - Payon Forest (1022001): 'Cover Boya and Wule' (reach the standoff point 22 between them and Eddga), then Eddga
+    with Boya and Wule (5300086/5300087) fighting beside the player as companions (below).
   - The Peco Peco nest (1051001): the Elusive Pecopeco with the Ancient Nest and Bragis shown.
   - Pharaoh (main story, 3120702): Pharaoh with the Relic he leaps out of, his coffin 5300013 at point 24, and the
     Pyramid 5300011 beside him (6 m east, 7 m north of point 20: the scene has no point for it). Its use is **inferred**
@@ -194,6 +198,27 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
     20 s of the fight the tip goes out, Pharaoh holds still for 4 s, then his strongest skill 5340301 (whose effect the
     client draws as a cross of light) hits everyone outside the Pyramid's shadow (a step `shelter`, DungeonService.Shelter).
   - Prontera North Gate (1011301): stage 1 'Investigate the fork in the road' completes within 17 m of Baphomet's point 20, which takes in the end of the client's guide line 24 but not the born point (inferred), then stage 2 is Baphomet (5300003) at point 20.
+- Companions (`DungeonService.Companions`, `CompanionUnit`): an actor marked `"companion": true` is shown as an allied
+  fighter instead of a plain scene actor. From the client: only an NPCConfig `_iNPCType` 1 row of the player's camp
+  (`_iCamp` 1) with a monster template and its own `_kSkills` qualifies (the catalog refuses the scene otherwise); its
+  HP and attack come from that template (`_iAttribute`, `_kAttriScale`, `_iLevel`), each skill's cooldown, action and
+  reach from SkillConfig (`_iCD`, `_iActionTime`, `_iDistanceMax`), its walking speed from NPCConfig `_iSpeed`, and
+  its search cadence, attack tick, view range and chase distance from AIConfig `_iAI` (5300007: `_iSearchTime` 100,
+  `_iAttackTickTime` 1000, `_iViewRange` 10000, `_iChaseDistance` 10000, `_iStayInPlace` 1). **Inferred** (the server
+  script is not in the client): it attacks the nearest living monster of its room within view, with the first listed
+  skill whose cooldown is ready and whose reach holds it, at most one cast per action and per attack tick; the hit
+  lands at 40% of the action, as for tower pets. When no ready skill reaches the monster it walks toward it (31081,
+  as a tower pet walks) until one does, never farther than `_iChaseDistance` from its point, and with no target it
+  walks back to its point (`_iStayInPlace` 1 read as "goes back to its point", not "never moves"). Its casts show like a monster's (31100, 31101), deal the skill's damage through the shared
+  formula and settle like a player's hit; a kill it makes counts for the run exactly like a player's (wave and step
+  completion, statistics), credited to the first present participant. A monster it hits answers it with its normal
+  attack once no player holds that monster (a player it already fights comes first; while it answers a companion it
+  does not look for another player until one hits it); at 0 HP the companion dies, its body leaves
+  after the template's remain time, and it does not come back in that run (`_kRespawnSkill` unused). Players cannot
+  target it and area effects do not hit it (it is no monster), and it never counts in the run's spawned or killed
+  monsters. It is separate from the Pet Tower's pets, whose behaviour does not change. In Payon Forest the pair stand
+  about 14 m from Eddga's point and reach 3.5-6 m, while Eddga's swing reaches 10 m: they walk up to him wherever the
+  player fights him, so the solo tuning counts them as always in reach.
 
 
 - The last three main-story blockers of the story walk: the ant nest vortex and egg passage (1000201, task 10104290),
