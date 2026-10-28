@@ -80,6 +80,21 @@ The commander's tools come from the client's own handlers (`LC_SceneCom_Command`
 
 Loading into the battle sends the side's commander marks, the party's own marks, the letters and the command skill panel. A full mark list answers `ErrorCodes.Parameter` **(inferred)**: the client stops at 10 itself. Checked in the client: a commander gets the Commander and Management buttons, a letter shows on the target with its 3D guide and the "New marker!" notice, and a commander mark shows on the siege map with "Can Mark: 1/10". **Inferred** for the skills: the panel is the side's (any commander of the guild casts from the same charges), a used charge recovers `skillRecoverCd` after its use, one at a time, with a fresh 30439 then; Blessing of Light's buff group 49090 carries SpecialStatusConfig 66 (光明庇护, no knockback); 292/293 for an expired or full call; an arrival lands on the commander's cast position.
 
+## Battle Merit (Battle Glory)
+
+`TerritoryWarsService.BattleGlory` (function 7205, base level 99). The client shows the merit rank and its rewards from 5001 `DBBattleGloryInfo` (`curRankId`, `isSpecialRank`, the keys of `rankRewardReceiveInfo`) and the points from currency 15 ("War Merit Points"). 83400 claims a reached rank's `_iNormalRewardGroup` once (ranks 2-9, MultiverseGroup 50102); the client has no handler for the reply and reads the claim from 5001.
+
+| Rule | Value |
+|---|---|
+| Where | maps with a `BattleGloryBase` row (30301-30319), public line 1, between `WorldHostile` players |
+| Kill / assist / death | `_iKillBase` 150 / `_iAssistBase` 100 / `_iDeathBase` 100 |
+| Repeats | `BattleGloryKillDif` / `BattleGloryDeathDif` by how many times today the same pair met that way: 100%, 80%, 60%, 40%, 20%, then 0 |
+| Power | kills and assists times `BattleGloryPowerDif` of the victim's power minus the earner's (the row with the largest threshold reached) |
+| Daily cap | `BattleGloryDailyLimit` 1,000,000 per game day (05:00) |
+| Rank | the sum of the `_iGloryCondition` of the ranks below: 1000 for rank 2 up to 36000 for rank 9; it never drops |
+
+**Inferred:** all the point rules (the client only displays results); an assist is a hit on the victim in the last 10 s; a death pays rather than costs (the record source enum names Kill, Assist and Death as ways points came); the state is the role's territory `RoleState.Glory`, per season. Not done: rank 10 (`_iRankCondition` 10, the top 10 of leaderboard 2102, which this client ships no LeaderBoardsConfig row for), the season-end SiegeSettlementHonorAward mail 1090, and the "Reach N Battle Merit" quests (target 106610).
+
 ## Descriptor and runtime evidence boundaries
 
 The checked-in `MG_Guild.proto` defines `TerritoryWarsGuildData.occupyWarzone` and places auction fields inside `guildData`. `LC_DAL_TerritoryWars.lua:884-925,988-1008` reads `campDatas` and some wrapper-level auction fields instead. Implementation sends the supplied descriptor, plus the coherent modern 5013/84037 and deadline notifications; exact legacy panel decoding remains unverified. A new field number is not invented.
