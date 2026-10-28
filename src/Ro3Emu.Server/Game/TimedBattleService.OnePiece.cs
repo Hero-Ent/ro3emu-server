@@ -92,21 +92,6 @@ public sealed partial class TimedBattleService
         // The dialog's Challenge option shows RestrictInfo1020 as "x/10" (_buildOnePieceExtraParams' caller).
         if (result == 0) await SyncRiftRestrictAsync(session);
         await session.SendGameAsync(SceneService.NpcInteraction, new NpcInteractionRsp { Result = result, Req = req });
-        if (result != 0 && session.Role != null)
-        {
-            string? hint = session.Progress?.Level < 44
-                ? FormattableString.Invariant($"Rift Crisis requires Base Level 44 (your level: {session.Progress?.Level ?? 1}) / Requiere Nivel Base 44 (tu nivel: {session.Progress?.Level ?? 1}).")
-                : !_schedule.IsOpen(200)
-                    ? "Rift Crisis is closed (open 10:00-22:00 server time; GM: '!rift new'). / Rift Crisis está cerrado (horario 10:00-22:00; GM: '!rift new')."
-                : !_functions.IsOpen(session, 95)
-                    ? "Rift Crisis feature is not unlocked yet. / La función Rift Crisis aún no está desbloqueada."
-                : stone?.Challenger != null
-                    ? "This Rift Stone is currently being challenged by another team. / Esta grieta ya está siendo desafiada."
-                : stone != null && MonsterService.Distance(session.Position.X, session.Position.Z, stone.Point.X, stone.Point.Z) > 10f
-                    ? "You are too far from the Rift Stone. / Estás demasiado lejos de la grieta."
-                : null;
-            if (hint != null) await GmCommands.ReplyAsync(session, hint);
-        }
         return true;
     }
 
@@ -271,26 +256,7 @@ public sealed partial class TimedBattleService
         if (error == 0 && req.InitData?.HiddenTreasureInitData is { PlayerIds.Count: > 0 } init
             && !init.PlayerIds.Order().SequenceEqual(members.Select(m => m.Role!.Id).Order())) error = ErrorCodes.Parameter;
         await session.SendGameAsync(DungeonService.Enter, new EnterDungeonRsp { Result = error });
-        if (error != 0)
-        {
-            if (session.Role != null)
-            {
-                var (least, most) = RiftPartySize();
-                string? hint = error switch
-                {
-                    ErrorCodes.RiftNoParty => FormattableString.Invariant($"Rift Challenge requires a party of {least}-{most} players on this map (GM: '!rift party 1' for solo) / Requiere grupo de {least}-{most} jugadores (usa '!rift party 1' para solo)."),
-                    ErrorCodes.NotPartyLeader => "Only the party leader can initiate the Rift Challenge. / Solo el líder del grupo puede iniciar el desafío de la grieta.",
-                    ErrorCodes.RiftPartyTooSmall => FormattableString.Invariant($"Rift Challenge requires at least {least} party members on this map. / Se necesitan al menos {least} miembros en el mapa."),
-                    ErrorCodes.RiftPartyTooLarge => FormattableString.Invariant($"Rift Challenge allows at most {most} party members. / El grupo no puede tener más de {most} miembros."),
-                    ErrorCodes.FeatureUnavailable when session.Progress?.Level < 44 => FormattableString.Invariant($"Rift Crisis requires Base Level 44 (your level: {session.Progress.Level}) / Requiere Nivel Base 44 (tu nivel: {session.Progress.Level})."),
-                    ErrorCodes.FeatureUnavailable when !_schedule.IsOpen(200) => "Rift Crisis is closed (open 10:00-22:00 server time). / Rift Crisis está cerrado (horario 10:00-22:00).",
-                    ErrorCodes.RiftStoneTaken => "This Rift Stone is currently being challenged by another team. / Esta grieta ya está siendo desafiada por otro grupo.",
-                    _ => null
-                };
-                if (hint != null) await GmCommands.ReplyAsync(session, hint);
-            }
-            return true;
-        }
+        if (error != 0) return true;
         stone!.Challenger = session;
         PostRiftState(stone);
         if (members.Length == 1) { await BeginTreasureAsync(session, members, stone); return true; }
