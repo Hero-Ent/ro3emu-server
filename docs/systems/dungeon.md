@@ -119,7 +119,8 @@ Reconstructed story encounters (`ReconstructedDungeons`, switch `Ro3Emu:Reconstr
 - Not reconstructed as monster waves (listed in the file): pure scripted scenes without a fight (ant nest
   exploration, Deniro ride, Louie's game, Moonlight Flower's hide-and-seek), the MVP party event, the Ring Test map and
   scenes without points. The four scenes are rebuilt as scripted scenes (below).
-  Airship cannons, allied NPC companions, the Professor rescue and the Goblin Forest transfer are not reproduced.
+  Allied NPC companions and the Goblin Forest transfer are not reproduced. The airship's cannons and the Professor's
+  rescue in Maya's nest are played as scripted stages (below).
 - The task widget: each reconstructed wave names the DungeonQuestConfig quest it plays. 30401 carries var 10001
   `PDungeonQuestIdList` (the scene's quests up to the current one; the widget shows the last one's title and goals)
   and var 10003 `PDungeonQuestGoalParamList` (the wave's kills and size, the goal's "(done/total)"). Seen live: the
