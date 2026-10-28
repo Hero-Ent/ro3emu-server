@@ -162,10 +162,16 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
   bubble. `ScriptedScenePacePercent` shortens these timers for tests.
 - Louie's shell game in the Pharaoh branch story (3120703, entered by task 205170 'A New Round') reuses the Culvert's
   gang, rings and Bells on the Culvert editor's layout moved 5 m south (`sc_pm_branchstory_sphinx_001`). It plays two
-  rounds, each won by Katie's ring (400134, dungeon message 11); the other rings (message 12) change nothing and the
-  round goes on. Guessed: the two rounds (from Louis's lines 'Let's go again' and 'I give up'), where Katie hides in
-  each round (the east Bell, then the west one) and the Bell row 400138. Louis's lines, the bubbles and the right/wrong
-  effects (buffs 5402101, 5402201) are not shown.
+  rounds, each won by Katie's ring (400134, dungeon message 11); the other rings (message 12) do not end the round.
+  Louis speaks through the step's `react` (DungeonService.Reaction): his Secretary rows go out as 1022 with Louie's uid,
+  round 1 opening with 5310008 'Let's start the game!' and 5310002 'Guess which Bell my cat is hiding in!' (each once
+  the previous one's `_iTime` has run out), round 2 with 5310002; a wrong ring answers 5310004 'Sorry, wrong guess!'
+  and shatters the Bell under it (buff 5402201, SXGD_WRONG); Katie's ring answers 5310003 'Congratulations ...' in round
+  1 and 5310009 'Darn ... I give up.' in round 2 and lights her Bell (5402101, SXGD_RIGHT), and the next round (or the
+  settlement) waits until that line's `_iTime` has run out. Guessed: the two rounds (from Louis's lines 'Let's go again'
+  and 'I give up'), where Katie hides in each round (the east Bell, then the west one), the Bell row 400138, and when
+  each line and effect goes out; the effects have not been checked in the live client. The bubbles 5310019-5310033 are
+  not sent.
 - Five story dungeons that were monster waves (or bare point respawns) now play their scripted stages around the
   fights, each with its evidence and guessed parts in the file:
   - Maya's nest (1000401): Maya, then 'Find the Professor' (within 10 m of the egg point), 'Free the Ant Egg' (5300056,

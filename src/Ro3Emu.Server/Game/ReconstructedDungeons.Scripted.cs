@@ -32,11 +32,29 @@ public sealed partial class ReconstructedDungeons
     /// casts a skill at the nearest monster of the step's fight (the airship's cannons); with Shots above 0, that many
     /// strikes defeat a monster whatever the skill's damage. <paramref name="Seek"/>: the step is a hide-and-seek game
     /// whose hiding places are its Point triggers; walking there does not complete it, winning the game does.
+    /// <paramref name="React"/>: what the step's speaker says, and the effect shown, when it begins, when an ignored event
+    /// arrives and when it completes.
     /// </summary>
     public sealed record ScriptedStep(string Stage, int Quest, (int Done, int Total) Goal, IReadOnlyList<SceneActor> Actors,
         long Story, IReadOnlyList<StepTrigger> Complete, IReadOnlyList<StepTrigger> Ignore, long TeleportAfter,
         IReadOnlyList<Spawn> Fight, bool All, IReadOnlyList<(long Interaction, long Skill, int Shots)>? Strikes = null,
-        Seek? Seek = null, Shelter? Shelter = null);
+        Seek? Seek = null, Shelter? Shelter = null, Reaction? React = null);
+
+    /// <summary>
+    /// A step's reactions (inferred, Louie's 3120703 shell game: his lines and the right/wrong Bell effects are client rows
+    /// that nothing in the client sends). <paramref name="Speaker"/> is the step's actor whose uid the lines carry;
+    /// <paramref name="Start"/> ChatConfig rows go out one after another when the step begins, each when the previous one's
+    /// _iTime has run out. <paramref name="Ignored"/> answers an event the step ignores, <paramref name="Complete"/> the
+    /// event that completes it.
+    /// </summary>
+    public sealed record Reaction(int Speaker, IReadOnlyList<int> Start, Response? Ignored, Response? Complete);
+
+    /// <summary>
+    /// One reaction: the ChatConfig row <paramref name="Say"/> (0: none) and the BuffConfig row <paramref name="Buff"/>
+    /// (0: none) put on the step's <paramref name="On"/> actor that stands at the point of the actor the player used. A
+    /// completing reaction holds the next step (or the settlement) until its line's _iTime has run out.
+    /// </summary>
+    public sealed record Response(int Say, int Buff, int On);
 
     /// <summary>
     /// Cover from a boss's sweeping attack (inferred, the story Pharaoh's 3120702 after the raid Pharaoh's "Pharaoh is
@@ -123,8 +141,19 @@ public sealed partial class ReconstructedDungeons
                 ? new Shelter(shelter.GetProperty("boss").GetInt32(), shelter.GetProperty("cover").GetInt32(), shelter.GetProperty("tip").GetInt32(),
                     shelter.GetProperty("skill").GetInt64(), shelter.GetProperty("everyMs").GetInt32(), shelter.GetProperty("warnMs").GetInt32(),
                     shelter.GetProperty("width").GetSingle(), shelter.GetProperty("depth").GetSingle())
-                : null);
+                : null,
+            s.TryGetProperty("react", out var react) ? ParseReaction(react) : null);
     }
+
+    private static Reaction ParseReaction(JsonElement r) => new(r.GetProperty("speaker").GetInt32(),
+        r.TryGetProperty("start", out var start) ? [.. start.EnumerateArray().Select(v => v.GetInt32())] : [],
+        r.TryGetProperty("ignored", out var ignored) ? ParseResponse(ignored) : null,
+        r.TryGetProperty("complete", out var complete) ? ParseResponse(complete) : null);
+
+    private static Response ParseResponse(JsonElement r) => new(
+        r.TryGetProperty("say", out var say) ? say.GetInt32() : 0,
+        r.TryGetProperty("buff", out var buff) ? buff.GetInt32() : 0,
+        r.TryGetProperty("on", out var on) ? on.GetInt32() : 0);
 
     private static IReadOnlyList<StepTrigger> Triggers(JsonElement step, string field)
     {
