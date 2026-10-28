@@ -237,37 +237,41 @@ public sealed partial class GroupContentTests : IAsyncLifetime
         Assert.Equal(1005, saved.CasualMmr);
     }
 
-    /// <summary>Each camp's 30441 Virtual team roster groups a real party into one squad and a lone player into its
-    /// own; the squad holding the match-wide leaderGuid is the lowest-indexed one.</summary>
+    /// <summary>Each camp's 30441 Virtual team roster keeps a real party in one squad and packs lone players into the
+    /// free slots, five to a squad, with team-wide positions; the squad holding the leaderGuid is the lowest-indexed one.</summary>
     [ClientDataFact]
     public async Task MockBattleGivesEachCampAVirtualTeamRosterGroupedByRealParty()
     {
         await using var alice = await InWorld("Alice");
         await using var carol = await InWorld("Carol");
         await using var bob = await InWorld("Bob");
-        foreach (var bot in new[] { alice, carol, bob }) await Gm(bot, "!lvl 99");
+        await using var dave = await InWorld("Dave");
+        foreach (var bot in new[] { alice, carol, bob, dave }) await Gm(bot, "!lvl 99");
         await Party(alice, carol);
         await Gm(alice, "!casual open");
         Assert.Equal(0, (await SignUp(alice)).Result);
         Assert.Equal(0, (await SignUp(bob)).Result);
+        Assert.Equal(0, (await SignUp(dave)).Result);
         await Gm(alice, "!casual start");
-        foreach (var bot in new[] { alice, carol, bob }) await Load(bot, CasualBattleService.Scene);
+        foreach (var bot in new[] { alice, carol, bob, dave }) await Load(bot, CasualBattleService.Scene);
 
         long room = Session(alice).InstanceId;
-        long aliceId = (long)alice.Self!.Uuid, carolId = (long)carol.Self!.Uuid, bobId = (long)bob.Self!.Uuid;
+        long aliceId = (long)alice.Self!.Uuid, carolId = (long)carol.Self!.Uuid, bobId = (long)bob.Self!.Uuid, daveId = (long)dave.Self!.Uuid;
         var mine = await Next(alice, DungeonService.TeamInfo, DungeonTeamInfoNotify.Parser);
         Assert.Equal(room, mine.TeamId);
         Assert.Equal(2, (int)mine.TeamType);
         var squad = Assert.Single(mine.Squads).Value;
         Assert.Equal(aliceId, squad.SquadLeaderGuid);
         Assert.Equal([aliceId, carolId], squad.Members.Keys.Order());
+        Assert.Equal([0, 1], squad.Members.Values.Select(m => m.Position).Order());
         Assert.Equal(mine.LeaderGuid, squad.SquadLeaderGuid);
 
-        var theirs = await Next(bob, DungeonService.TeamInfo, DungeonTeamInfoNotify.Parser);
+        // The two lone players share one squad, in slots 0 and 1 (the client groups slots by five: LC_TeamHelper).
+        var theirs = await Next(bob, DungeonService.TeamInfo, DungeonTeamInfoNotify.Parser, n => n.Squads.Values.Sum(s => s.Members.Count) == 2);
         Assert.Equal(room, theirs.TeamId);
-        var solo = Assert.Single(theirs.Squads).Value;
-        Assert.Equal(bobId, solo.SquadLeaderGuid);
-        Assert.Equal(bobId, Assert.Single(solo.Members).Key);
+        var lone = Assert.Single(theirs.Squads).Value;
+        Assert.Equal([bobId, daveId], lone.Members.Keys.Order());
+        Assert.Equal([0, 1], lone.Members.Values.Select(m => m.Position).Order());
     }
 
     /// <summary>30451 DUNGEON_TEAM_TRANSFER: only the Virtual team's current leader may hand the role to another
