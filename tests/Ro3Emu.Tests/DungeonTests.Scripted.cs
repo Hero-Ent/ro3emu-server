@@ -269,6 +269,8 @@ public sealed partial class DungeonTests
         await PlotEnd(alice, 140020);
 
         await Stage(alice, 4, quest: 2);
+        var device = Assert.Single(await ActorsIn(alice, 1));
+        Assert.Equal((400046, 37L), (device.NpcId, device.Point));
         var instrument = Service<WorldData>().Map(scene)!.Points[37];
         await WalkTo(alice, instrument.X + 6, instrument.Y, instrument.Z); // not yet within its 4 m
         await Task.Delay(200);
