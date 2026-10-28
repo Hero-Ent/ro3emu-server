@@ -33,19 +33,21 @@ public sealed class Ro1AggressiveMonstersTests
             Assert.False(string.IsNullOrWhiteSpace(m.Name), $"{npcId}: name");
             Assert.False(string.IsNullOrWhiteSpace(m.AegisName), $"{npcId}: aegisName");
             Assert.False(string.IsNullOrWhiteSpace(m.Ro1Name), $"{npcId}: ro1 name");
-            Assert.Equal("English name", m.Match);
+            Assert.True(m.Match.StartsWith("English name", StringComparison.Ordinal) || m.Match.StartsWith("variant:", StringComparison.Ordinal),
+                $"{npcId}: match {m.Match}");
+            Assert.Contains("rAthena", m.Why, StringComparison.Ordinal);
             Assert.False(string.IsNullOrWhiteSpace(m.Why), $"{npcId}: why");
         }
 
-        // The file names its source, and every unmatched name its reason.
+        // The file names its sources, and every unmatched name (none today) its reason.
         using var stream = typeof(MonsterService).Assembly.GetManifestResourceStream(MonsterService.Ro1AggressiveResource)!;
         using var doc = JsonDocument.Parse(stream);
         string about = doc.RootElement.GetProperty("about").GetString()!;
         Assert.Contains("https://raw.githubusercontent.com/rathena/rathena/master/db/pre-re/mob_db.yml", about);
         Assert.Contains("https://raw.githubusercontent.com/rathena/rathena/master/doc/mob_db_mode_list.txt", about);
+        Assert.Contains("https://github.com/rathena/rathena/tree/master/npc/pre-re/mobs", about);
         Assert.Contains("not client evidence", about, StringComparison.OrdinalIgnoreCase);
         var unmatched = doc.RootElement.GetProperty("unmatched").EnumerateObject().ToArray();
-        Assert.NotEmpty(unmatched);
         Assert.All(unmatched, u => Assert.False(string.IsNullOrWhiteSpace(u.Value.GetProperty("reason").GetString())));
         Assert.All(unmatched, u => Assert.False(monsters.ContainsKey(int.Parse(u.Name, System.Globalization.CultureInfo.InvariantCulture))));
     }
