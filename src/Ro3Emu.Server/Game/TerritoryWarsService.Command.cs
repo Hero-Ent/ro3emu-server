@@ -34,6 +34,7 @@ public sealed partial class TerritoryWarsService
         public Dictionary<long, Vec3?[]> CommanderMarks { get; } = [];
         public Dictionary<long, Vec3?[]> TeamMarks { get; } = [];
         public Dictionary<long, long[]> CommandMarks { get; } = [];
+        public Dictionary<long, CommandSkillState> Skills { get; } = [];
     }
 
     private readonly record struct CommandSide(CommandBoard Board, long Guild, GameSession[] Members);
@@ -173,7 +174,8 @@ public sealed partial class TerritoryWarsService
         return notify;
     }
 
-    /// <summary>On loading into the battle: the side's commander marks, the party's own marks and the command letters.</summary>
+    /// <summary>On loading into the battle: the side's commander marks, the party's own marks, the command letters and the
+    /// command skills.</summary>
     private async Task SendCommandBoardAsync(GameSession s)
     {
         if (CommandSideOf(s) is not { } side) return;
@@ -182,5 +184,6 @@ public sealed partial class TerritoryWarsService
         await s.SendGameAsync(MarkNotify, MarkSnapshot(team > 0 ? side.Board.TeamMarks.GetValueOrDefault(team) : null,
             DungeonMarkType.DungeonMarkTeamLeader));
         await s.SendGameAsync(CommandMarkNotify, CommandMarkSnapshot(side.Board.CommandMarks.GetValueOrDefault(side.Guild)));
+        await s.SendGameAsync(CommandSkillNotify, CommandSkillSnapshot(CommandSkillsOf(side), CommandRules(s), CommandNow));
     }
 }
