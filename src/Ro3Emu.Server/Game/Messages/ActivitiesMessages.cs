@@ -37,6 +37,8 @@ public sealed class ActivitiesMessages(PraiseService praise, CasualBattleService
             or DungeonService.HallOfFame or DungeonService.MarkBlessings or PraiseService.Praise);
         // Final Trial honor claims pay their awards (DungeonService.RealmOfGods reserves the role and the claim).
         routes.AdmitEconomic(id => id is DungeonService.ClaimHonor);
+        // Mock Battle's Virtual team leadership transfer touches no goods or currencies.
+        routes.AdmitRole(id => id is CasualBattleService.Transfer);
 
         routes.Map(82800, "genre", async (session, msgId, body) =>
         {
@@ -407,6 +409,10 @@ public sealed class ActivitiesMessages(PraiseService praise, CasualBattleService
         routes.Map(DungeonService.ClaimHonor, "dungeons", async (session, msgId, body) =>
         {
             await dungeons.ClaimHonorAsync(session, MultiDungeonClaimHonorAwardReq.Parser.ParseFrom(body.Span));
+        });
+        routes.Map(CasualBattleService.Transfer, "dungeons", async (session, msgId, body) =>
+        {
+            await casual.TransferAsync(session, DungeonTeamTransferReq.Parser.ParseFrom(body.Span));
         });
         routes.Map(PraiseService.Praise, "praise", async (session, msgId, body) =>
         {
