@@ -647,13 +647,12 @@ public sealed partial class CombatService : IGameTicker
         : Math.Clamp(1 - b.Flee / (double)(b.Flee + 600) + a.Hit / (double)(a.Hit + 600) * 0.5, 0.3, 1.0);
 
     /// <summary>
-    /// _iSkillHit 10000 never misses, except on a normal attack (_iIsNormalAtk 1). Nearly every monster's normal attack
-    /// carries 10000 (280 of 282), which made FLEE useless against monsters while the character sheet shows it as dodge
-    /// (#bug-reports "163 FLEE, every attack hits"). (inferred) A normal attack always draws the FLEE roll, like the
-    /// players' own normal attacks (all _iSkillHit 0).
+    /// _iSkillHit 10000 never misses (inferred). The data sets it per row: nearly every damaging skill, physical and
+    /// magic, and 444 monster normal attacks carry 10000; the players' normal attacks and 55 monster ones (MVP swings,
+    /// GvG and Pet Tower monsters) carry 0 and roll against FLEE. So FLEE dodges players and those monsters, not the
+    /// rest, as the data was set up (#bug-reports "163 FLEE, every attack hits" is that rule, not a bug).
     /// </summary>
-    internal static bool NeverMisses(JsonElement skill) =>
-        new Data.Config.SkillConfig(skill) is { SkillHit: >= 10000, IsNormalAtk: not 1 };
+    internal static bool NeverMisses(JsonElement skill) => new Data.Config.SkillConfig(skill).SkillHit >= 10000;
 
     private static double CritRate(Fighter a, Fighter b, JsonElement skill) =>
         Math.Max(0, a.Cri - b.ResCri) / 10000.0 * GameData.Int(skill, "_iSkillCri") / 10000.0;

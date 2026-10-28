@@ -6,9 +6,9 @@ using Ro3Emu.Server.Game;
 namespace Ro3Emu.Tests;
 
 /// <summary>
-/// #bug-reports "I have 163 Flee ... Roda Frog (Level 13) ... Every single attack hits me": almost every monster's
-/// normal attack carries _iSkillHit 10000, which skipped the hit roll, so FLEE never dodged a monster. A normal attack
-/// now always draws the FLEE roll; a skill with _iSkillHit 10000 still never misses.
+/// #bug-reports "I have 163 Flee ... Roda Frog (Level 13) ... Every single attack hits me". The data decides per skill
+/// row: _iSkillHit 10000 never misses (nearly every damaging skill and most monster normal attacks), 0 rolls against
+/// FLEE (the players' normal attacks and some monsters': MVP swings, GvG and Pet Tower monsters).
 /// </summary>
 public sealed class FleeTests
 {
@@ -20,19 +20,23 @@ public sealed class FleeTests
     }
 
     [ClientDataFact]
-    public void AMonsterNormalAttackCanBeDodged()
+    public void AFieldMonsterNormalAttackWithFullSkillHitNeverMisses()
     {
         var frog = Data().Row("SkillConfig", 5002101)!.Value; // Roda Frog's normal attack
+        Assert.Equal(1, GameData.Int(frog, "_iIsNormalAtk"));
         Assert.Equal(10000, GameData.Int(frog, "_iSkillHit"));
-        Assert.False(CombatService.NeverMisses(frog));
+        Assert.True(CombatService.NeverMisses(frog));
     }
 
     [ClientDataFact]
-    public void ASkillWithFullSkillHitStillNeverMisses()
+    public void AnMvpSwingAndAPlayerNormalAttackRollAgainstFlee()
     {
-        var skill = Data().Row("SkillConfig", 1510205)!.Value; // Sonic Blow
-        Assert.Equal(10000, GameData.Int(skill, "_iSkillHit"));
-        Assert.Equal(0, GameData.Int(skill, "_iIsNormalAtk"));
-        Assert.True(CombatService.NeverMisses(skill));
+        var data = Data();
+        var mvp = data.Row("SkillConfig", 4121501)!.Value; // MVPAttack
+        Assert.Equal(1, GameData.Int(mvp, "_iIsNormalAtk"));
+        Assert.False(CombatService.NeverMisses(mvp));
+        var swordman = data.Row("SkillConfig", 1000001)!.Value; // a player's normal attack
+        Assert.False(CombatService.NeverMisses(swordman));
+        Assert.True(CombatService.NeverMisses(data.Row("SkillConfig", 1510205)!.Value)); // Sonic Blow
     }
 }
