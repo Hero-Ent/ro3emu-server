@@ -178,7 +178,7 @@ internal sealed class EscrowEconomyTransactionPlan(RoleItemPlan child, EscrowEco
                 "GuildMaterialContributionPlan" or "GuildCaravanRewardPlan" or "GuildEventAppendPlan" or
                 "FriendGiftWritePlan" or "FriendGiftGuardPlan" or "FriendGiftSourcePlan" or
                 "ActivityEveGlobalPlan" or "ActivityPreDonationPlan" or "ActivityInventoryGuardPlan" or
-                "CaravanMemberWritePlan"))
+                "CaravanMemberWritePlan" or "GiftCodeRedeemPlan"))
                 throw new InvalidOperationException("Unclassified E03 typed child: " + name);
         }
         foreach (var blob in child.Parts.OfType<RoleBlobWritePlan>())

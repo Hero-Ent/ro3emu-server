@@ -370,4 +370,14 @@ public static class ErrorCodes
     public const int LifeRecipe = 6610, LifeVigor = 6611, LifeWrongJob = 6613, LifeCollectionLocked = 6614;
     public const int LifeRequirements = 6618, LifeAlreadyLearned = 6619, LifeCollectionLearned = 6623;
     public const int LifeInvalidJob = 6624, LifeVigorOverflow = 6627;
+
+    // HTTP POST /gift-card/use/v2 (GiftCodeEndpoints). LC_RedemptionCodeManager's enum_GiftCardErrCode holds only the two
+    // success codes; any other `code` is a refusal and the client shows the response's `message` verbatim. The refusal
+    // values below are (inferred): the original server's codes are not in the client.
+    public const int GiftCardUseSuccess = 1959;     // enum_GiftCardErrCode.GiftCardUseSuccess
+    public const int GiftCardUseSuccessLeft = 1960; // enum_GiftCardErrCode.GiftCardUseSuccessLeft (never sent)
+    public const int GiftCardBadRequest = 1961, GiftCardBadCredentials = 1962, GiftCardRoleNotOwned = 1963;
+    public const int GiftCardUnknown = 1964, GiftCardDisabled = 1965, GiftCardNotStarted = 1966, GiftCardExpired = 1967;
+    public const int GiftCardExhausted = 1968, GiftCardAlreadyRedeemed = 1969, GiftCardInvalidItems = 1970;
+    public const int GiftCardRateLimited = 1971, GiftCardFailed = 1972;
 }
