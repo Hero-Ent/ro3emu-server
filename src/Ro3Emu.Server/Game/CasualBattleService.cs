@@ -358,7 +358,9 @@ public sealed class CasualBattleService : IGameTicker
 
     /// <summary>
     /// 30451 DUNGEON_TEAM_TRANSFER: the Virtual team's current leader (TeamLeader) hands the role off to another
-    /// present member of the same camp. No client-visible result mapping is named for this response; ErrorCodes.
+    /// present member of the same camp. It changes the match, not just the sender's role, so it keeps the default
+    /// realm-wide admission like the match's own timeline work (PostLegacy). No client-visible result mapping is named
+    /// for this response; ErrorCodes.
     /// NoPermission (not the leader) and ErrorCodes.Parameter (no such present camp member) are (inferred).
     /// </summary>
     public async Task TransferAsync(GameSession s, DungeonTeamTransferReq req)
