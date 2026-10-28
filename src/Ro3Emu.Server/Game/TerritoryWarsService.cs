@@ -28,6 +28,7 @@ public sealed partial class TerritoryWarsService : IGameTicker
     private readonly RoleStore _roles;
     private readonly GuildStore _guildStore;
     private readonly GuildService _guilds;
+    private readonly TeamService _teams;
     private readonly CharacterService _character;
     private readonly FunctionService _functions;
     private readonly TerritoryWarsClock _clock;
@@ -169,14 +170,14 @@ public sealed partial class TerritoryWarsService : IGameTicker
         GuildService guilds, CharacterService character, FunctionService functions, TerritoryWarsClock clock, TimedTodoSchedule siegeSchedule,
         SessionRegistry sessions, InstanceService instances, SceneService scene, WorldData maps, World world,
         MonsterService monsters, CombatService combat, BuffService buffs, RewardService rewards, MailService mail, NewActivityService activities,
-        GameLoop loop, ILogger<TerritoryWarsService> log)
+        TeamService teams, GameLoop loop, ILogger<TerritoryWarsService> log)
     {
         this._data = data; this._accounts = accounts; this._roles = roles; this._guildStore = guildStore;
         this._guilds = guilds; this._character = character; this._functions = functions; this._clock = clock;
         this._siegeSchedule = siegeSchedule;
         this._sessions = sessions; this._instances = instances; this._scene = scene; this._maps = maps;
         this._world = world; this._monsters = monsters; this._buffs = buffs; this._rewards = rewards; this._mail = mail;
-        this._activities = activities;
+        this._activities = activities; this._teams = teams;
         activities.TerritoryWarState = BuildActivityState;
         this._loop = loop; this._log = log;
         state = accounts.ReadSync<byte[]?>(new TerritoryRealmReadPlan(RealmStateKind.TerritoryWars)) is { } saved
@@ -357,7 +358,8 @@ public sealed partial class TerritoryWarsService : IGameTicker
             or QueueNotify or QueueEnter or QueueCancel or QueueArea or SubmitDrop or Bid or AuctionQuery or AutoSet
             or AutoCancel or AutoQuery or AutoNotify or RankNotify or WarHall or SiegeBaseQuery or SiegeHistoryQuery or SiegeResultNotify
             or SiegeToolAssign or SiegeToolExchange or SiegeToolList or SiegeToolPermissionNotify or SiegeToolChangeNotify
-            or SiegeToolPrepay or SiegeToolBuild or SiegeToolCancel or SiegeToolAdd or SiegeVehicleUse;
+            or SiegeToolPrepay or SiegeToolBuild or SiegeToolCancel or SiegeToolAdd or SiegeVehicleUse
+            or SetMark or GatherMark or CommandMark;
 
     /// <summary>Route only shared packets that this territory family can actually consume.</summary>
     internal bool IsSharedOwnerRequest(GameSession session, uint id, ReadOnlyMemory<byte> body)
@@ -422,6 +424,9 @@ public sealed partial class TerritoryWarsService : IGameTicker
                 case SiegeToolCancel: await Send(s, id, new GuildWartimeStoreItemCancelUseResp { Result = ErrorCodes.FeatureUnavailable }); break;
                 case SiegeToolAdd: await Send(s, id, new GuildWartimeStoreItemAddResp { Result = ErrorCodes.FeatureUnavailable }); break;
                 case SiegeVehicleUse: await Send(s, id, new GuildVehicleUseRsp { Result = ErrorCodes.FeatureUnavailable }); break;
+                case SetMark: await SetMarkAsync(s, DungeonSetMarkPosReq.Parser.ParseFrom(body.Span)); break;
+                case GatherMark: await GatherAsync(s, DungeonGatherMarkPosReq.Parser.ParseFrom(body.Span)); break;
+                case CommandMark: await CommandMarkAsync(s, GvgWarUpdateCommandMarkReq.Parser.ParseFrom(body.Span)); break;
             }
         }
         finally { stagedTerritoryState.Dispose(); _gate.Release(); reservation?.Dispose(); }
