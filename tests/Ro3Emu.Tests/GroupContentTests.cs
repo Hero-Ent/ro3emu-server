@@ -237,6 +237,39 @@ public sealed partial class GroupContentTests : IAsyncLifetime
         Assert.Equal(1005, saved.CasualMmr);
     }
 
+    /// <summary>Each camp's 30441 Virtual team roster groups a real party into one squad and a lone player into its
+    /// own; the squad holding the match-wide leaderGuid is the lowest-indexed one.</summary>
+    [ClientDataFact]
+    public async Task MockBattleGivesEachCampAVirtualTeamRosterGroupedByRealParty()
+    {
+        await using var alice = await InWorld("Alice");
+        await using var carol = await InWorld("Carol");
+        await using var bob = await InWorld("Bob");
+        foreach (var bot in new[] { alice, carol, bob }) await Gm(bot, "!lvl 99");
+        await Party(alice, carol);
+        await Gm(alice, "!casual open");
+        Assert.Equal(0, (await SignUp(alice)).Result);
+        Assert.Equal(0, (await SignUp(bob)).Result);
+        await Gm(alice, "!casual start");
+        foreach (var bot in new[] { alice, carol, bob }) await Load(bot, CasualBattleService.Scene);
+
+        long room = Session(alice).InstanceId;
+        long aliceId = (long)alice.Self!.Uuid, carolId = (long)carol.Self!.Uuid, bobId = (long)bob.Self!.Uuid;
+        var mine = await Next(alice, DungeonService.TeamInfo, DungeonTeamInfoNotify.Parser);
+        Assert.Equal(room, mine.TeamId);
+        Assert.Equal(2, (int)mine.TeamType);
+        var squad = Assert.Single(mine.Squads).Value;
+        Assert.Equal(aliceId, squad.SquadLeaderGuid);
+        Assert.Equal([aliceId, carolId], squad.Members.Keys.Order());
+        Assert.Equal(mine.LeaderGuid, squad.SquadLeaderGuid);
+
+        var theirs = await Next(bob, DungeonService.TeamInfo, DungeonTeamInfoNotify.Parser);
+        Assert.Equal(room, theirs.TeamId);
+        var solo = Assert.Single(theirs.Squads).Value;
+        Assert.Equal(bobId, solo.SquadLeaderGuid);
+        Assert.Equal(bobId, Assert.Single(solo.Members).Key);
+    }
+
     // ---- MVP likes ----
 
     private async Task Party(BotClient leader, params BotClient[] others)
