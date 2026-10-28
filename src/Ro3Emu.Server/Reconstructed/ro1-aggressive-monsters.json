@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "about": "RO1 reference, NOT client evidence (inferred, docs/research/world-core-evidence.md). The server makes a field monster attack on sight when its NPCConfig _iAI is 20000004 (MonsterService.AggressiveAi, three field monsters); with the switch on, the monsters below attack on sight too because their Ragnarok Online 1 counterpart does. Source: rAthena's pre-renewal monster database https://raw.githubusercontent.com/rathena/rathena/master/db/pre-re/mob_db.yml and its mode reference https://raw.githubusercontent.com/rathena/rathena/master/doc/mob_db_mode_list.txt, both fetched 2026-10-28. A RO1 monster is aggressive when its Modes set Aggressive, otherwise when its Aegis Ai type maps to a mode with MD_AGGRESSIVE (0x4): 04, 05, 08, 09, 10, 11, 12, 13, 19, 20, 21, 26, 27. Field monsters are NPCConfig rows with _iNPCType 1 that a scene editor spawns (m_kWorldMonsterSpawnPoints / m_kWorldMonsterSpawnGroups) or that have _iWildMonsters 1. They are matched by English name (NPCConfig _kName in Localization_en), case-insensitive and exact, to exactly one RO1 entry; a name with several RO1 entries or none is listed under unmatched with the reason, not guessed. The renewal database (db/re/mob_db.yml) agrees with pre-renewal on every matched monster. Counts: 21 aggressive (monsters), 38 matched but not aggressive in RO1 (notAggressive), 164 unmatched. Switch: Ro3Emu:Ro1AggressiveMonsters (off by default). Never mixed into client data. A name with several rAthena entries counts when every entry is aggressive. Bosses and elites (NPCConfig _iNPCSubType other than 1) are left out (listed under bosses): their fights keep the client's own AI.",
+  "about": "RO1 reference, NOT client evidence (inferred, docs/research/world-core-evidence.md). The server makes a field monster attack on sight when its NPCConfig _iAI is 20000004 (MonsterService.AggressiveAi, three field monsters); with the switch on, the monsters below attack on sight too because their Ragnarok Online 1 counterpart does. Source: rAthena's pre-renewal monster database https://raw.githubusercontent.com/rathena/rathena/master/db/pre-re/mob_db.yml and its mode reference https://raw.githubusercontent.com/rathena/rathena/master/doc/mob_db_mode_list.txt, both fetched 2026-10-28. A RO1 monster is aggressive when its Modes set Aggressive, otherwise when its Aegis Ai type maps to a mode with MD_AGGRESSIVE (0x4): 04, 05, 08, 09, 10, 11, 12, 13, 19, 20, 21, 26, 27. Field monsters are NPCConfig rows with _iNPCType 1 that a scene editor spawns (m_kWorldMonsterSpawnPoints / m_kWorldMonsterSpawnGroups) or that have _iWildMonsters 1. They are matched by English name (NPCConfig _kName in Localization_en), case-insensitive and exact, to exactly one RO1 entry; a name with several RO1 entries or none is listed under unmatched with the reason, not guessed. The renewal database (db/re/mob_db.yml) agrees with pre-renewal on every matched monster. Counts: 21 aggressive (monsters), 38 matched but not aggressive in RO1 (notAggressive), 164 unmatched. Switch: Ro3Emu:Ro1AggressiveMonsters (off by default). Never mixed into client data. A name with several rAthena entries counts when every entry is aggressive. Bosses and elites count like any other monster (owner's decision: Maya, an MVP, attacks on sight as in RO1).",
   "monsters": {
     "4940001": {
       "name": "Orc Baby",
@@ -32,6 +32,26 @@
       "match": "English name",
       "why": "every rAthena pre-re entry named Desert Wolf is aggressive (1106 DESERT_WOLF (aggressive), 1220 M_DESERT_WOLF (aggressive), 1432 G_DESERT_WOLF (aggressive), 1821 EVENT_DESERT_WOLF (aggressive)); the entry without a variant prefix is shown"
     },
+    "4940009": {
+      "name": "Minorous",
+      "ro1": {
+        "id": 1149,
+        "aegisName": "MINOROUS (aggressive)",
+        "name": "Minorous"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Minorous is aggressive (1149 MINOROUS (aggressive), 1461 G_MINOROUS (aggressive)); a boss or elite (NPCConfig _iNPCSubType 2, AI 20000014)"
+    },
+    "4940011": {
+      "name": "Goblin Leader",
+      "ro1": {
+        "id": 1299,
+        "aegisName": "GOBLIN_LEADER (aggressive)",
+        "name": "Goblin Leader"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Goblin Leader is aggressive (1299 GOBLIN_LEADER (aggressive), 1539 G_GOBLIN_LEADER (aggressive)); a boss or elite (NPCConfig _iNPCSubType 2, AI 20000014)"
+    },
     "4940013": {
       "name": "Orc Baby",
       "ro1": {
@@ -61,6 +81,36 @@
       },
       "match": "English name",
       "why": "every rAthena pre-re entry named Desert Wolf is aggressive (1106 DESERT_WOLF (aggressive), 1220 M_DESERT_WOLF (aggressive), 1432 G_DESERT_WOLF (aggressive), 1821 EVENT_DESERT_WOLF (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940021": {
+      "name": "Minorous",
+      "ro1": {
+        "id": 1149,
+        "aegisName": "MINOROUS (aggressive)",
+        "name": "Minorous"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Minorous is aggressive (1149 MINOROUS (aggressive), 1461 G_MINOROUS (aggressive)); a boss or elite (NPCConfig _iNPCSubType 2, AI 20000014)"
+    },
+    "4940022": {
+      "name": "Chimera",
+      "ro1": {
+        "id": 1283,
+        "aegisName": "CHIMERA (aggressive)",
+        "name": "Chimera"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Chimera is aggressive (1283 CHIMERA (aggressive), 1456 G_CHIMERA (aggressive)); a boss or elite (NPCConfig _iNPCSubType 2, AI 20000014)"
+    },
+    "4940023": {
+      "name": "Goblin Leader",
+      "ro1": {
+        "id": 1299,
+        "aegisName": "GOBLIN_LEADER (aggressive)",
+        "name": "Goblin Leader"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Goblin Leader is aggressive (1299 GOBLIN_LEADER (aggressive), 1539 G_GOBLIN_LEADER (aggressive)); a boss or elite (NPCConfig _iNPCSubType 2, AI 20000014)"
     },
     "4940025": {
       "name": "Orc Baby",
@@ -112,6 +162,36 @@
       "match": "English name",
       "why": "every rAthena pre-re entry named Orc Zombie is aggressive (1153 ORC_ZOMBIE (aggressive), 1463 G_ORC_ZOMBIE (aggressive)); the entry without a variant prefix is shown"
     },
+    "4940033": {
+      "name": "Minorous",
+      "ro1": {
+        "id": 1149,
+        "aegisName": "MINOROUS (aggressive)",
+        "name": "Minorous"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Minorous is aggressive (1149 MINOROUS (aggressive), 1461 G_MINOROUS (aggressive)); a boss or elite (NPCConfig _iNPCSubType 2, AI 20000014)"
+    },
+    "4940034": {
+      "name": "Chimera",
+      "ro1": {
+        "id": 1283,
+        "aegisName": "CHIMERA (aggressive)",
+        "name": "Chimera"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Chimera is aggressive (1283 CHIMERA (aggressive), 1456 G_CHIMERA (aggressive)); a boss or elite (NPCConfig _iNPCSubType 2, AI 20000014)"
+    },
+    "4940035": {
+      "name": "Goblin Leader",
+      "ro1": {
+        "id": 1299,
+        "aegisName": "GOBLIN_LEADER (aggressive)",
+        "name": "Goblin Leader"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Goblin Leader is aggressive (1299 GOBLIN_LEADER (aggressive), 1539 G_GOBLIN_LEADER (aggressive)); a boss or elite (NPCConfig _iNPCSubType 2, AI 20000014)"
+    },
     "4940040": {
       "name": "Raydric",
       "ro1": {
@@ -161,6 +241,36 @@
       },
       "match": "English name",
       "why": "every rAthena pre-re entry named Raydric Archer is aggressive (1276 RAYDRIC_ARCHER (aggressive), 1453 G_RAYDRIC_ARCHER (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940045": {
+      "name": "Kobold Leader",
+      "ro1": {
+        "id": 1296,
+        "aegisName": "KOBOLD_LEADER (aggressive)",
+        "name": "Kobold Leader"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Kobold Leader is aggressive (1296 KOBOLD_LEADER (aggressive), 1548 G_KOBOLD_LEADER (aggressive)); a boss or elite (NPCConfig _iNPCSubType 2, AI 20000014)"
+    },
+    "4940046": {
+      "name": "Kobold Leader",
+      "ro1": {
+        "id": 1296,
+        "aegisName": "KOBOLD_LEADER (aggressive)",
+        "name": "Kobold Leader"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Kobold Leader is aggressive (1296 KOBOLD_LEADER (aggressive), 1548 G_KOBOLD_LEADER (aggressive)); a boss or elite (NPCConfig _iNPCSubType 2, AI 20000014)"
+    },
+    "4940047": {
+      "name": "Khalitzburg",
+      "ro1": {
+        "id": 1132,
+        "aegisName": "KHALITZBURG (aggressive)",
+        "name": "Khalitzburg"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Khalitzburg is aggressive (1132 KHALITZBURG (aggressive), 1438 G_KHALITZBURG (aggressive)); a boss or elite (NPCConfig _iNPCSubType 2, AI 20000013))"
     },
     "4940048": {
       "name": "Isis",
@@ -242,6 +352,16 @@
       "match": "English name",
       "why": "every rAthena pre-re entry named Orc Skeleton is aggressive (1152 ORC_SKELETON (aggressive), 1462 G_ORC_SKELETON (aggressive)); the entry without a variant prefix is shown"
     },
+    "4940057": {
+      "name": "Maya",
+      "ro1": {
+        "id": 1147,
+        "aegisName": "MAYA",
+        "name": "Maya"
+      },
+      "match": "English name",
+      "why": "rAthena pre-re 1147 MAYA is aggressive; a boss or elite (NPCConfig _iNPCSubType 2, AI 20000014)"
+    },
     "4940059": {
       "name": "Sandman",
       "ro1": {
@@ -321,6 +441,36 @@
       },
       "match": "English name",
       "why": "every rAthena pre-re entry named Wind Ghost is aggressive (1263 WIND_GHOST (aggressive), 1450 G_WIND_GHOST (aggressive)); the entry without a variant prefix is shown"
+    },
+    "4940067": {
+      "name": "Gryphon",
+      "ro1": {
+        "id": 1259,
+        "aegisName": "GRYPHON (aggressive)",
+        "name": "Gryphon"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Gryphon is aggressive (1259 GRYPHON (aggressive), 1447 G_GRYPHON (aggressive)); a boss or elite (NPCConfig _iNPCSubType 2, AI 20000014)"
+    },
+    "4940068": {
+      "name": "Gryphon",
+      "ro1": {
+        "id": 1259,
+        "aegisName": "GRYPHON (aggressive)",
+        "name": "Gryphon"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Gryphon is aggressive (1259 GRYPHON (aggressive), 1447 G_GRYPHON (aggressive)); a boss or elite (NPCConfig _iNPCSubType 2, AI 20000014)"
+    },
+    "4940069": {
+      "name": "Rybio",
+      "ro1": {
+        "id": 1201,
+        "aegisName": "RYBIO (aggressive)",
+        "name": "Rybio"
+      },
+      "match": "English name",
+      "why": "every rAthena pre-re entry named Rybio is aggressive (1201 RYBIO (aggressive), 1483 G_RYBIO (aggressive)); a boss or elite (NPCConfig _iNPCSubType 2, AI 20000014)"
     },
     "5000019": {
       "name": "Familiar",
@@ -1504,68 +1654,6 @@
     "5000170": {
       "name": "King Dramoh",
       "reason": "no RO1 entry with this name"
-    }
-  },
-  "bosses": {
-    "4940009": {
-      "name": "Minorous",
-      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1149 MINOROUS (aggressive), 1461 G_MINOROUS (aggressive))"
-    },
-    "4940011": {
-      "name": "Goblin Leader",
-      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1299 GOBLIN_LEADER (aggressive), 1539 G_GOBLIN_LEADER (aggressive))"
-    },
-    "4940021": {
-      "name": "Minorous",
-      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1149 MINOROUS (aggressive), 1461 G_MINOROUS (aggressive))"
-    },
-    "4940022": {
-      "name": "Chimera",
-      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1283 CHIMERA (aggressive), 1456 G_CHIMERA (aggressive))"
-    },
-    "4940023": {
-      "name": "Goblin Leader",
-      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1299 GOBLIN_LEADER (aggressive), 1539 G_GOBLIN_LEADER (aggressive))"
-    },
-    "4940033": {
-      "name": "Minorous",
-      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1149 MINOROUS (aggressive), 1461 G_MINOROUS (aggressive))"
-    },
-    "4940034": {
-      "name": "Chimera",
-      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1283 CHIMERA (aggressive), 1456 G_CHIMERA (aggressive))"
-    },
-    "4940035": {
-      "name": "Goblin Leader",
-      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1299 GOBLIN_LEADER (aggressive), 1539 G_GOBLIN_LEADER (aggressive))"
-    },
-    "4940045": {
-      "name": "Kobold Leader",
-      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1296 KOBOLD_LEADER (aggressive), 1548 G_KOBOLD_LEADER (aggressive))"
-    },
-    "4940046": {
-      "name": "Kobold Leader",
-      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1296 KOBOLD_LEADER (aggressive), 1548 G_KOBOLD_LEADER (aggressive))"
-    },
-    "4940047": {
-      "name": "Khalitzburg",
-      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000013): left to the client's own AI; every RO1 entry of this name is aggressive (1132 KHALITZBURG (aggressive), 1438 G_KHALITZBURG (aggressive))"
-    },
-    "4940057": {
-      "name": "Maya",
-      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; RO1 counterpart 1147 MAYA is aggressive"
-    },
-    "4940067": {
-      "name": "Gryphon",
-      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1259 GRYPHON (aggressive), 1447 G_GRYPHON (aggressive))"
-    },
-    "4940068": {
-      "name": "Gryphon",
-      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1259 GRYPHON (aggressive), 1447 G_GRYPHON (aggressive))"
-    },
-    "4940069": {
-      "name": "Rybio",
-      "reason": "boss or elite (NPCConfig _iNPCSubType 2, AI 20000014): left to the client's own AI; every RO1 entry of this name is aggressive (1201 RYBIO (aggressive), 1483 G_RYBIO (aggressive))"
     }
   }
 }
