@@ -41,6 +41,10 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     }
 
     private const long UidBase = 1L << 41;
+    /// <summary>
+    /// (inferred) The only AI whose monsters attack on sight (Familiar, Thief Bug Male, Poison Spore). The client does not
+    /// establish it: AIConfig 20000004 and 20000001 (the passive field monsters) are identical in all their fields.
+    /// </summary>
     private const int AggressiveAi = 20000004;
 
     /// <summary>A walk segment is capped so a monster seen mid-way is re-synchronized soon.</summary>

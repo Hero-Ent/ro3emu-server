@@ -33,8 +33,8 @@ public sealed class ServerOptions
 
     /// <summary>Field monsters whose Ragnarok Online 1 counterpart is aggressive (rAthena pre-renewal mob_db, listed in
     /// Reconstructed/ro1-aggressive-monsters.json) attack on sight like the client's AIConfig 20000004 monsters. An RO1
-    /// reference, not client evidence (inferred); off by default, and off changes nothing.</summary>
-    public bool Ro1AggressiveMonsters { get; set; }
+    /// reference, not client evidence (inferred); on by default as a trial (owner's decision, 28.10), off changes nothing.</summary>
+    public bool Ro1AggressiveMonsters { get; set; } = true;
 
     /// <summary>Game-message JSON log (data/logs/traffic-*.jsonl): "off", "on" or a comma-separated account list.
     /// Formatting and writes run off the game loop; keep it off for load tests and production.</summary>
