@@ -525,12 +525,15 @@
       "evidence": [
         "DungeonQuestConfig 5300030, the scene's only quest: 1 'Complete Louie's game', goal [5,0,1] 'Find Kitty-Katie' (the Culvert's quest 1 texts). Task 205170 'A New Round' ('Play the shell game', target 'Complete the shell game') enters it by its accept and track action 3000 after 205160 'Help the Man'; 205180 'Return the Sword' follows on the field.",
         "Editor sc_pm_branchstory_sphinx_001 is the Culvert editor's layout moved 5 m south: born point 22 (56.5, 67.5) facing south; group 24 (25 centre, 26 west, 27 east at z 60, facing the born point), where the Culvert's story 1013 leaves Louie (centre), Martha (west) and Katie (east); group 28 (29 west, 30 centre, 31 east at z 50), where the Culvert's Bells stand; marks 33-35 (z 55) and 37 (28.8, 93.8). No region, guide or NPC list.",
-        "ChatConfig 5310002-5310004 and 5310008-5310009, Louis's lines in the side-story block with Moonlight Flower's (5310001, 5310005-5310007), which no client code or other config references: 'Let's start the game! Guess where my cat will move!', 'Guess which Bell my cat is hiding in!', 'Congratulations, you got it right! Let's go again, this time it'll be harder!', 'Sorry, wrong guess! Let's try again.', 'Darn, you got it right again! I give up.'; bubbles 5310019-5310033 (Katie's meows, Louie's and Martha's taunts, 'It's only the first round.').",
+        "ChatConfig 5310002-5310004 and 5310008-5310009, Louis's lines in the side-story block with Moonlight Flower's (5310001, 5310005-5310007), which no client code or other config references, all _iType 7 Secretary rows: 5310008 'Let's start the game! Guess where my cat will move!' (_iTime 3000), 5310002 'Guess which Bell my cat is hiding in!' (2000), 5310003 'Congratulations, you got it right! Let's go again—this time it'll be harder!' (5000), 5310004 'Sorry, wrong guess! Let's try again.' (5000), 5310009 'Darn, you got it right again! I give up.' (5000); bubbles 5310019-5310033 (_iType 2: Katie's meows, Louie's and Martha's taunts, 'It's only the first round.').",
         "BuffConfig 5402101 (sound SFX_IO_BRANCHSTORY_SXGD_RIGHT, effects fx_substorylingdang_qinzhu and fx_substory_true) and 5402201 (SXGD_WRONG, fx_substorylingdang_sui 'the bell shatters' and fx_substory_false); SXGD is the shell game.",
         "NPCs as in the Culvert: 400131 Louie, 400132 Martha, 400133 Katie (story units); rings 400134-400136 (auto dialogue 'Here's Katie the kitty!', 'Choose this one!' runs 211 TriggerNpcInteract on 5300040, 5300041 or 5300042, which send dungeon messages 11, 12 and 12); Bells 400137 and 400138, identical rows."
       ],
       "guessed": [
-        "Two rounds, from Louis's lines (right: 'Let's go again', right again: 'I give up'); a wrong guess (message 12) changes nothing and the round goes on ('Let's try again'). Louis's lines, the bubbles and the right/wrong effects (buffs 5402101, 5402201) are not shown: the engine sends no chat and reacts to no wrong guess.",
+        "Two rounds, from Louis's lines (right: 'Let's go again', right again: 'I give up'); a wrong guess (message 12) does not end the round ('Let's try again').",
+        "When Louis's lines go out, from what they say: round 1 opens with 'Let's start the game!' and then 'Guess which Bell my cat is hiding in!', each when the previous one's _iTime has run out; round 2 opens with the second only; a wrong guess answers 'Sorry, wrong guess!'; a right one 'Congratulations ...' in round 1 and 'Darn ...' in round 2, and the next round (or the settlement) waits until that line's _iTime has run out. They go out as 1022 with Louie's uid, as Moonlight Flower's do.",
+        "The right/wrong effects (buffs 5402101 SXGD_RIGHT, 5402201 SXGD_WRONG: their sound and effects play when the buff starts) are put on the Bell under the ring the player chose; the Bells of the next round drop them. Not checked in the live client.",
+        "The bubbles 5310019-5310033 are not sent: which unit says which, and when, is not in the client.",
         "Katie hides under the Bell straight ahead of where she stands (point 31, east) in round 1 and moves to the west Bell (point 29) in round 2; the shuffle is not animated. Louie and Martha watch from group 24; Katie, hidden, is not shown.",
         "The Bells are 400138, the second Bell row (the Culvert uses 400137), at group 28 like the Culvert's; the rings stand on them.",
         "Marks 33-35 and 37 are not used: the Culvert's mark 37 was the instrument, and this scene has no second quest."
@@ -554,7 +557,14 @@
           ],
           "ignore": [
             { "message": 12, "why": "the two other rings: a wrong guess, 'Let's try again'" }
-          ]
+          ],
+          "react": {
+            "speaker": 400131,
+            "start": [5310008, 5310002],
+            "ignored": { "say": 5310004, "buff": 5402201, "on": 400138 },
+            "complete": { "say": 5310003, "buff": 5402101, "on": 400138 },
+            "why": "Louie opens the game, 'Sorry, wrong guess!' and the shattering Bell for a wrong ring, 'Congratulations ... Let's go again' and the right Bell's effect for Katie's"
+          }
         },
         {
           "quest": 1,
@@ -574,7 +584,14 @@
           ],
           "ignore": [
             { "message": 12, "why": "a wrong guess, the round goes on" }
-          ]
+          ],
+          "react": {
+            "speaker": 400131,
+            "start": [5310002],
+            "ignored": { "say": 5310004, "buff": 5402201, "on": 400138 },
+            "complete": { "say": 5310009, "buff": 5402101, "on": 400138 },
+            "why": "'Guess which Bell ...' again, the same answer to a wrong ring, 'Darn, you got it right again! I give up.' for Katie's"
+          }
         }
       ]
     },
