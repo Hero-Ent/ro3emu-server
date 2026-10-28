@@ -45,7 +45,7 @@ public sealed partial class DungeonService
         : CompanionCreditAmong([.. Present(a).Where(s => a.Loaded.Contains(s) && !s.SceneLoading)]);
 
     internal static GameSession? CompanionCreditAmong(IReadOnlyList<GameSession> loaded) =>
-        loaded.FirstOrDefault(s => !s.Dead) ?? loaded.FirstOrDefault();
+        loaded.FirstOrDefault(s => !s.Dead) ?? (loaded.Count > 0 ? loaded[0] : null);
 
     /// <summary>A companion fell: it is no longer the step's, and its body leaves after the template's remain time.</summary>
     private Task CompanionFellAsync(Attempt a, CompanionUnit fallen)
