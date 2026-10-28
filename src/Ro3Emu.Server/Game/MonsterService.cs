@@ -25,6 +25,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     {
         this._reconstructed = reconstructed;
         _bossOptions = options?.Value.BossSkills ?? new BossSkillOptions();
+        _ro1Aggressive = Ro1Aggressive(options?.Value); // MonsterService.Ro1Aggression
         this._world = world;
         this._worldData = worldData;
         this._data = data;
@@ -118,7 +119,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
             Hit: attr.ContainsKey(109) ? A(109) : level + 1, Flee: attr.ContainsKey(110) ? A(110) : level, Cri: A(111),
             speed, (int)GameData.Int(npc, "_iElement"), (int)GameData.Int(npc, "_iRace"), (int)GameData.Int(npc, "_iSize"),
             Math.Max(1, (int)GameData.Int(npc, "_iCamp")),
-            Aggressive: ai == AggressiveAi,
+            Aggressive: ai == AggressiveAi || _ro1Aggressive.Contains(npcId), // the RO1 reference (inferred), when switched on
             RoamDistance: speed > 0 ? Cm("_iRoamDis", 0) : 0, RoamTimeMs: aiRow is { } r2 ? (int)Math.Max(2000, GameData.Int(r2, "_iRoamTime")) : 8000,
             ViewRange: Cm("_iViewRange", 5), LeashDistance: aiRow is { } r3 && r3.TryGetProperty("_iUnFightParam", out var uf) && uf.ValueKind == JsonValueKind.Array
                 && uf.GetArrayLength() > 0 && GameData.Number(uf[0]) is { } leash ? (float)leash / 100 : Cm("_iChaseDistance", 18),
