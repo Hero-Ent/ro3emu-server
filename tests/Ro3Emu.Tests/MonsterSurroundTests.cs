@@ -94,6 +94,44 @@ public sealed class MonsterSurroundTests
         await f.HitAsync(m);
     }
 
+    [Theory]
+    [InlineData(2f, 200, 1.5f, 3f, 5f)]
+    [InlineData(3f, 400, 1.5f, 3f, 5f)]
+    [InlineData(10f, 300, 2.5f, 5f, 14f)]
+    public async Task ASurroundingMonsterSwingsAsOftenAsAStraightOneAtAPlayerStrafingInReach(float reach, int speedCm,
+        float strafe, float pace, float away)
+    {
+        // 1 m spacing; the player strafes ±strafe m at pace m/s for 8 s (swing interval 2 s).
+        await using var f = await Fixture.StartAsync();
+        MonsterTemplate Tuned(MonsterTemplate t) => t with { AttackRange = reach, SpeedCm = speedCm };
+        var surrounding = await f.SpawnAsync(Surrounding, 90, spacing: 1, away: away, tune: Tuned);
+        var straight = await f.SpawnAsync(Straight, 90, away: away, tune: Tuned);
+        var swings = new Dictionary<MonsterUnit, int> { [surrounding] = 0, [straight] = 0 };
+        await f.Loop.InvokeAsync(() =>
+        {
+            var monsters = f.Monsters;
+            var attack = monsters.Attack!;
+            monsters.Attack = (m, p) =>
+            {
+                if (swings.TryGetValue(m, out int n)) swings[m] = n + 1;
+                return attack(m, p);
+            };
+            return Task.CompletedTask;
+        });
+        await f.EngageAsync([surrounding, straight]);
+        float phase = 0;
+        for (var end = DateTime.UtcNow.AddSeconds(8); DateTime.UtcNow < end;)
+        {
+            await Task.Delay(50);
+            phase += pace * 0.05f;
+            float x = PlayerX + strafe * MathF.Sin(phase / strafe);
+            await f.Loop.InvokeAsync(() => { f.Session.Position.X = x; return Task.CompletedTask; });
+        }
+        var (around, line) = await f.Read(() => (swings[surrounding], swings[straight]));
+        Assert.True(line >= 3, $"straight {line}");
+        Assert.True(Math.Abs(around - line) <= 1, $"surrounding {around}, straight {line}");
+    }
+
     /// <summary>
     /// Today's approach: on the line toward the monster's start, stopped at its first tick in reach (attack range
     /// + 0.5 m) or at the end of its walk, 0.8 of the attack range from the player.
@@ -137,7 +175,7 @@ public sealed class MonsterSurroundTests
 
         public GameSession Session => _host.Service<SessionRegistry>().All().Single(s => s.Role != null);
         public GameLoop Loop => _host.Service<GameLoop>();
-        private MonsterService Monsters => _host.Service<MonsterService>();
+        public MonsterService Monsters => _host.Service<MonsterService>();
 
         public static async Task<Fixture> StartAsync((int X0, int X1, int Z0, int Z1)? blocked = null)
         {
@@ -229,18 +267,21 @@ public sealed class MonsterSurroundTests
 
         private static string Key(long id) => id.ToString(CultureInfo.InvariantCulture);
 
-        /// <summary>A monster <see cref="Away"/> m from the player at <paramref name="bearing"/>°.</summary>
-        public Task<MonsterUnit> SpawnAsync(int npcId, float bearing, float? spacing = null) =>
+        /// <summary>A monster <paramref name="away"/> m (default <see cref="Away"/>) from the player at
+        /// <paramref name="bearing"/>°, reaching <see cref="Reach"/> unless <paramref name="tune"/> says otherwise.</summary>
+        public Task<MonsterUnit> SpawnAsync(int npcId, float bearing, float? spacing = null, float away = Away,
+            Func<MonsterTemplate, MonsterTemplate>? tune = null) =>
             Loop.InvokeAsync(async () =>
             {
                 var template = Monsters.Template(npcId) ?? throw new InvalidOperationException("No fixture monster.");
                 float a = bearing * MathF.PI / 180;
-                var at = new MapPoint(PlayerX + Away * MathF.Cos(a), 0, PlayerZ + Away * MathF.Sin(a), 0);
+                var at = new MapPoint(PlayerX + away * MathF.Cos(a), 0, PlayerZ + away * MathF.Sin(a), 0);
                 var tuned = template with
                 {
                     AttackRange = Reach,
                     SurroundDistance = spacing ?? template.SurroundDistance,
                 };
+                tuned = tune?.Invoke(tuned) ?? tuned;
                 return await Monsters.SpawnSingleAsync(Session.SceneEntry, npcId, at, Session.InstanceId,
                         customTemplate: tuned)
                     ?? throw new InvalidOperationException("Fixture monster could not spawn.");

@@ -593,10 +593,11 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         }
         float dist = Distance(m, target);
         if (m.Template.Skills != null && !m.SpecialsOwnedByMvp && TryBossSkill(m, target, null, dist, now)) return;
-        float reach = m.Template.AttackRange + 0.5f;
-        // AIConfig _iIsSurround: walk to a slot around the target instead (MonsterService.Surround).
-        if (SurroundSlot(m, target) is { } slot && WalksToSlot(m, map, slot, dist <= reach, now)) return;
-        if (dist <= reach)
+        bool inReach = dist <= m.Template.AttackRange + 0.5f;
+        // AIConfig _iIsSurround: walk to a slot around the target instead, between swings (MonsterService.Surround).
+        if (!(inReach && SwingHolds(m, now)) && SurroundSlot(m, target) is { } slot
+            && WalksToSlot(m, map, slot, inReach, now)) return;
+        if (inReach)
         {
             Swing(m, target, now);
             return;

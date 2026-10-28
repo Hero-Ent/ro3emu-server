@@ -27,16 +27,20 @@ Everything in this section is *(inferred)*.
 - **Which slot.** A monster takes the free slot whose angle is nearest its own bearing from the player. On a tie it
   takes the lower slot. Monsters attacking the same player share one ring when they have the same radius and slot
   count. When every slot is taken, the monster shares the nearest slot, the same stacking as the straight approach. It
-  keeps its slot until its target changes or it leaves the map.
+  keeps its slot until its target changes, it leaves the map, or it falls back to the straight approach.
 - **Walking.** The slot moves with the player. Out of reach, the monster walks to its slot instead of straight at the
-  player, in segments of at most 12 m, re-pathed every 400 ms. In reach, it finishes the walk to its slot and then
-  swings. While it stands still, it keeps swinging if the player moves a little: it stays put while its slot is no
-  farther than half the spacing and no farther than the gap between the ring and the attack range. Beyond that, it
-  walks back to its slot before its next swing.
+  player, in segments of at most 12 m, re-pathed every 400 ms.
+- **Swinging comes first.** In reach, the monster stops and swings whenever its swing is due, and stands for the
+  swing's action time (the skill's `_iActionTime`), exactly like a monster without surround. Between swings it walks to
+  its slot, and resumes that walk after a swing interrupts it. Once there, it stays put while the player moves a
+  little: while its slot is no farther than half the spacing and no farther than the gap between the ring and the
+  attack range. Beyond that, it walks to its slot again between swings. A monster whose action time fills its whole
+  swing interval never walks in reach, so it swings from where it entered reach.
 - **Fallback.** Some slots cannot be used: the nav grid has no straight walkable line from the player to the slot, or
   the walk to the slot cannot start (nav grid, or a control that forbids walking). Then the monster chases and swings
   straight, as before.
-- Swing interval, damage, leash and return home are unchanged.
+- Its attack rate is the same as without surround, also against a player who moves within reach. Swing interval,
+  damage, leash and return home are unchanged.
 
 ## Tests
 
@@ -47,4 +51,6 @@ Everything in this section is *(inferred)*.
 - slots are taken in order, the nearest free one first, and a full ring is shared;
 - a slot blocked by the nav grid (its own cell, or a wall between it and the player) falls back to the straight
   approach;
-- a row with `_iIsSurround` 0 keeps the straight approach.
+- a row with `_iIsSurround` 0 keeps the straight approach;
+- against a player strafing within reach, a surrounding monster swings as often as one without surround (within one
+  swing over 8 s).

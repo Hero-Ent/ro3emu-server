@@ -36,21 +36,31 @@ public sealed partial class MonsterService
         var at = target.Position;
         float x = at.X + radius * MathF.Cos(angle), z = at.Z + radius * MathF.Sin(angle);
         var nav = _worldData.Map(m.SceneEntry)?.Nav;
-        return nav == null || nav.CanWalk(at.X, at.Y, at.Z, x, z) ? (x, z) : null;
+        if (nav == null || nav.CanWalk(at.X, at.Y, at.Z, x, z)) return (x, z);
+        ReleaseSurroundSlot(m); // the straight approach holds no slot
+        return null;
     }
 
     /// <summary>
-    /// True when walking to the slot is this tick's action. In reach, a monster finishes its walk to the slot, then
-    /// swings from where it stands while that stays within half a spacing of the slot and within the margin between the
-    /// ring and the attack range (the player moved a little); farther, it walks to the slot again first (inferred). A
-    /// walk that cannot start leaves the straight approach to the caller.
+    /// In reach, a due swing and the swing's action come first, exactly as for a monster without surround: it moves
+    /// to its slot only between swings (inferred), so its attack rate stays the original one.
+    /// </summary>
+    private bool SwingHolds(MonsterUnit m, long now) =>
+        Attack != null
+        && (now >= m.NextSwingMs || now < m.NextSwingMs - m.Template.SwingIntervalMs + m.Template.SkillMs);
+
+    /// <summary>
+    /// True when walking to the slot is this tick's action. In reach and between swings, a monster finishes its walk
+    /// to the slot, also one a swing interrupted, then stands while it stays within half a spacing of the slot and
+    /// within the margin between the ring and the attack range (the player moved a little); farther, it walks to the
+    /// slot again (inferred). A walk that cannot start leaves the straight approach to the caller.
     /// </summary>
     private bool WalksToSlot(MonsterUnit m, MapInstance map, (float X, float Z) slot, bool inReach, long now)
     {
         float away = Distance(m.X, m.Z, slot.X, slot.Z);
         float settled = Math.Min(m.Template.SurroundDistance / 2, m.Template.AttackRange * (1 - ApproachShare));
-        if (inReach && !m.Moving && away <= settled) return false;
         bool heading = Distance(m.ToX, m.ToZ, slot.X, slot.Z) <= MinChaseStep;
+        if (inReach && !m.Moving && (away <= MinChaseStep || away <= settled && !heading)) return false;
         if (m.Moving && (inReach && heading || now < m.NextChaseMs)) return true;
         if (away <= MinChaseStep) return false;
         float go = Math.Min(MaxSegment, away);
