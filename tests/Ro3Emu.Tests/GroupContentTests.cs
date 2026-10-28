@@ -270,6 +270,45 @@ public sealed partial class GroupContentTests : IAsyncLifetime
         Assert.Equal(bobId, Assert.Single(solo.Members).Key);
     }
 
+    /// <summary>30451 DUNGEON_TEAM_TRANSFER: only the Virtual team's current leader may hand the role to another
+    /// present member of its own camp; everyone's next 30441 shows the new leaderGuid.</summary>
+    [ClientDataFact]
+    public async Task MockBattleVirtualTeamLeadershipTransfersToAnotherCampMember()
+    {
+        await using var alice = await InWorld("Alice");
+        await using var carol = await InWorld("Carol");
+        await using var bob = await InWorld("Bob");
+        foreach (var bot in new[] { alice, carol, bob }) await Gm(bot, "!lvl 99");
+        await Party(alice, carol);
+        await Gm(alice, "!casual open");
+        Assert.Equal(0, (await SignUp(alice)).Result);
+        Assert.Equal(0, (await SignUp(bob)).Result);
+        await Gm(alice, "!casual start");
+        foreach (var bot in new[] { alice, carol, bob }) await Load(bot, CasualBattleService.Scene);
+        long carolId = (long)carol.Self!.Uuid, bobId = (long)bob.Self!.Uuid;
+        await Next(alice, DungeonService.TeamInfo, DungeonTeamInfoNotify.Parser); // the roster from loading, consumed
+        await Next(carol, DungeonService.TeamInfo, DungeonTeamInfoNotify.Parser);
+        await Next(bob, DungeonService.TeamInfo, DungeonTeamInfoNotify.Parser);
+
+        // Not the leader: refused, nothing changes.
+        await carol.SendGameAsync(CasualBattleService.Transfer, new DungeonTeamTransferReq { TargetGuid = carolId });
+        Assert.Equal(ErrorCodes.NoPermission, (await Next(carol, CasualBattleService.Transfer, DungeonTeamTransferResp.Parser)).Result);
+
+        // A member of the other camp: refused.
+        await alice.SendGameAsync(CasualBattleService.Transfer, new DungeonTeamTransferReq { TargetGuid = bobId });
+        Assert.Equal(ErrorCodes.Parameter, (await Next(alice, CasualBattleService.Transfer, DungeonTeamTransferResp.Parser)).Result);
+
+        // The leader hands off to Carol: both squadmates see the new leaderGuid.
+        await alice.SendGameAsync(CasualBattleService.Transfer, new DungeonTeamTransferReq { TargetGuid = carolId });
+        Assert.Equal(0, (await Next(alice, CasualBattleService.Transfer, DungeonTeamTransferResp.Parser)).Result);
+        await Next(alice, DungeonService.TeamInfo, DungeonTeamInfoNotify.Parser, m => m.LeaderGuid == carolId);
+        await Next(carol, DungeonService.TeamInfo, DungeonTeamInfoNotify.Parser, m => m.LeaderGuid == carolId);
+
+        // Alice is no longer the leader; Carol is.
+        await alice.SendGameAsync(CasualBattleService.Transfer, new DungeonTeamTransferReq { TargetGuid = carolId });
+        Assert.Equal(ErrorCodes.NoPermission, (await Next(alice, CasualBattleService.Transfer, DungeonTeamTransferResp.Parser)).Result);
+    }
+
     // ---- MVP likes ----
 
     private async Task Party(BotClient leader, params BotClient[] others)
