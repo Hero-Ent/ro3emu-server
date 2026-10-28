@@ -131,6 +131,8 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         {
             Skills = BossBook(npcId, npc, skill),
             CastSpeed = A(AttributeId.CastSpeed),
+            BattleCallRange = aiRow is { } call && new Data.Config.AIConfig(call).BattleCallType == 1 ? new Data.Config.AIConfig(call).BattleCallDistance / 100f : 0,
+            AnswersBattleCall = aiRow is { } answer && new Data.Config.AIConfig(answer).BattleCallResponse == 1,
         };
     }
 
@@ -488,13 +490,35 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         await _world.ToUnitViewersAsync(monster, CombatService.AoiAttrChange, SpeedChange(monster, now));
     }
 
-    /// <summary>A player hit it (or came into view of an aggressive one): chase and attack.</summary>
-    public void Engage(MonsterUnit m, GameSession target)
+    /// <summary>A player hit it (or came into view of an aggressive one): chase and attack. A monster that enters the
+    /// fight calls its own into it (<see cref="CallIntoBattle"/>).</summary>
+    public void Engage(MonsterUnit m, GameSession target) => Engage(m, target, called: false);
+
+    private void Engage(MonsterUnit m, GameSession target, bool called)
     {
         if (m.Dead || m.WorldScene != target.WorldScene || TargetVisible?.Invoke(m, target) == false || m.Template.SpeedCm == 0 && m.Template.AttackRange <= 0) return;
-        if (m.Target == null) m.NextSwingMs = NowMs + 300;
+        bool entering = m.Target == null;
+        if (entering) m.NextSwingMs = NowMs + 300;
         SetTarget(m, target);
         m.Returning = false;
+        if (entering && !called && m.Template.BattleCallRange > 0) CallIntoBattle(m, target);
+    }
+
+    /// <summary>
+    /// AIConfig battle call (server-only fields; the client never reads them): a monster whose AI has _iBattleCallType
+    /// 1 calls, as it enters a fight, the monsters within _iBattleCallDistance whose AI has _iBattleCallResponse 1.
+    /// Inferred: those of its camp in its instance, alive and not fighting yet, take on the same player; a called
+    /// monster does not call in turn (one call per fight, not a chain across the map).
+    /// </summary>
+    private void CallIntoBattle(MonsterUnit caller, GameSession target)
+    {
+        int camp = caller.CampOverride ?? caller.Template.Camp;
+        foreach (var unit in _world.Map(caller.WorldScene).Near(caller.X, caller.Z, caller.Template.BattleCallRange).ToArray())
+            if (unit is MonsterUnit ally && !ReferenceEquals(ally, caller) && !ally.Dead && ally.Hp > 0 && ally.Target == null
+                && ally.Template.AnswersBattleCall && ally.InstanceId == caller.InstanceId
+                && (ally.CampOverride ?? ally.Template.Camp) == camp
+                && Distance(ally.X, ally.Z, caller.X, caller.Z) <= caller.Template.BattleCallRange)
+                Engage(ally, target, called: true);
     }
 
     /// <summary>Authoritative target transitions, consumed by hatred/lock notifications and facing effects.</summary>
