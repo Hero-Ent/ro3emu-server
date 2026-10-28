@@ -37,6 +37,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
             return unit is MonsterUnit { BossSkills: not null } boss ? EndBossSkillsTask(boss, interrupt: false) ?? Task.CompletedTask : Task.CompletedTask;
         });
         world.UnitRemoved.Add(ForgetCompanionTargets);
+        world.UnitRemoved.Add(ForgetSurroundSlot);
     }
 
     private const long UidBase = 1L << 41;
@@ -44,6 +45,15 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
 
     /// <summary>A walk segment is capped so a monster seen mid-way is re-synchronized soon.</summary>
     private const float MaxSegment = 12f;
+
+    /// <summary>A chasing monster re-paths toward its target this often, or when its segment ended.</summary>
+    private const int ChaseRepathMs = 400;
+
+    /// <summary>A chase step shorter than this is not walked.</summary>
+    private const float MinChaseStep = 0.2f;
+
+    /// <summary>The chase stops this share of the attack range away from the target.</summary>
+    private const float ApproachShare = 0.8f;
 
     private readonly Dictionary<int, MonsterTemplate?> _templates = new();
     private sealed class SpawnState
@@ -126,6 +136,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         {
             Skills = BossBook(npcId, npc, skill),
             CastSpeed = A(AttributeId.CastSpeed),
+            SurroundDistance = SurroundSpacing(_data, ai),
         };
     }
 
@@ -500,6 +511,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         var previous = monster.Target;
         if (ReferenceEquals(previous, target)) return;
         monster.Target = target;
+        ReleaseSurroundSlot(monster);
         foreach (var handler in TargetChanged) _loop.TrackRuntimeDetached("monster target change", () => handler(monster, previous, target));
     }
 
@@ -582,30 +594,38 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         float dist = Distance(m, target);
         if (m.Template.Skills != null && !m.SpecialsOwnedByMvp && TryBossSkill(m, target, null, dist, now)) return;
         float reach = m.Template.AttackRange + 0.5f;
+        // AIConfig _iIsSurround: walk to a slot around the target instead (MonsterService.Surround).
+        if (SurroundSlot(m, target) is { } slot && WalksToSlot(m, map, slot, dist <= reach, now)) return;
         if (dist <= reach)
         {
-            if (m.Moving)
-            {
-                m.Moving = false;
-                SendStop(m, now);
-            }
-            if (now >= m.NextSwingMs && Attack != null)
-            {
-                m.NextSwingMs = now + m.Template.SwingIntervalMs;
-                m.Face = Angle(m.X, m.Z, target.Position.X, target.Position.Z);
-                _loop.TrackRuntimeDetached("monster attack", () => Attack(m, target));
-            }
+            Swing(m, target, now);
             return;
         }
         if (m.Template.SpeedCm <= 0) return;
         // Chase: re-path toward the target every 400 ms or when the segment ended.
         if (!m.Moving || now >= m.NextChaseMs)
         {
-            m.NextChaseMs = now + 400;
+            m.NextChaseMs = now + ChaseRepathMs;
             float dx = target.Position.X - m.X, dz = target.Position.Z - m.Z;
             float len = MathF.Sqrt(dx * dx + dz * dz);
-            float go = Math.Min(MaxSegment, len - m.Template.AttackRange * 0.8f);
-            if (go > 0.2f) WalkTo(m, map, m.X + dx / len * go, m.Z + dz / len * go, 1f);
+            float go = Math.Min(MaxSegment, len - m.Template.AttackRange * ApproachShare);
+            if (go > MinChaseStep) WalkTo(m, map, m.X + dx / len * go, m.Z + dz / len * go, 1f);
+        }
+    }
+
+    /// <summary>In reach of its player: stand and swing when the swing interval allows.</summary>
+    private void Swing(MonsterUnit m, GameSession target, long now)
+    {
+        if (m.Moving)
+        {
+            m.Moving = false;
+            SendStop(m, now);
+        }
+        if (now >= m.NextSwingMs && Attack != null)
+        {
+            m.NextSwingMs = now + m.Template.SwingIntervalMs;
+            m.Face = Angle(m.X, m.Z, target.Position.X, target.Position.Z);
+            _loop.TrackRuntimeDetached("monster attack", () => Attack(m, target));
         }
     }
 
@@ -625,15 +645,15 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         WalkTo(m, map, m.Home.X + (float)Math.Cos(angle) * r, m.Home.Z + (float)Math.Sin(angle) * r, 1f);
     }
 
-    /// <summary>One straight Walk segment when the nav grid allows it.</summary>
-    private void WalkTo(MonsterUnit m, MapInstance map, float x, float z, float speedFactor)
+    /// <summary>One straight Walk segment when the nav grid allows it; false when none started.</summary>
+    private bool WalkTo(MonsterUnit m, MapInstance map, float x, float z, float speedFactor)
     {
-        if (Forbidden?.Invoke(m, ForbiddenState.Walk) == true) return;
+        if (Forbidden?.Invoke(m, ForbiddenState.Walk) == true) return false;
         var nav = _worldData.Map(m.SceneEntry)?.Nav;
         float? y = nav?.WalkHeight(x, z, m.Y) ?? m.Y;
-        if (y == null || nav != null && !nav.CanWalk(m.X, m.Y, m.Z, x, z)) return;
+        if (y == null || nav != null && !nav.CanWalk(m.X, m.Y, m.Z, x, z)) return false;
         float dx = x - m.X, dz = z - m.Z, len = MathF.Sqrt(dx * dx + dz * dz);
-        if (len < 0.1f) return;
+        if (len < 0.1f) return false;
         long now = NowMs;
         float speed = m.SpeedCm(now) / 100f * speedFactor;
         m.FromX = m.X; m.FromY = m.Y; m.FromZ = m.Z;
@@ -657,6 +677,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
                 MovementWalk = new MovementWalk { Dir = m.Face, Speed = speed, Acc = 0, EndHeight = y.Value },
             },
         }));
+        return true;
     }
 
     private static MovementChangeNtf Stop(MonsterUnit m, long now) => new()

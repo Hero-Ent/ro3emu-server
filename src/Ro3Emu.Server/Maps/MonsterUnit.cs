@@ -17,6 +17,9 @@ public sealed record MonsterTemplate(
     public BossSkillBook? Skills { get; init; }
     /// <summary>AttriMonsterConfig cast speed (116), retained for live chant modifiers.</summary>
     public long CastSpeed { get; init; }
+    /// <summary>AIConfig _iIsSurround 1: metres between the attackers' slots around a player (_iSurroundDistance cm);
+    /// 0: a straight approach (MonsterService.Surround).</summary>
+    public float SurroundDistance { get; init; }
 }
 
 /// <summary>A live monster on a map (entityType 1): HP, home point, current walk segment and AI state.</summary>

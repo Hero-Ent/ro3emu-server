@@ -11,7 +11,8 @@ show is playable from day one, without season or server-day gates ([details](gui
 **World**
 - login, server list, both gates, character create / select / delete
 - maps, portals, NPCs, Kafra travel, wings, map channels
-- monsters, MVPs with their summons and fields, death and revive
+- monsters (they surround the player they attack, [monster AI](systems/monster-ai.md)), MVPs with their summons
+  and fields, death and revive
 - silent reconnect, emotes and sitting
 
 **Character and combat**
