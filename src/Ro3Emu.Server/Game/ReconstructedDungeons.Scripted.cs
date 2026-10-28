@@ -32,11 +32,16 @@ public sealed partial class ReconstructedDungeons
     /// casts a skill at the nearest monster of the step's fight (the airship's cannons); with Shots above 0, that many
     /// strikes defeat a monster whatever the skill's damage. <paramref name="Seek"/>: the step is a hide-and-seek game
     /// whose hiding places are its Point triggers; walking there does not complete it, winning the game does.
+    /// <paramref name="Companions"/>: the actors marked "companion", shown as allied fighters (CompanionUnit) instead of
+    /// plain scene actors; they are not in <paramref name="Actors"/>.
     /// </summary>
     public sealed record ScriptedStep(string Stage, int Quest, (int Done, int Total) Goal, IReadOnlyList<SceneActor> Actors,
         long Story, IReadOnlyList<StepTrigger> Complete, IReadOnlyList<StepTrigger> Ignore, long TeleportAfter,
         IReadOnlyList<Spawn> Fight, bool All, IReadOnlyList<(long Interaction, long Skill, int Shots)>? Strikes = null,
-        Seek? Seek = null, Shelter? Shelter = null);
+        Seek? Seek = null, Shelter? Shelter = null)
+    {
+        public IReadOnlyList<SceneActor> Companions { get; init; } = [];
+    }
 
     /// <summary>
     /// Cover from a boss's sweeping attack (inferred, the story Pharaoh's 3120702 after the raid Pharaoh's "Pharaoh is
@@ -94,11 +99,9 @@ public sealed partial class ReconstructedDungeons
     private static ScriptedStep Step(JsonElement s)
     {
         var goal = s.TryGetProperty("goal", out var g) ? (g[0].GetInt32(), g[1].GetInt32()) : (0, 1);
-        var actors = s.TryGetProperty("actors", out var a)
-            ? a.EnumerateArray().Select(x => new SceneActor(x.GetProperty("npc").GetInt32(), x.GetProperty("point").GetInt64(),
-                x.TryGetProperty("buffs", out var b) ? b.EnumerateArray().Select(v => v.GetInt32()).ToArray() : [],
-                x.TryGetProperty("offset", out var o) ? o[0].GetSingle() : 0, x.TryGetProperty("offset", out o) ? o[1].GetSingle() : 0)).ToArray()
-            : [];
+        var listed = s.TryGetProperty("actors", out var a) ? a.EnumerateArray().ToArray() : [];
+        bool IsCompanion(JsonElement x) => x.TryGetProperty("companion", out var c) && c.GetBoolean();
+        var actors = listed.Where(x => !IsCompanion(x)).Select(Actor).ToArray();
         var complete = Triggers(s, "complete");
         var fight = s.TryGetProperty("fight", out var f)
             ? f.EnumerateArray().Select(x => new Spawn(x.GetProperty("point").GetInt64(), x.GetProperty("npc").GetInt32())).ToArray()
@@ -123,8 +126,13 @@ public sealed partial class ReconstructedDungeons
                 ? new Shelter(shelter.GetProperty("boss").GetInt32(), shelter.GetProperty("cover").GetInt32(), shelter.GetProperty("tip").GetInt32(),
                     shelter.GetProperty("skill").GetInt64(), shelter.GetProperty("everyMs").GetInt32(), shelter.GetProperty("warnMs").GetInt32(),
                     shelter.GetProperty("width").GetSingle(), shelter.GetProperty("depth").GetSingle())
-                : null);
+                : null)
+        { Companions = [.. listed.Where(IsCompanion).Select(Actor)] };
     }
+
+    private static SceneActor Actor(JsonElement x) => new(x.GetProperty("npc").GetInt32(), x.GetProperty("point").GetInt64(),
+        x.TryGetProperty("buffs", out var b) ? b.EnumerateArray().Select(v => v.GetInt32()).ToArray() : [],
+        x.TryGetProperty("offset", out var o) ? o[0].GetSingle() : 0, x.TryGetProperty("offset", out o) ? o[1].GetSingle() : 0);
 
     private static IReadOnlyList<StepTrigger> Triggers(JsonElement step, string field)
     {

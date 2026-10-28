@@ -80,6 +80,7 @@ public sealed partial class DungeonService
         // A fight-only step has no client event to wait for: its kills complete it.
         a.StepDone = step.Complete.Count == 0;
         await SyncSceneActorsAsync(a, step.Actors);
+        await SyncCompanionsAsync(a, step.Companions);
         a.StepGeneration++;
         if (step.Seek is { } seek) StartSeek(a, seek);
         if (step.Shelter is { } shelter) StartShelter(a, shelter);
