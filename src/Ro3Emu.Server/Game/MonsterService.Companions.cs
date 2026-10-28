@@ -5,8 +5,10 @@ namespace Ro3Emu.Server.Game;
 /// <summary>
 /// Monsters answering allied companions (CompanionUnit). (inferred) A monster a companion hits keeps it as a second
 /// target: while a player holds it (MonsterUnit.Target) it fights the player, and once none does it chases and swings
-/// at that companion with its normal attack, until the companion falls, leaves or is out of its leash. A monster keeps
-/// the companion it answers while that one stands; the server script of the original fight is not in the client.
+/// at that companion with its normal attack, until the companion falls, leaves or is out of its leash. A player comes
+/// first: an aggressive monster answering a companion still looks for players as when idle, and one it finds becomes
+/// its target. A monster that cannot move stops answering a companion out of its reach. A monster keeps the companion
+/// it answers while that one stands; the server script of the original fight is not in the client.
 /// Tower pets (TowerPetUnit, MonsterUnit.PetTarget) are a separate path and do not change.
 /// </summary>
 public sealed partial class MonsterService
@@ -40,7 +42,7 @@ public sealed partial class MonsterService
         return Task.CompletedTask;
     }
 
-    /// <summary>Tick's step for a monster no player holds: true when it is fighting a companion.</summary>
+    /// <summary>Tick's step for a monster no player holds: true when it is fighting a companion (or took a player).</summary>
     private bool FightsCompanion(MonsterUnit m, MapInstance map, long now)
     {
         if (!_companionTargets.TryGetValue(m, out var target)) return false;
@@ -51,9 +53,18 @@ public sealed partial class MonsterService
             Disengage(m, map);
             return true;
         }
-        m.Returning = false;
         float dist = Distance(m.X, m.Z, target.X, target.Z);
-        if (m.BusyUntilMs > now || dist <= m.Template.AttackRange + CompanionReachSlack)
+        bool inReach = m.BusyUntilMs > now || dist <= m.Template.AttackRange + CompanionReachSlack;
+        if (!inReach && m.Template.SpeedCm <= 0)
+        {
+            // It cannot walk to the companion: it stops answering it, and the rest of the tick (player scan, return
+            // home) runs as when idle. A later hit of the companion draws it again only while it is in reach.
+            _companionTargets.Remove(m);
+            return false;
+        }
+        if (TakesPlayer(m)) return true;
+        m.Returning = false;
+        if (inReach)
         {
             if (m.Moving)
             {
@@ -63,13 +74,21 @@ public sealed partial class MonsterService
             if (m.BusyUntilMs <= now && now >= m.NextSwingMs && AttackCompanion != null) SwingAtCompanion(m, target, now);
             return true;
         }
-        if (m.Template.SpeedCm > 0 && (!m.Moving || now >= m.NextChaseMs))
+        if (!m.Moving || now >= m.NextChaseMs)
         {
             m.NextChaseMs = now + CompanionChaseMs;
             float go = Math.Min(MaxSegment, dist - m.Template.AttackRange * CompanionApproachShare);
             if (go > 0.2f) WalkTo(m, map, m.X + (target.X - m.X) / dist * go, m.Z + (target.Z - m.Z) / dist * go, 1f);
         }
         return true;
+    }
+
+    /// <summary>A player comes first: the aggressive scan Tick runs for an idle monster; one in sight becomes its target.</summary>
+    private bool TakesPlayer(MonsterUnit m)
+    {
+        if (!m.Template.Aggressive || m.Viewers.Count == 0 || m.Returning || NearestTarget(m) is not { } near) return false;
+        Engage(m, near);
+        return ReferenceEquals(m.Target, near);
     }
 
     // The lambda lives here, not in FightsCompanion, so a tick that does not swing allocates no closure.
