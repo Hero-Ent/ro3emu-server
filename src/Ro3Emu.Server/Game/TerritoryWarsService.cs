@@ -190,6 +190,7 @@ public sealed partial class TerritoryWarsService : IGameTicker
         scene.LoadedKeys.Add(SceneKeys);
         scene.Leaving.Add(LeavingAsync);
         scene.Leaving.Add(SiegeLeavingAsync);
+        scene.Leaving.Add(GloryLeavingAsync);
         combat.Killed.Add(KilledAsync);
         combat.Killed.Add(SiegeKilledAsync);
         combat.Killed.Add(WorldKilledAsync);
@@ -231,6 +232,7 @@ public sealed partial class TerritoryWarsService : IGameTicker
         public Dictionary<string, List<Grant>> Pending { get; set; } = new();
         public HashSet<string> Paid { get; set; } = new();
         public GloryState Glory { get; set; } = new();
+        public Dictionary<string, GloryState> GlorySeasons { get; set; } = [];
     }
     public sealed record Grant(int Entry, int Count, int Bind = 0);
     public sealed record RoleSeason(long Honor, long Valor, long Donated, Dictionary<long, long> Donations);

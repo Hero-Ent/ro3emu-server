@@ -72,11 +72,11 @@ public static partial class EconomySnapshotReader
     // casual_battle_obligation.payout is CasualBattleService.Payout: a frozen match result (rating delta, record,
     // numbers) and the DropPool ids its payment rolls. No goods: they are granted by the role's event/casual-battle
     // receipt that also writes the timed_battle state and marks the row delivered.
-    // Battle Merit: role.territory_wars Glory (TerritoryWarsService.GloryState) holds the season's earned points, the
+    // Battle Merit: role.territory_wars Glory (TerritoryWarsService.GloryState; past seasons in GlorySeasons) holds a season's earned points, the
     // reached rank, claimed rank markers and today's counters. No balance and no asset: the points themselves are
     // currency 15 in the purse, granted by the earner's event/battle-glory receipt with this state; a rank reward is
     // its event/battle-glory-rank receipt, whose claimed marker is that receipt's once-only source.
-    public const string ExpectedFormatManifestHash = "AF58C2CE4C4F4BDB631D9BA63D652B0E837B7C4C89ACF10096CF61F303C84A5D";
+    public const string ExpectedFormatManifestHash = "BA5E8395604B3C714F797006E333C5049C1890E5468ED623A68D953FB65ED5E7";
     public static string FormatManifestHash => State.FormatManifestHash;
 
     private sealed partial class State
