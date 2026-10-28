@@ -205,7 +205,8 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
   walks back to its point (`_iStayInPlace` 1 read as "goes back to its point", not "never moves"). Its casts show like a monster's (31100, 31101), deal the skill's damage through the shared
   formula and settle like a player's hit; a kill it makes counts for the run exactly like a player's (wave and step
   completion, statistics), credited to the first present participant. A monster it hits answers it with its normal
-  attack once no player holds that monster (a player always comes first); at 0 HP the companion dies, its body leaves
+  attack once no player holds that monster (a player it already fights comes first; while it answers a companion it
+  does not look for another player until one hits it); at 0 HP the companion dies, its body leaves
   after the template's remain time, and it does not come back in that run (`_kRespawnSkill` unused). Players cannot
   target it and area effects do not hit it (it is no monster), and it never counts in the run's spawned or killed
   monsters. It is separate from the Pet Tower's pets, whose behaviour does not change. In Payon Forest the pair stand

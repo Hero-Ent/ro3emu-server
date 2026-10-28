@@ -11,6 +11,11 @@ namespace Ro3Emu.Server.Game;
 /// </summary>
 public sealed partial class MonsterService
 {
+    // (inferred) The tower pets' timings (FightPet): the first swing's delay, how often a chase re-aims, the reach slack
+    // and how deep into its attack range a monster walks.
+    private const int CompanionFirstSwingMs = 300, CompanionChaseMs = 400;
+    private const float CompanionReachSlack = 0.5f, CompanionApproachShare = 0.8f;
+
     private readonly Dictionary<MonsterUnit, CompanionUnit> _companionTargets = [];
 
     /// <summary>Set by CombatService: a monster's normal attack on a companion (the brain decides when).</summary>
@@ -21,7 +26,7 @@ public sealed partial class MonsterService
     {
         if (m.Dead || m.Hp <= 0 || companion.Dead || companion.Hp <= 0 || m.WorldScene != companion.WorldScene) return;
         if (_companionTargets.TryGetValue(m, out var held) && !held.Dead) return;
-        if (m.Target == null) m.NextSwingMs = NowMs + 300;
+        if (m.Target == null) m.NextSwingMs = NowMs + CompanionFirstSwingMs;
         _companionTargets[m] = companion;
     }
 
@@ -48,7 +53,7 @@ public sealed partial class MonsterService
         }
         m.Returning = false;
         float dist = Distance(m.X, m.Z, target.X, target.Z);
-        if (m.BusyUntilMs > now || dist <= m.Template.AttackRange + 0.5f)
+        if (m.BusyUntilMs > now || dist <= m.Template.AttackRange + CompanionReachSlack)
         {
             if (m.Moving)
             {
@@ -60,8 +65,8 @@ public sealed partial class MonsterService
         }
         if (m.Template.SpeedCm > 0 && (!m.Moving || now >= m.NextChaseMs))
         {
-            m.NextChaseMs = now + 400;
-            float go = Math.Min(MaxSegment, dist - m.Template.AttackRange * 0.8f);
+            m.NextChaseMs = now + CompanionChaseMs;
+            float go = Math.Min(MaxSegment, dist - m.Template.AttackRange * CompanionApproachShare);
             if (go > 0.2f) WalkTo(m, map, m.X + (target.X - m.X) / dist * go, m.Z + (target.Z - m.Z) / dist * go, 1f);
         }
         return true;
