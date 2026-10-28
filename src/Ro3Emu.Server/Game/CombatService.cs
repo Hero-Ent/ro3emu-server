@@ -260,6 +260,14 @@ public sealed partial class CombatService : IGameTicker
     public List<Func<GameSession, Task>> PlayerRevived { get; } = new();
     /// <summary>A match owner decides which skills a participant may cast (true/false), or defers (null).</summary>
     public Func<GameSession, int, bool?>? MatchSkillRule { get; set; }
+    /// <summary>
+    /// A skill a feature owns outright (the war commander's): null for any other skill, else 0 to cast it or the refusal.
+    /// Such a cast skips the job-tree check and the SkillConfig cooldowns; <see cref="OwnSkillCast"/> runs in their place
+    /// once the cast is accepted, and <see cref="OwnSkillLanded"/> resolves it instead of the generic effects.
+    /// </summary>
+    public Func<GameSession, int, int?>? OwnSkillAdmit { get; set; }
+    public Func<GameSession, int, Task>? OwnSkillCast { get; set; }
+    public Func<GameSession, JsonElement, Task>? OwnSkillLanded { get; set; }
     /// <summary>World-core owns the dead player's explicit accept/decline invitation.</summary>
     public Func<GameSession, GameSession, JsonElement, Task>? ReviveOffer { get; set; }
     public Func<GameSession, int>? ReviveCheck { get; set; }
