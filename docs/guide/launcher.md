@@ -5,7 +5,19 @@ installs the RO3 client patched for your server, keeps it updated, updates itsel
 proof. The official RO3 launchers cannot be reused for this: they pin the publisher's manifest signing key and update
 hosts in the exe, update themselves, and their Repair restores the original DLLs.
 
-This page explains how to host your own patch repository and publish to it.
+The same exe runs in one of two modes, chosen by its `launcher.json`:
+
+- **RO3Emu mode** (`"mode": "ro3emu"`, the built-in default, and what the release zip ships): RO3Emu's own app, the
+  window over what `RO3Emu.exe` does. It finds the game (or downloads it from the official servers), exports the game
+  data, starts your own server on this PC, patches the game and starts it. Settings → Play with friends hosts a server
+  for friends or joins someone else's. Its news are RO3Emu's GitHub releases, it updates itself from the latest
+  release (`RO3Emu-win-x64.zip`: downloaded, size and checksum checked, swapped in on restart; your game, `data`,
+  `logs` and settings stay), and after an update it shows that release's notes once. Closing it stops the server it
+  started. `RO3Emu.exe` stays for the command line.
+- **Operator mode** (`"mode": "operator"`, or a config with a `repository`): a server's own launcher, below. It shows
+  only what the operator configures; nothing of RO3Emu.
+
+The rest of this page is about operator mode: how to host your own patch repository and publish to it.
 
 ## How it works
 
@@ -32,12 +44,13 @@ This page explains how to host your own patch repository and publish to it.
 
 ## Configure the launcher
 
-`src/Ro3Emu.Launcher/launcher.json` is built into the exe (the csproj property `LauncherConfigFile` can point to
-another file). A `launcher.json` placed beside the exe overrides the built-in one, which is handy for testing against a
-local repository.
+`src/Ro3Emu.Launcher/launcher.json` is built into the exe; it selects RO3Emu mode. Build your launcher with your own
+file (`dotnet publish src/Ro3Emu.Launcher -c Release -p:LauncherConfigFile=<path to your launcher.json>`). A
+`launcher.json` placed beside the exe overrides the built-in one, which is handy for testing against a local repository.
 
 ```json
 {
+  "mode": "operator",
   // Patch repository (static HTTP) and the channel this launcher follows.
   "repository": "https://patch.example.com/ro3/",
   "channel": "test",

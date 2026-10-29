@@ -134,10 +134,26 @@
       </div>
     </div>
 
+    <div class="field repair" id="set-friends-field" hidden>
+      <div>
+        <span class="label">Play with friends</span>
+        <p class="hint">Host a server friends can join, or join someone else's.</p>
+      </div>
+      <button type="button" class="btn ghost" id="set-friends">Host or join…</button>
+    </div>
+
+    <div class="field repair" id="set-server-field" hidden>
+      <div>
+        <span class="label">Your server</span>
+        <p class="hint" id="set-server-text"></p>
+      </div>
+      <button type="button" class="btn ghost" id="set-server-stop">Stop server</button>
+    </div>
+
     <div class="field repair">
       <div>
         <span class="label">Repair</span>
-        <p class="hint">Checks every game file and downloads only what is missing or damaged. Your settings and screenshots are kept.</p>
+        <p class="hint" id="set-repair-hint">Checks every game file and downloads only what is missing or damaged. Your settings and screenshots are kept.</p>
       </div>
       <button type="button" class="btn ghost" id="set-repair"><svg class="i"><use href="#i-wrench"/></svg>Repair files</button>
     </div>
@@ -178,6 +194,32 @@
     <div class="sheet-foot">
       <button type="button" class="btn ghost" id="shortcuts-no">No, thanks</button>
       <button type="button" class="btn ink" id="shortcuts-yes">Add shortcuts</button>
+    </div>
+  </div>
+</div>
+
+<!-- RO3Emu mode: host a server for friends, or join someone else's -->
+<div class="scrim" id="friends" hidden>
+  <div class="sheet narrow" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="friends-title">
+    <div class="sheet-head">
+      <h2 id="friends-title">Play with friends</h2>
+      <button type="button" class="ctl plain" id="friends-x" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="field first">
+      <span class="label">Host</span>
+      <div class="path-row stack">
+        <input type="text" class="entry" id="host-address" spellcheck="false" aria-label="Address friends connect to">
+        <input type="text" class="entry" id="host-gm" spellcheck="false" placeholder="GM accounts, comma separated (optional)" aria-label="GM accounts">
+      </div>
+      <p class="hint">Friends join with this address. Players outside your network need TCP ports 5380, 20000 and 33100 forwarded to this PC.</p>
+      <div class="row-end"><button type="button" class="btn ink" id="host-go">Host</button></div>
+    </div>
+    <div class="field">
+      <span class="label">Join</span>
+      <div class="path-row">
+        <input type="text" class="entry" id="join-address" spellcheck="false" placeholder="Server address, for example 203.0.113.10" aria-label="Server address">
+        <button type="button" class="btn ink" id="join-go">Join</button>
+      </div>
     </div>
   </div>
 </div>

@@ -11,14 +11,14 @@ namespace Ro3Emu.Launcher;
 
 /// <summary>
 /// Frameless window hosting the HTML page (ui/, embedded) in WebView2:
-/// the page talks to <see cref="LauncherController"/> through web messages; window commands, links and the tray icon
+/// the page talks to an <see cref="ILauncherController"/> (an operator's launcher or RO3Emu's own app) through web messages; window commands, links and the tray icon
 /// while the game runs are handled here.
 /// </summary>
 public partial class MainWindow : Window
 {
     const string Origin = "https://launcher.ro3emu/";
 
-    readonly LauncherController _controller;
+    readonly ILauncherController _controller;
     readonly LauncherConfig _config;
     readonly string _exePath;
     TrayIcon? _tray;
@@ -31,7 +31,9 @@ public partial class MainWindow : Window
         _config = config;
         _exePath = exePath;
         Title = config.ServerName;
-        _controller = new LauncherController(config, exePath, Post, PickFolder, OnGameRunningChanged);
+        _controller = config.IsRo3EmuMode
+            ? new Ro3EmuController(exePath, Post, PickFolder, OnGameRunningChanged)
+            : new LauncherController(config, exePath, Post, PickFolder, OnGameRunningChanged);
         SourceInitialized += (_, _) => RoundCorners();
         Loaded += async (_, _) => await InitializeWebAsync();
         Closing += (_, _) =>
@@ -53,7 +55,9 @@ public partial class MainWindow : Window
             _tray ??= new TrayIcon(_exePath, _config.ServerName + " Launcher", ShowFromTray, Close);
             _tray.Visible = true;
             Hide();
-            _tray.ShowBalloon(_config.ServerName, "The launcher waits here while you play.");
+            _tray.ShowBalloon(_config.ServerName, _config.IsRo3EmuMode
+                ? "RO3Emu waits here while you play. Exiting it stops your server."
+                : "The launcher waits here while you play.");
         }
         else
         {

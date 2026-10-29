@@ -11,7 +11,7 @@ namespace Ro3Emu.Launcher;
 /// <see cref="Updater"/>, updates the launcher itself, pings the game server and starts ro3.exe.
 /// Messages to the page: state, progress, server, settings, news, hero, notes, shortcuts, uninstall (see ui/app.js).
 /// </summary>
-public sealed partial class LauncherController : IDisposable
+public sealed partial class LauncherController : ILauncherController
 {
     readonly LauncherConfig _config;
     readonly string _exePath;
@@ -38,7 +38,7 @@ public sealed partial class LauncherController : IDisposable
         _post = post;
         _pickFolder = pickFolder;
         _gameRunningChanged = gameRunningChanged;
-        _repo = new RepositoryClient(new Uri(config.Repository));
+        _repo = new RepositoryClient(new Uri(config.RepositoryUrl));
         _layout = new InstallLayout(_settings.ClientDirectory ?? Path.Combine(Path.GetDirectoryName(exePath)!, "Client"));
     }
 
@@ -312,24 +312,5 @@ public sealed partial class LauncherController : IDisposable
         _life.Cancel();
         _work?.Cancel();
         _game?.Dispose();
-    }
-
-    /// <summary>Download speed over the last ~5 seconds and the remaining seconds at that speed.</summary>
-    sealed class SpeedMeter
-    {
-        readonly Stopwatch _clock = Stopwatch.StartNew();
-        readonly Queue<(double At, long Bytes)> _samples = new();
-
-        public (double Rate, double Eta) Sample(long done, long total)
-        {
-            double now = _clock.Elapsed.TotalSeconds;
-            _samples.Enqueue((now, done));
-            while (_samples.Count > 2 && now - _samples.Peek().At > 5) _samples.Dequeue();
-            var first = _samples.Peek();
-            double seconds = now - first.At;
-            if (seconds < 1) return (0, 0);
-            double rate = (done - first.Bytes) / seconds;
-            return rate <= 0 ? (0, 0) : (rate, (total - done) / rate);
-        }
     }
 }

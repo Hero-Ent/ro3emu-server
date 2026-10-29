@@ -322,6 +322,12 @@ body[data-phase="error"] .status-text span{color:var(--rose-ink)}
 /* folder pickers */
 .btn.icon{width:42px;padding:0;justify-content:center;flex:none}
 .path-row .btn{flex:none}
+/* RO3Emu mode: typed addresses read left to right; the host fields stack */
+.path-row input.entry{direction:ltr;cursor:text}
+.path-row.stack{flex-direction:column}
+.path-row.stack input{flex:none}
+.field.first{border-top:0;padding-top:4px}
+.row-end{display:flex;justify-content:flex-end;margin-top:12px}
 .linkish{align-self:flex-start;margin-top:3px;padding:0;border:0;background:none;font:inherit;font-size:13px;font-weight:700;color:var(--rose-ink);cursor:default}
 .linkish:hover{text-decoration:underline}
 
