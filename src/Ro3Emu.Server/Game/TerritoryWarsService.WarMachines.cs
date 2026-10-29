@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using Romsg;
 using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 using Ro3Emu.Server.Maps;
 
 namespace Ro3Emu.Server.Game;
@@ -81,12 +82,12 @@ public sealed partial class TerritoryWarsService
         public int CheckPlace(GameSession builder, JsonElement cannon, Vec3 pos)
         {
             if (builder.SiegeBattle is not { } battle) return ErrorCodes.GuildCannonPlace;
-            float reach = GameData.Int(cannon, "_iBuildRadius") / 100f + 3f;
+            float reach = new GVGCannonConfig(cannon).BuildRadius / 100f + 3f;
             if (MonsterService.Distance(builder.Position.X, builder.Position.Z, pos.X, pos.Z) > reach)
                 return ErrorCodes.GuildCannonPlace;
             if (owner._maps.Map(builder.SceneEntry)?.Nav is { } nav && nav.WalkHeight(pos.X, pos.Z, pos.Y) == null)
                 return ErrorCodes.GuildCannonPlace;
-            float exclusive = GameData.Int(cannon, "_iExclusiveRadius") / 100f;
+            float exclusive = new GVGCannonConfig(cannon).ExclusiveRadius / 100f;
             foreach (var (unit, room) in owner.StandingCannons())
                 if (room == battle.Room && MonsterService.Distance(unit.X, unit.Z, pos.X, pos.Z) < exclusive * 2)
                     return ErrorCodes.GuildCannonPlace;
@@ -107,7 +108,7 @@ public sealed partial class TerritoryWarsService
         public async Task<long> RaiseAsync(GameSession builder, JsonElement cannon, Vec3 pos, float face)
         {
             if (builder.SiegeBattle is not { } battle || builder.Role is not { } role) return 0;
-            int npcId = (int)GameData.Int(cannon, "_iNPCID");
+            int npcId = (int)new GVGCannonConfig(cannon).NpcId;
             if (owner._data.Row("NPCConfig", npcId) is not { } npc) return 0;
             var at = owner._maps.Map(builder.SceneEntry) is { } map ? map.Grounded(new MapPoint(pos.X, pos.Y, pos.Z, face))
                 : new MapPoint(pos.X, pos.Y, pos.Z, face);
@@ -115,18 +116,16 @@ public sealed partial class TerritoryWarsService
             {
                 Uid = CannonUidBase | Interlocked.Increment(ref owner._cannonSerial), SceneEntry = builder.SceneEntry,
                 InstanceId = battle.Room.Id, X = at.X, Y = at.Y, Z = at.Z, Face = face, NpcId = npcId, Builder = role.Id,
-                Camp = builder.EventFaction > 0 ? builder.EventFaction : 1, Name = owner._data.TextOf(npc, "_kName"),
+                Camp = builder.EventFaction > 0 ? builder.EventFaction : 1, Name = new NPCConfig(npc).Name is [var nameId, ..] ? owner._data.Text(nameId) : "",
                 Template = owner._monsters.Template(npcId),
             };
-            if (npc.TryGetProperty("_kBornEventBuff", out var born) && born.ValueKind == JsonValueKind.Array)
-                foreach (var entry in born.EnumerateArray())
-                    if (entry.ValueKind == JsonValueKind.Array && entry.GetArrayLength() > 0
-                        && GameData.Number(entry[0]) is { } buff and > 0 && owner._data.Row("BuffConfig", (long)buff) != null)
-                        unit.Buffs.Add(new BuffInfo
-                        {
-                            BuffGuid = Interlocked.Increment(ref owner._cannonBuffGuid), ConfigId = (int)buff, PileCount = 1,
-                            SourceId = unit.Uid,
-                        });
+            foreach (long[] entry in new NPCConfig(npc).BornEventBuff)
+                if (entry is [var buff, ..] && buff > 0 && owner._data.Row("BuffConfig", buff) != null)
+                    unit.Buffs.Add(new BuffInfo
+                    {
+                        BuffGuid = Interlocked.Increment(ref owner._cannonBuffGuid), ConfigId = (int)buff, PileCount = 1,
+                        SourceId = unit.Uid,
+                    });
             if (!await owner._instances.AddPropAsync(battle.Room, unit)) return 0;
             owner._cannons[unit.Uid] = (unit, battle.Room);
             return unit.Uid;

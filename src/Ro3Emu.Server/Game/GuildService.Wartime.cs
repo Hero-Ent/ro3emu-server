@@ -3,6 +3,7 @@ using System.Text.Json;
 using Romsg;
 using Ro3Emu.Server.Accounts;
 using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 
 namespace Ro3Emu.Server.Game;
 
@@ -106,7 +107,7 @@ public sealed partial class GuildService
     /// <summary>The GVGCannonConfig row building cannon item <paramref name="item"/> (_iItemID): the machines 32270
     /// reserves.</summary>
     private JsonElement? CannonRow(int item) => item <= 0 ? null
-        : data.Table("GVGCannonConfig").Values.Where(r => GameData.Int(r, "_iItemID") == item)
+        : data.Table("GVGCannonConfig").Values.Where(r => new GVGCannonConfig(r).ItemId == item)
             .Select(r => (JsonElement?)r).FirstOrDefault();
 
     private bool IsCannonItem(int item) => CannonRow(item) != null;
@@ -237,10 +238,10 @@ public sealed partial class GuildService
         var row = cannon!.Value;
         long token = Interlocked.Increment(ref _buildSerial);
         _building[role] = token;
-        long buildMs = Math.Max(0, GameData.Int(row, "_iBuildTime"));
+        long buildMs = Math.Max(0, new GVGCannonConfig(row).BuildTime);
         await site!.BuildStateAsync(s, new BuildCannonState
         {
-            Progress = BuildCannonState.Types.EBuildProcess.Building, GvgCannonConfigId = GameData.Int(row, "_iID"),
+            Progress = BuildCannonState.Types.EBuildProcess.Building, GvgCannonConfigId = new GVGCannonConfig(row).Id,
             CompleteTime = NowMs() + buildMs,
         });
         var pos = req.Pos!.Clone();
@@ -272,7 +273,7 @@ public sealed partial class GuildService
             }
             if (uid == 0)
             {
-                int item = (int)GameData.Int(row, "_iItemID");
+                int item = (int)new GVGCannonConfig(row).ItemId;
                 g.WartimeItems[item] = g.WartimeItems.GetValueOrDefault(item) + 1;
                 await SaveGuildAsync(g);
                 await PushStoreAsync(g);
