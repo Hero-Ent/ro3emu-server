@@ -12,6 +12,8 @@ public readonly partial record struct ItemConfig(JsonElement Row)
     [ConfigField("_iCD")] public partial long Cd { get; }
     [ConfigField("_iCardGroup")] public partial long CardGroup { get; }
     [ConfigField("_iCardPart")] public partial long CardPart { get; }
+    /// <summary>[text id, @{1}, @{2}, ...]: the description and the values its placeholders show.</summary>
+    [ConfigField("_iDescription")] public partial JsonElement? Description { get; }
     [ConfigField("_iEnchantSlot")] public partial long EnchantSlot { get; }
     [ConfigField("_iEquipId")] public partial long EquipId { get; }
     [ConfigField("_iEquipPart")] public partial long EquipPart { get; }

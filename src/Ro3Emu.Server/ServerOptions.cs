@@ -109,8 +109,16 @@ public sealed class ServerOptions
     /// </summary>
     public int LoginAttemptsPerMinute { get; set; } = 20;
 
-    /// <summary>Tests: the credential limit applies to loopback too.</summary>
+    /// <summary>Tests: the credential limit and the gift code address limit apply to loopback too.</summary>
     public bool LoginLimitIncludesLoopback { get; set; }
+
+    /// <summary>
+    /// Gift code attempts (POST /gift-card/use/v2, docs/systems/gift-codes.md) one remote address, and separately one
+    /// account, may make per minute; past it the server answers the refusal code GiftCardRateLimited without looking
+    /// the code up. Loopback is exempt from the address budget, as for <see cref="LoginAttemptsPerMinute"/>, but not
+    /// from the account budget. Behind a reverse proxy every player shares the proxy's address, so raise this there.
+    /// </summary>
+    public int GiftCodeAttemptsPerMinute { get; set; } = 10;
 
     /// <summary>Team voice relay proof of concept (Voice/, docs TBD). Off until a port is set.</summary>
     public VoiceOptions Voice { get; set; } = new();
@@ -247,6 +255,12 @@ public sealed class FeedbackOptions
 
     /// <summary>Minimum seconds between two reports of one account.</summary>
     public int CooldownSeconds { get; set; } = 5;
+
+    /// <summary>
+    /// A Discord channel webhook (https://discord.com/api/webhooks/...): each stored report is also posted there. Unset
+    /// keeps reports in the file only. The URL lets anyone post to that channel, so keep it out of committed config.
+    /// </summary>
+    public string? DiscordWebhookUrl { get; set; }
 }
 
 /// <summary>

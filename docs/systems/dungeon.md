@@ -135,7 +135,19 @@ Reconstructed story encounters (`ReconstructedDungeons`, switch `Ro3Emu:Reconstr
 - Live check with the real client: Culvert waves 1-3 spawn and render with names and models, the
   tracker follows the Culvert quests with its counter, the story Golden Thief Bug fights back with its borrowed
   attack, the elite Scorpion run ends in DungeonResSuccess, leaving returns to the field. The client shows no result
-  window for these Plane scenes (as with Payon Forest).
+  window for these Plane scenes (as with Payon Forest): 30403 only raises `LC_DunGeon_Base`'s DungeonSettlement event.
+- A solo Plane scene (DungeonConfig `_iPlaneMapID` set, `_iRoleCntLimit` 1) returns the player to the field
+  `DungeonService.PlaneExitSeconds` (5) seconds after a successful clear, through the exit button's own 30402
+  (`LC_DunGeon_Base.CELL_LEAVE_DUNGEON` takes it unasked). **(inferred)**: the original encounter scripts are not in the
+  client; without it a cleared plane left the player in an empty copy of the field (seen on Southern Payon 1021301,
+  whose story continues on the field: 10102110 is delivered to NPC 400037 on map 10213). A failed run stays, so the
+  client's DungeonReset can retry it.
+- Guide arrows: a solo story scene whose scene editor file has guide routes (`m_kGuidePoints`, e.g. the Culvert
+  plane's 19 and 21, the Geffen field plane's 17) sets dungeon var 10021 `PGuideWayList` to their ids in 30401
+  (`LC_DunGeon_VarDefine.lua:736-741`, processed by `LC_SceneCom_GuideGfx`, which draws each route as the guide arrow
+  line), and to an empty list in a 30404 var change after the clear. **(inferred)**: the scripts that set 10021 are
+  not in the client, so all routes show from the start (a scene's routes chain into one path: the Culvert's 19 ends
+  where 21 starts). `DungeonService.GuideWays`, `SceneEditorGuides`.
 - Solo tuning: the story bosses were built for the original's allied NPC
   companions (mostly not reproduced); untuned, a level-matched player died in 3-36 s and needed 3-38 minutes to win.
   `soloTuning` scales each story template's HP and attack (basis points) so a Swordman at the boss level, every stat

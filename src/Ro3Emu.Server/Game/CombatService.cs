@@ -233,7 +233,12 @@ public sealed partial class CombatService : IGameTicker
     public List<Func<GameSession, GameSession, Task>> PlayerKilled { get; } = new();
     public Func<GameSession, GameSession, bool>? PlayerHostile { get; set; }
     public Func<GameSession, MonsterUnit, bool>? MonsterTargetAllowed { get; set; }
-    public Func<GameSession, MonsterUnit, Vec3, Vec3, bool>? BlockedMonsterEndpointAllowed { get; set; }
+    /// <summary>
+    /// Whether something stands between the caster and the target of a skill that walls stop (_iPassBlock 2): the
+    /// monster aimed at (null for a ground or player target), the caster's and the target's positions. Unset, nothing
+    /// does (see <see cref="ValidateTarget"/>).
+    /// </summary>
+    public Func<GameSession, MonsterUnit?, Vec3, Vec3, bool>? SkillLineBlocked { get; set; }
 
     /// <summary>A monster damaged a player; the flag says the hit was lethal (MVP statistics).</summary>
     public List<Action<MonsterUnit, GameSession, long, bool>> Taken { get; } = new();
@@ -268,6 +273,12 @@ public sealed partial class CombatService : IGameTicker
     public Func<GameSession, int, int?>? OwnSkillAdmit { get; set; }
     public Func<GameSession, int, Task>? OwnSkillCast { get; set; }
     public Func<GameSession, JsonElement, Task>? OwnSkillLanded { get; set; }
+
+    /// <summary>
+    /// Skills a player may cast without learning them, resolved like any other (a war vehicle seat's skills,
+    /// VehicleSeatConfig _kMainSkills / _kSkills); their cooldowns are the ordinary SkillConfig ones.
+    /// </summary>
+    public List<Func<GameSession, int, bool>> GrantedSkill { get; } = [];
     /// <summary>World-core owns the dead player's explicit accept/decline invitation.</summary>
     public Func<GameSession, GameSession, JsonElement, Task>? ReviveOffer { get; set; }
     public Func<GameSession, int>? ReviveCheck { get; set; }
@@ -323,13 +334,24 @@ public sealed partial class CombatService : IGameTicker
         _log.LogDebug("{Name} locks {Target}", s.Role?.Name, req.EnemyId);
     }
 
-    /// <summary>The template's damage EffectData (hit fx + flinch): the first with m_kDamage in [show*100, show*100+99].</summary>
+    /// <summary>
+    /// The template's hit EffectData (hit fx, flinch, hit sound) for SkillHitInfo.showPoint: the first in
+    /// [show*100, show*100+99] whose m_kDamage has m_kActionDamge, else the first with any m_kDamage.
+    /// LC_DamageHelper.CalcDamageHitPoint reads only m_kActionDamge from the show point, so a bullet entry there (Fire
+    /// Bolt 1200411, Lightning Bolt 1200503, Double Strafe 1300304) showed no hit; the bullet goes in 31120 instead
+    /// (<see cref="BulletEffect"/>).
+    /// </summary>
     private int HitEffect(long scriptShow)
     {
         var effects = _data.SkillTemplateTable("Lua_Config_EffectData");
+        int first = 0;
         for (long id = scriptShow * 100; id < scriptShow * 100 + 100; id++)
-            if (effects.TryGetValue(id.ToString(), out var e) && e.TryGetProperty("m_kDamage", out _)) return (int)id;
-        return 1000002;
+        {
+            if (SkillEffectData.Find(effects, id) is not { HasDamage: true } effect) continue;
+            if (effect.HasHitReaction) return (int)id;
+            if (first == 0) first = (int)id;
+        }
+        return first != 0 ? first : 1000002;
     }
 
     /// <summary>
