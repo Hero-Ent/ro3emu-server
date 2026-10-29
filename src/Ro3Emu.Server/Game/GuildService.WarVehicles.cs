@@ -19,23 +19,29 @@ public sealed partial class GuildService
 {
     public const uint VehicleUse = 32281;
     private const long UseSkillEffect = 606;
-    private const string BuildMechaScript = "GVG_S0_BuildMecha";
+    private const string BuildMechaScript = "GVG_S0_BuildMecha", RepairAreaScript = "GVG_S0_RepairArea";
 
     /// <summary>Each member's standing vehicle (the roleUsingToolId of its Vehicle slot); runtime only, like cannons.</summary>
     private readonly ConcurrentDictionary<long, long> _vehicleOf = new();
 
     /// <summary>The NPC a vehicle item raises (_iUseEffect 606 -> GVG_S0_BuildMecha's _kLogicData[0]), or 0.</summary>
-    internal int VehicleNpc(int item)
+    internal int VehicleNpc(int item) =>
+        UseSkill(item) is { ScriptLogic: BuildMechaScript, LogicData: [var npc, ..] } && NPCConfig.Get(data, npc) != null ? (int)npc : 0;
+
+    /// <summary>The GVG_S0_RepairArea skill of a repair item (1006010 Madogear Pilot Repair: _iUseEffect 606 -> 4901901), or 0.</summary>
+    internal long RepairSkill(int item) => UseSkill(item) is { ScriptLogic: RepairAreaScript } skill ? skill.Id : 0;
+
+    /// <summary>The skill of an item's _iUseEffect 606 (use a skill).</summary>
+    private SkillConfig? UseSkill(int item)
     {
         if (item <= 0 || ItemConfig.Get(data, item)?.UseEffect is not { ValueKind: System.Text.Json.JsonValueKind.Array } effects)
-            return 0;
+            return null;
         foreach (var effect in effects.EnumerateArray())
             if (effect.ValueKind == System.Text.Json.JsonValueKind.Array && effect.GetArrayLength() >= 2
                 && GameData.Number(effect[0]) == UseSkillEffect && GameData.Number(effect[1]) is { } skill
-                && SkillConfig.Get(data, (long)skill) is { ScriptLogic: BuildMechaScript, LogicData: [var npc, ..] }
-                && NPCConfig.Get(data, npc) != null)
-                return (int)npc;
-        return 0;
+                && SkillConfig.Get(data, (long)skill) is { } row)
+                return row;
+        return null;
     }
 
     public Task VehicleUseAsync(GameSession s, GuildVehicleUseReq req) => RunGuildAsync(s, [], [], () => VehicleUseCoreAsync(s, req));
@@ -51,10 +57,11 @@ public sealed partial class GuildService
         var g = Own(s);
         int item = req.VehicleItem?.ItemId ?? 0;
         int npc = VehicleNpc(item);
+        long repair = npc == 0 ? RepairSkill(item) : 0;
         var site = WarMachines;
         int code = g == null ? ErrorCodes.TerritoryGuild
             : WarSideOf?.Invoke(s) is not > 0 || site == null ? ErrorCodes.FeatureUnavailable
-            : npc == 0 ? ErrorCodes.Parameter
+            : npc == 0 && repair == 0 ? ErrorCodes.Parameter
             : ToolOf(g, s.Role!.Id) != WartimeToolType.Vehicle ? ErrorCodes.GuildPermission : 0;
         if (code == 0)
         {
@@ -68,6 +75,11 @@ public sealed partial class GuildService
         }
         g!.WartimeItems[item]--;
         await SaveGuildAsync(g);
+        if (repair != 0)
+        {
+            await RepairUseAsync(s, g, item, repair, site!);
+            return;
+        }
         long uid = await site!.RaiseVehicleAsync(s, npc);
         if (uid == 0)
         {
@@ -83,6 +95,23 @@ public sealed partial class GuildService
         await PushStoreAsync(g);
         await PushToolPermissionAsync(g, role);
         await PushToolChangesAsync(g, [.. SlotsOf(g, role)]);
+    }
+
+    /// <summary>
+    /// A repair item of the vehicle bag (1006010, 32281 like a vehicle: LC_WartimeItemHelper.TryUseVehicle): its repair
+    /// zone stands at the member's feet; the item goes back to the warehouse if it cannot.
+    /// </summary>
+    private async Task RepairUseAsync(GameSession s, GuildStore.State g, int item, long skill, IWarMachineSite site)
+    {
+        if (!await site.RaiseRepairZoneAsync(s, item, skill))
+        {
+            g.WartimeItems[item]++;
+            await SaveGuildAsync(g);
+            await s.SendGameAsync(VehicleUse, new GuildVehicleUseRsp { Result = ErrorCodes.FeatureUnavailable });
+            return;
+        }
+        await s.SendGameAsync(VehicleUse, new GuildVehicleUseRsp());
+        await PushStoreAsync(g);
     }
 
     /// <summary>The Tactics machine type of the player (SiegePermissionSelfData eToolType), None outside a guild slot.</summary>

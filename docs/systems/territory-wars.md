@@ -200,7 +200,7 @@ Code: `TerritoryWarsService.CannonFire.cs`, `TerritoryWarsService.CannonShots.cs
 - The camera follow values: a distance of 1000 cm, no screen offset.
 - An empty cannon stays standing.
 - PublicParamConfig `ArtilleryAttackCityGateReduceDamage` and `OutCannonHpPercent` are server parameters the client
-  never reads. There are no city gates and no cannon HP yet, so neither is applied.
+  never reads; see "Machine HP, destruction and repair" for why neither is applied.
 
 ### War vehicles (32281, 32700, 32708, 31074)
 
@@ -241,8 +241,47 @@ Code: `GuildService.WarVehicles.cs`, `TerritoryWarsService.WarVehicles.cs`.
   their own.
 - A gunner's 31074 face is its seat's `fire_dir` in the vehicle's AOI detail.
 - Any free seat can be changed to with 32708.
-- An empty vehicle keeps standing. Vehicles have no HP of their own yet; repair (1006010, `GVG_S0_RepairArea`) is not
-  simulated.
+- An empty vehicle keeps standing.
+
+### Machine HP, destruction and repair
+
+Code: `TerritoryWarsService.MachineDamage.cs`, `TerritoryWarsService.WarRepair.cs`, `MonsterService.MachineTemplate`.
+
+- **HP.** Cannons (`_iNPCSubType` 102) and vehicles (103) are NPCConfig `_iNPCType` 2 rows whose `_iAttributeVariated`
+  and `_iLevel` select an AttriMonsterConfig row as a monster's do (222059: 69 170 HP, scaled by `_kAttriScale`).
+  Their entity carries properties 101 (max HP), 2000 (HP) and 2002 (level), so the client shows an HP bar, and
+  `AOIAttrChange` 2000 updates it.
+- **Damage.** On the server a machine is a monster unit (`CannonUnit` and `VehicleUnit` derive from `MonsterUnit`): the
+  attacks, skills and cannon shots of the other camp's siege members damage it through the monster pipeline, with its
+  template's defences. Its own camp cannot hit it (`LC_CommonCondition.CheckCamp` compares `EntityCamp`: the machines of
+  the own camp are allies). The NPC rows drop nothing (`_iDrop` 0, `_iNormalDrop` empty), so a kill grants no reward.
+- **Destruction.** At 0 HP the machine dies as a monster does (HP 0, state Dead). Its operator or riders are put back on
+  foot, its owner's slot shows nothing in use (`roleUsingToolId` 0 in 32285 and 32286) and the wreck leaves after
+  `_iBodyRemainTime` (1.5 s for a cannon, 10 s for a vehicle).
+- **Repair.** The repair item 1006010 "Madogear Pilot Repair" sits in the vehicle bag (`_iSubType` 1402), so its use
+  button sends 32281 like a vehicle (`LC_WartimeItemHelper.TryUseVehicle`). Its `_iUseEffect` [606, 4901901] names skill
+  4901901 `GVG_S0_RepairArea`; the item text reads "Use to create a Madogear Pilot repair zone for @{1} seconds.
+  Madogear Pilots within the zone can be repaired." with @{1} = 30. It needs the Vehicle permission, stock and a running
+  siege, and leaves the warehouse (32273). BuffConfig 4903501 "Madogear Pilot Repair" ("The Madogear Pilot is being
+  repaired.") carries `T_AXadd0_etc` [2, 100, 101, 2]: 100 / 10 000 of the recipient's attribute 101 (max HP).
+
+**Inferred:**
+- The repair zone is the NPC named "Madogear Repair Zone" (4901010, `_iNPCType` 4, a ground object) at the member's
+  feet for the description's @{1} seconds; `GVG_S0_RepairArea` is a server script and names no NPC. Its radius is the
+  skill's `_iDistanceMax` (5 m).
+- Every war vehicle of the member's camp inside the zone carries buff 4903501 and heals 1% of its max HP each second
+  (the cadence of the other `T_AXadd0_etc` heals and drains). Cannons are not repaired (the item and the buff name the
+  Madogear); the tank and the Jet Backpack are, as the client's "Vehicles can be repaired here." (10370001103)
+  suggests.
+- A destroyed machine's wreck stays for its `_iBodyRemainTime`, and damage to machines counts in the siege's damage
+  statistics like damage to the crystal.
+- `OutCannonHpPercent` (80) sits among the GVE cannon parameters (`GVECannonExitInteractId`,
+  `GVESwitchBulletInteractIds`), not the siege ones, so it is not applied to siege cannons.
+- `ArtilleryAttackCityGateReduceDamage` [3002, 3003, -9000] would lower cannon damage against the city gates. The
+  siege has no gate units yet (NPC 4900005 and the "Break Through the Castle Gate" phase are not spawned), so it is
+  not applied.
+- Restocking the warehouse: 32275 has no client sender and no shop or award sells the machine items (the "War Machine
+  Shop" text has no data behind it), so the stock is only `SiegeInitItemList` and what the machines leave or return.
 
 ## Descriptor and runtime evidence boundaries
 

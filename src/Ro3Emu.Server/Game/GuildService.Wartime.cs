@@ -50,6 +50,25 @@ public sealed partial class GuildService
         bool Standing(long machine);
         /// <summary>Destroys a standing cannon or vehicle; whoever is on it gets off first.</summary>
         Task RemoveAsync(long machine);
+        /// <summary>The repair zone of a repair item's GVG_S0_RepairArea skill at the member's feet; false if it could not stand.</summary>
+        Task<bool> RaiseRepairZoneAsync(GameSession user, int item, long skill);
+    }
+
+    /// <summary>
+    /// A member's cannon or vehicle was destroyed in the siege: the slot shows nothing in use any more (32285 to the member,
+    /// 32286 to the guild).
+    /// </summary>
+    internal async Task MachineGoneAsync(long role, long machine)
+    {
+        bool gone = _cannonOf.TryRemove(new KeyValuePair<long, long>(role, machine))
+            | _vehicleOf.TryRemove(new KeyValuePair<long, long>(role, machine));
+        if (!gone || store.ForRole(role) is not { } owner) return;
+        await RunGuildAsync(null, [owner.Id], [], async () =>
+        {
+            if (store.Get(owner.Id) is not { } g || !g.Members.ContainsKey(role)) return;
+            await PushToolPermissionAsync(g, role);
+            await PushToolChangesAsync(g, [.. SlotsOf(g, role)]);
+        });
     }
 
     /// <summary>Each member's standing cannon (the roleUsingToolId of its slot); runtime only, cannons end with the

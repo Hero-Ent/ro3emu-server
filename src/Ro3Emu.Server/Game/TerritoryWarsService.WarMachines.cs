@@ -40,9 +40,10 @@ public sealed partial class TerritoryWarsService
     /// A built cannon: NPCConfig _iNPCType 2 (sub type 102), so the client creates it as an NPC and keeps it in its
     /// GVGCannon group (LC_GVGBuildCannon keeps new blueprints out of its _iExclusiveRadius). Its entity names the
     /// builder as <c>owner</c> and carries the builder's camp: interaction 4900005 checks both (LC_CommonCondition
-    /// CheckBuilder, the head info Owner, and CheckCamp, EntityCamp). NPCConfig _kBornEventBuff are its standing buffs.
+    /// CheckBuilder, the head info Owner, and CheckCamp, EntityCamp). NPCConfig _kBornEventBuff are its standing buffs. It is
+    /// a monster unit for the combat (MonsterService.MachineTemplate): the other camp damages and destroys it.
     /// </summary>
-    internal sealed class CannonUnit : WorldUnit
+    internal sealed class CannonUnit : MonsterUnit
     {
         public required int NpcId { get; init; }
         public required long Builder { get; init; }
@@ -50,7 +51,6 @@ public sealed partial class TerritoryWarsService
         public required string Name { get; init; }
         /// <summary>Its GVGCannonConfig row.</summary>
         public required long ConfigId { get; init; }
-        public MonsterTemplate? Template { get; init; }
         public List<BuffInfo> Buffs { get; } = [];
         /// <summary>The player on it (its builder), shots left (_iBulletNumLimit) and the cannon skill's cooldown.</summary>
         public GameSession? Operator { get; set; }
@@ -63,15 +63,14 @@ public sealed partial class TerritoryWarsService
             var entity = new EntityBase
             {
                 Uuid = (ulong)Uid, EntityTemplateID = (ulong)NpcId, EntityType = 2, Name = Name, EntityCamp = Camp,
-                Owner = Builder, Face = Face, State = EntityState.Alive, NotifyType = EntityBase.Types.NotifyType.All,
+                Owner = Builder, Face = Face, State = Dead ? EntityState.Dead : EntityState.Alive,
+                NotifyType = EntityBase.Types.NotifyType.All,
                 MovementInfo = new MovementInfo
                 {
                     Pos = Pos, Face = Face, ServerTime = MonsterService.NowMs, MoveType = MovementType.MoveTypeNone
                 },
             };
-            if (Template is { } t)
-                foreach (var (idx, value) in new (long, long)[] { (101, t.MaxHp), (2000, t.MaxHp), (2002, t.Level) })
-                    entity.Property.Add(new AoIProperty { Idx = idx, Data = value, BaseData = value });
+            AddMachineHealth(entity, this);
             if (Buffs.Count > 0) entity.BuffData = new AoIBuffInfo { AddBuffs = { Buffs.Select(b => b.Clone()) } };
             entity.CustomDatas.Add(CannonLong(BulletRestNum, Bullets));
             return entity;
@@ -117,16 +116,18 @@ public sealed partial class TerritoryWarsService
         {
             if (builder.SiegeBattle is not { } battle || builder.Role is not { } role) return 0;
             int npcId = (int)new GVGCannonConfig(cannon).NpcId;
-            if (owner._data.Row("NPCConfig", npcId) is not { } npc) return 0;
+            if (owner._data.Row("NPCConfig", npcId) is not { } npc || owner._monsters.MachineTemplate(npcId) is not { } template) return 0;
             var at = owner._maps.Map(builder.SceneEntry) is { } map ? map.Grounded(new MapPoint(pos.X, pos.Y, pos.Z, face))
                 : new MapPoint(pos.X, pos.Y, pos.Z, face);
+            var (group, home) = MachineHome(npcId, at);
+            long camp = CampOf(builder);
             var unit = new CannonUnit
             {
                 Uid = CannonUidBase | Interlocked.Increment(ref owner._cannonSerial), SceneEntry = builder.SceneEntry,
                 InstanceId = battle.Room.Id, X = at.X, Y = at.Y, Z = at.Z, Face = face, NpcId = npcId, Builder = role.Id,
-                Camp = builder.EventFaction > 0 ? builder.EventFaction : 1, Name = new NPCConfig(npc).Name is [var nameId, ..] ? owner._data.Text(nameId) : "",
-                Template = owner._monsters.Template(npcId), ConfigId = new GVGCannonConfig(cannon).Id,
-                Bullets = new GVGCannonConfig(cannon).BulletNumLimit,
+                Camp = camp, CampOverride = (int)camp, Name = new NPCConfig(npc).Name is [var nameId, ..] ? owner._data.Text(nameId) : "",
+                Template = template, Group = group, Home = home, Hp = template.MaxHp, BornTimeMs = MonsterService.NowMs,
+                ConfigId = new GVGCannonConfig(cannon).Id, Bullets = new GVGCannonConfig(cannon).BulletNumLimit,
             };
             foreach (long[] entry in new NPCConfig(npc).BornEventBuff)
                 if (entry is [var buff, ..] && buff > 0 && owner._data.Row("BuffConfig", buff) != null)
@@ -141,6 +142,8 @@ public sealed partial class TerritoryWarsService
         }
 
         public Task<long> RaiseVehicleAsync(GameSession vehicleOwner, int npcId) => owner.RaiseVehicleAsync(vehicleOwner, npcId);
+
+        public Task<bool> RaiseRepairZoneAsync(GameSession user, int item, long skill) => owner.RaiseRepairZoneAsync(user, item, skill);
 
         public bool Standing(long machine) => owner._cannons.TryGetValue(machine, out var c) && !c.Unit.Removed && !c.Room.Closed
             || owner.VehicleStanding(machine);
