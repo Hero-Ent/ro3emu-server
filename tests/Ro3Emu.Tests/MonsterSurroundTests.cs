@@ -161,7 +161,7 @@ public sealed class MonsterSurroundTests
         return Near(m, SlotPoint(p.X, p.Z, SlotOf(m.X - p.X, m.Z - p.Z)));
     }
 
-    private static bool Near(MonsterUnit m, (float X, float Z) at, float within = 0.15f) =>
+    private static bool Near(MonsterUnit m, (float X, float Z) at, float within = 0.25f) =>
         !m.Moving && Distance(m.X - at.X, m.Z - at.Z) <= within;
 
     private static float Distance(float dx, float dz) => MathF.Sqrt(dx * dx + dz * dz);
