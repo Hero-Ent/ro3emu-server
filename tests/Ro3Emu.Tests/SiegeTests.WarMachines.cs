@@ -2,10 +2,12 @@ using Romsg;
 using Ro3Emu.Bot;
 using Ro3Emu.Server.Accounts;
 using Ro3Emu.Server.Game;
+using Ro3Emu.Server.Maps;
 
 namespace Ro3Emu.Tests;
 
-/// <summary>War machines in a running siege: reserving one from the guild warehouse (32270) and giving it back (32272).</summary>
+/// <summary>War machines in a running siege: reserving one from the guild warehouse (32270), giving it back (32272) and
+/// building it (32271).</summary>
 public sealed partial class SiegeTests
 {
     private static async Task<GuildWartimeStorePrepayResp> Prepay(BotClient bot, int item)
@@ -73,5 +75,63 @@ public sealed partial class SiegeTests
         Assert.Empty(Guild().WartimePrepay);
         await attack.SendGameAsync(GuildService.CancelPrepay, new GuildWartimeStoreItemCancelUseReq());
         Assert.Equal(0, (await Next(attack, GuildService.CancelPrepay, GuildWartimeStoreItemCancelUseResp.Parser)).Result);
+    }
+
+    private static async Task<GuildAttackCityBuildResp> Build(BotClient bot, float x, float y, float z)
+    {
+        await bot.SendGameAsync(GuildService.BuildCannon, new GuildAttackCityBuildReq { Pos = new Vec3 { X = x, Y = y, Z = z }, Face = 90 });
+        return await Next(bot, GuildService.BuildCannon, GuildAttackCityBuildResp.Parser);
+    }
+
+    [ClientDataFact]
+    public async Task ABuiltCannonStandsForItsBuilderAfterTheBuildTimeAndReplacesTheLastOne()
+    {
+        var (attack, defense, ga) = await SiegeWithFirearm("B");
+        await using var _ = attack;
+        await using var __ = defense;
+        await Enter(attack, 1); await Enter(defense, 2);
+        var me = Session(attack);
+        long builder = me.Role!.Id;
+        var at = me.Position.Clone();
+
+        // Without a reserved machine there is nothing to build.
+        Assert.Equal(ErrorCodes.Parameter, (await Build(attack, at.X, at.Y, at.Z)).Result);
+        Assert.Equal(0, (await Prepay(attack, 1006001)).Result);
+        // Far outside the build radius: 530 "Cannot place this here.", and the machine stays reserved.
+        Assert.Equal(ErrorCodes.GuildCannonPlace, (await Build(attack, at.X + 40, at.Y, at.Z)).Result);
+
+        var built = await Build(attack, at.X, at.Y, at.Z);
+        Assert.Equal((0, 1006001), (built.Result, built.Item.ItemId));
+        Assert.Empty(Service<GuildStore>().Get(ga)!.WartimePrepay);
+        var working = await Next(attack, WorldInteractionService.Change, InteractChangeNtf.Parser,
+            n => n.Uid == builder && n.DataInfo.EType == InteractInfo.Types.EState.BuildingCannon);
+        Assert.Equal(BuildCannonState.Types.EBuildProcess.Building, working.DataInfo.BuildCannonInfo.Progress);
+        Assert.Equal(4900010, working.DataInfo.BuildCannonInfo.GvgCannonConfigId);
+        Assert.InRange(working.DataInfo.BuildCannonInfo.CompleteTime - _clock.GetUtcNow().ToUnixTimeMilliseconds(), 2000, 3100);
+
+        // After GVGCannonConfig _iBuildTime the cannon stands: an NPC owned by its builder, in the builder's camp.
+        var view = await Next(attack, GameAoiSink.SyncAoiView, AoIViewChangeData.Parser,
+            v => v.Bases.Any(b => b.EntityTemplateID == 4900013));
+        var cannon = view.Bases.Single(b => b.EntityTemplateID == 4900013);
+        Assert.Equal((2, builder, 1L), (cannon.EntityType, cannon.Owner, cannon.EntityCamp));
+        Assert.Contains(cannon.BuffData.AddBuffs, b => b.ConfigId == 4909901);
+        await Next(attack, WorldInteractionService.Change, InteractChangeNtf.Parser,
+            n => n.Uid == builder && n.DataInfo.EType == InteractInfo.Types.EState.Idle);
+        // The slot and the builder's own permission name the cannon (roleUsingToolId).
+        Assert.Equal((long)cannon.Uuid, (await Next(attack, GuildService.ToolPermission, GuildWartimeToolRolePermissionNtf.Parser,
+            n => n.RoleUsingToolId != 0)).RoleUsingToolId);
+        await Next(attack, GuildService.ToolChange, GuildWartimeToolBelongInfoChangeNtf.Parser,
+            n => n.InfoList.Any(i => i.ToolBelongInfo.RoleGuildId == builder && i.ToolBelongInfo.RoleUsingToolId == (long)cannon.Uuid));
+
+        // A second cannon cannot stand on the first one; elsewhere it replaces it (UIWords 61001).
+        Assert.Equal(0, (await Prepay(attack, 1006002)).Result);
+        Assert.Equal(ErrorCodes.GuildCannonPlace, (await Build(attack, cannon.MovementInfo.Pos.X + 1, at.Y, cannon.MovementInfo.Pos.Z)).Result);
+        await OnLoop(() => Service<SceneService>().TeleportInMapAsync(me, new MapPoint(at.X + 6, at.Y, at.Z, 0)));
+        var spot = Session(attack).Position.Clone();
+        Assert.Equal(0, (await Build(attack, spot.X, spot.Y, spot.Z)).Result);
+        var gone = await Next(attack, GameAoiSink.SyncAoiView, AoIViewChangeData.Parser, v => v.LeaveAoi.Contains(cannon.Uuid));
+        Assert.Contains(cannon.Uuid, gone.LeaveAoi);
+        Assert.NotEqual((long)cannon.Uuid, (await Next(attack, GuildService.ToolPermission, GuildWartimeToolRolePermissionNtf.Parser,
+            n => n.RoleUsingToolId != 0 && n.RoleUsingToolId != (long)cannon.Uuid)).RoleUsingToolId);
     }
 }

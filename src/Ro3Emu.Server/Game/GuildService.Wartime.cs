@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Text.Json;
 using Romsg;
 using Ro3Emu.Server.Accounts;
 using Ro3Emu.Server.Data;
@@ -20,7 +22,7 @@ public sealed partial class GuildService
 {
     public const uint WartimeStore = 32273, ToolAssign = 32282, ToolExchange = 32283, ToolList = 32284,
         ToolPermission = 32285, ToolChange = 32286;
-    public const uint Prepay = 32270, CancelPrepay = 32272;
+    public const uint Prepay = 32270, BuildCannon = 32271, CancelPrepay = 32272;
 
     /// <summary>
     /// Set by TerritoryWarsService: the side (1 attack, 2 defense) the role fights for in an active siege it is loaded
@@ -28,6 +30,34 @@ public sealed partial class GuildService
     /// siege's, LC_WartimeItemHelper.TryBuildCannon).
     /// </summary>
     public Func<GameSession, int>? WarSideOf { get; set; }
+
+    /// <summary>Set by TerritoryWarsService: places and raises the cannons of the siege a member fights in.</summary>
+    public IWarMachineSite? WarMachines { get; set; }
+
+    /// <summary>The siege side of building a cannon (TerritoryWarsService.WarMachines).</summary>
+    public interface IWarMachineSite
+    {
+        /// <summary>0, or 530 (<see cref="ErrorCodes.GuildCannonPlace"/>) when the blueprint stands where the client
+        /// would refuse it.</summary>
+        int CheckPlace(GameSession builder, JsonElement cannon, Vec3 pos);
+        /// <summary>The builder's 32702: BuildingCannon with <paramref name="state"/>, Idle when null.</summary>
+        Task BuildStateAsync(GameSession builder, BuildCannonState? state);
+        /// <summary>The cannon raised for a builder still fighting there; its unit id, or 0.</summary>
+        Task<long> RaiseAsync(GameSession builder, JsonElement cannon, Vec3 pos, float face);
+        bool Standing(long cannon);
+        Task RemoveAsync(long cannon);
+    }
+
+    /// <summary>Each member's standing cannon (the roleUsingToolId of its slot); runtime only, cannons end with the
+    /// siege.</summary>
+    private readonly ConcurrentDictionary<long, long> _cannonOf = new();
+    /// <summary>Builds in progress: role to the build's token.</summary>
+    private readonly ConcurrentDictionary<long, long> _building = new();
+    private long _buildSerial;
+
+    /// <summary>The cannon a member operates now, or 0.</summary>
+    private long CannonOf(long role) =>
+        _cannonOf.TryGetValue(role, out long uid) && WarMachines?.Standing(uid) == true ? uid : 0;
     private const int MachineRight = 13;
 
     /// <summary>(inferred) Operator slots per machine type: no config row sets them, and the panel shows as many as it
@@ -74,9 +104,13 @@ public sealed partial class GuildService
         return stock;
     }
 
-    /// <summary>The cannon items GVGCannonConfig builds (_iItemID): the machines 32270 reserves.</summary>
-    private bool IsCannonItem(int item) => item > 0
-        && data.Table("GVGCannonConfig").Values.Any(r => new GVGCannonConfig(r).ItemId == item);
+    /// <summary>The GVGCannonConfig row building cannon item <paramref name="item"/> (_iItemID): the machines 32270
+    /// reserves.</summary>
+    private JsonElement? CannonRow(int item) => item <= 0 ? null
+        : data.Table("GVGCannonConfig").Values.Where(r => new GVGCannonConfig(r).ItemId == item)
+            .Select(r => (JsonElement?)r).FirstOrDefault();
+
+    private bool IsCannonItem(int item) => CannonRow(item) != null;
 
     /// <summary>The guild's own stock from now on: the initial list becomes its starting stock (inferred).</summary>
     private void Stock(GuildStore.State g)
@@ -171,6 +205,92 @@ public sealed partial class GuildService
         await PushStoreAsync(g);
     }
 
+    public Task BuildCannonAsync(GameSession s, GuildAttackCityBuildReq req) =>
+        RunGuildAsync(s, [], [], () => BuildCannonCoreAsync(s, req));
+
+    /// <summary>
+    /// 32271, the blueprint confirmed (LC_GVGBuildCannon.Build: its position and facing). The reserved machine is used
+    /// up and the answer closes the blueprint (LC_DunGeon_Siege.GUILD_ATTACK_CITY_BUILD); the builder then works for
+    /// GVGCannonConfig _iBuildTime in 32702 BuildingCannon (LC_GamePlayStatusMgr.BuildingCannon, GameplayStatusConfig
+    /// _iBuildStatusID 1), and the cannon stands after it. A cannon the member already had is destroyed (UIWords 61001,
+    /// "Building another will destroy the current one"). Refusals: 6001, 28 outside a siege, 82 without a reserved
+    /// machine or while building, 530 for a spot the client would refuse.
+    /// </summary>
+    private async Task BuildCannonCoreAsync(GameSession s, GuildAttackCityBuildReq req)
+    {
+        var g = Own(s);
+        long role = s.Role!.Id;
+        int item = g?.WartimePrepay.GetValueOrDefault(role) ?? 0;
+        var cannon = CannonRow(item);
+        var site = WarMachines;
+        int code = g == null ? ErrorCodes.TerritoryGuild
+            : WarSideOf?.Invoke(s) is not > 0 || site == null ? ErrorCodes.FeatureUnavailable
+            : cannon == null || req.Pos == null || _building.ContainsKey(role) ? ErrorCodes.Parameter
+            : site.CheckPlace(s, cannon.Value, req.Pos);
+        if (code != 0)
+        {
+            await s.SendGameAsync(BuildCannon, new GuildAttackCityBuildResp { Result = code });
+            return;
+        }
+        g!.WartimePrepay.Remove(role);
+        await SaveGuildAsync(g);
+        await s.SendGameAsync(BuildCannon, new GuildAttackCityBuildResp { Item = new GuildWartimeItem { ItemId = item, ItemCount = 1 } });
+        var row = cannon!.Value;
+        long token = Interlocked.Increment(ref _buildSerial);
+        _building[role] = token;
+        long buildMs = Math.Max(0, new GVGCannonConfig(row).BuildTime);
+        await site!.BuildStateAsync(s, new BuildCannonState
+        {
+            Progress = BuildCannonState.Types.EBuildProcess.Building, GvgCannonConfigId = new GVGCannonConfig(row).Id,
+            CompleteTime = NowMs() + buildMs,
+        });
+        var pos = req.Pos!.Clone();
+        float face = req.Face;
+        long guild = g.Id;
+        loop.ScheduleRuntime(TimeSpan.FromMilliseconds(buildMs), () => FinishCannonAsync(s, guild, role, token, row, pos, face));
+    }
+
+    /// <summary>
+    /// The build time is over: the cannon stands for a builder still alive in the siege, the member's slot shows it
+    /// (roleUsingToolId in 32285 and 32286) and the cannon it had before is destroyed. (inferred) A builder who died or
+    /// left meanwhile gets nothing and the machine goes back to the warehouse.
+    /// </summary>
+    private async Task FinishCannonAsync(GameSession s, long guild, long role, long token, JsonElement row, Vec3 pos, float face)
+    {
+        if (!_building.TryGetValue(role, out long current) || current != token) return;
+        _building.TryRemove(role, out _);
+        var site = WarMachines!;
+        bool here = s.Role?.Id == role && !s.Dead && WarSideOf?.Invoke(s) > 0;
+        long uid = here ? await site.RaiseAsync(s, row, pos, face) : 0;
+        if (here) await site.BuildStateAsync(s, null);
+        await RunGuildAsync(null, [guild], [], async () =>
+        {
+            var g = store.Get(guild);
+            if (g == null || !g.Members.ContainsKey(role))
+            {
+                if (uid != 0) await site.RemoveAsync(uid);
+                return;
+            }
+            if (uid == 0)
+            {
+                int item = (int)new GVGCannonConfig(row).ItemId;
+                g.WartimeItems[item] = g.WartimeItems.GetValueOrDefault(item) + 1;
+                await SaveGuildAsync(g);
+                await PushStoreAsync(g);
+                return;
+            }
+            if (_cannonOf.TryGetValue(role, out long old) && old != uid) await site.RemoveAsync(old);
+            _cannonOf[role] = uid;
+            await PushToolPermissionAsync(g, role);
+            await PushToolChangesAsync(g, [.. SlotsOf(g, role)]);
+        });
+    }
+
+    /// <summary>The slots a member holds (at most one).</summary>
+    private static IEnumerable<(WartimeToolType Type, int Index)> SlotsOf(GuildStore.State g, long role) =>
+        g.WartimeSlots.SelectMany(p => p.Value.Where(slot => slot.Value == role && ValidSlot((WartimeToolType)p.Key, slot.Key))
+            .Select(slot => ((WartimeToolType)p.Key, slot.Key)));
+
     private GuildWartimeStoreItemNtf StoreOf(GuildStore.State? g)
     {
         var ntf = new GuildWartimeStoreItemNtf();
@@ -180,14 +300,17 @@ public sealed partial class GuildService
         return ntf;
     }
 
-    private static GetGuildWartimeToolBelongListRsp ToolListOf(GuildStore.State g)
+    private GetGuildWartimeToolBelongListRsp ToolListOf(GuildStore.State g)
     {
         var rsp = new GetGuildWartimeToolBelongListRsp();
         foreach (var type in ToolTypes)
         {
             var page = new GuildWartimeItemPermissionClient { ToolType = type };
             for (int index = 1; index <= SlotCount(type); index++)
-                page.InfoList.Add(new GuildWartimeToolBelongInfo { RoleGuildId = Holder(g, type, index) });
+            {
+                long holder = Holder(g, type, index);
+                page.InfoList.Add(new GuildWartimeToolBelongInfo { RoleGuildId = holder, RoleUsingToolId = CannonOf(holder) });
+            }
             rsp.ItemPermissionAllData.Add(page);
         }
         return rsp;
@@ -198,7 +321,8 @@ public sealed partial class GuildService
     {
         await s.SendGameAsync(WartimeStore, StoreOf(g));
         if (s.Role != null && ToolOf(g, s.Role.Id) is var type && type != WartimeToolType.None)
-            await s.SendGameAsync(ToolPermission, new GuildWartimeToolRolePermissionNtf { ToolType = type });
+            await s.SendGameAsync(ToolPermission,
+                new GuildWartimeToolRolePermissionNtf { ToolType = type, RoleUsingToolId = CannonOf(s.Role.Id) });
     }
 
     /// <summary>A former member: an empty warehouse and no permission (the battle bag empties).</summary>
@@ -301,7 +425,10 @@ public sealed partial class GuildService
         ntf.InfoList.AddRange(changed.Select(c => new GuildWartimeToolBelongDetailInfo
         {
             ToolType = c.Type, BagIndex = c.Index,
-            ToolBelongInfo = new GuildWartimeToolBelongInfo { RoleGuildId = Holder(g, c.Type, c.Index) },
+            ToolBelongInfo = new GuildWartimeToolBelongInfo
+            {
+                RoleGuildId = Holder(g, c.Type, c.Index), RoleUsingToolId = CannonOf(Holder(g, c.Type, c.Index)),
+            },
         }));
         foreach (var m in g.Members.Values)
             if (Online(m.RoleId) is { } peer) await peer.SendGameAsync(ToolChange, ntf);
@@ -311,6 +438,7 @@ public sealed partial class GuildService
     private async Task PushToolPermissionAsync(GuildStore.State g, long role)
     {
         if (role == 0 || Online(role) is not { } peer) return;
-        await peer.SendGameAsync(ToolPermission, new GuildWartimeToolRolePermissionNtf { ToolType = ToolOf(g, role) });
+        await peer.SendGameAsync(ToolPermission,
+            new GuildWartimeToolRolePermissionNtf { ToolType = ToolOf(g, role), RoleUsingToolId = CannonOf(role) });
     }
 }
