@@ -18,7 +18,7 @@ namespace Ro3Emu.Server.Accounts;
 ///   <c>.partial</c> too and renamed only once complete, with the copy's time kept so pruning orders both kinds alike.
 ///   <see cref="DatabaseRestore"/> takes either.
 /// </summary>
-public sealed class DatabaseBackup(IOptions<ServerOptions> options, AccountStore accounts, ILogger<DatabaseBackup> log, Diagnostics.ServerMetrics? metrics = null) : BackgroundService
+public sealed partial class DatabaseBackup(IOptions<ServerOptions> options, AccountStore accounts, ILogger<DatabaseBackup> log, Diagnostics.ServerMetrics? metrics = null) : BackgroundService
 {
     internal const string Prefix = "ro3emu-", Extension = ".db", CompressedExtension = ".db.gz", PartialExtension = ".partial", CorruptExtension = ".corrupt";
     private BackupOptions Settings => options.Value.Backup;
@@ -126,10 +126,13 @@ public sealed class DatabaseBackup(IOptions<ServerOptions> options, AccountStore
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException)
             {
                 try { File.Delete(partial); } catch (Exception ignored) when (ignored is IOException or UnauthorizedAccessException) { }
-                log.LogWarning(e, "Could not compress the backup {Backup}; it stays uncompressed", plain);
+                LogCompressFailed(log, e, plain);
             }
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not compress the backup {Backup}; it stays uncompressed")]
+    private static partial void LogCompressFailed(ILogger logger, Exception exception, string backup);
 
     /// <summary>Second-based names, made unique within a second, so concurrent requests never share a file.</summary>
     private string NextName()
