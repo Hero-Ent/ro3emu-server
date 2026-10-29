@@ -33,8 +33,9 @@ delete to unban). The server never writes the table, and it reads the table agai
 takes effect on the next sign-in without a restart. The panel must not create the table: when it is missing, the
 server is too old to enforce bans.
 
-A row for a name that has no account crashes nothing. `/sdk/login` registers an unknown name, so that name is
-registered and then refused like any banned account.
+A ban outlives its account: deleting an account (for example from the panel) keeps its `account_ban` row, so the
+player cannot escape a ban by recreating the account. `/sdk/login` registers unknown names, but a name with an active
+ban is refused before it is registered, so no new account is created for it.
 
 ## Where the server checks
 

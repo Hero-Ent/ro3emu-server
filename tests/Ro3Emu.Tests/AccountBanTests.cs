@@ -142,9 +142,16 @@ public sealed class AccountBanTests : IAsyncLifetime
         await bot.LoginAsync("ban-paths-witness", "pw");
         await bot.ReconnectMicroAsync();
         Assert.False(await bot.BindGateAsync("ban-paths-entity", gateAuth));
-        // A ban row for a name with no account crashes nothing: that name logs in like any banned one.
+        // A ban outlives its account (the panel deletes the account, not the ban): the name is refused before it is
+        // registered again, so no account is created for it.
         Ban("ban-ghost");
         Assert.Equal(401, (await SdkLoginAsync("ban-ghost", "pw")).Code);
+        using (var db = PanelConnection())
+        using (var cmd = db.CreateCommand())
+        {
+            cmd.CommandText = "SELECT COUNT(*) FROM account WHERE name='ban-ghost'";
+            Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
+        }
     }
 
     private async Task<string> SdkLoginBodyAsync(string identity, string credential)

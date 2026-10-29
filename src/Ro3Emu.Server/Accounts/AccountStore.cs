@@ -498,13 +498,13 @@ public sealed partial class AccountStore : IDisposable
     /// <summary>
     /// Login or first-time registration. <see cref="SignIn.Account"/> is the account's stored name, which can differ
     /// from <paramref name="name"/> in letter case; tokens and sessions must carry it, never the typed spelling. The ban
-    /// is checked only once the password matched (or the name was registered), so a wrong password answers the same
-    /// whether or not the account is banned.
+    /// is checked only once the password matched, so a wrong password answers the same whether or not the account is
+    /// banned; a name that has no account but a ban row is refused before it is registered.
     /// </summary>
     public async Task<SignIn> SignInAsync(string name, string password)
     {
         var signIn = await CheckOrRegisterAsync(name, password).ConfigureAwait(false);
-        if (signIn.Result == LoginResult.BadPassword) return signIn;
+        if (signIn.Result is LoginResult.BadPassword or LoginResult.Banned) return signIn;
         return await UnlessBannedAsync(signIn.Account, "sign-in").ConfigureAwait(false) == null
             ? signIn with { Result = LoginResult.Banned } : signIn;
     }
@@ -513,6 +513,9 @@ public sealed partial class AccountStore : IDisposable
     {
         var existing = await ReadAsync<AccountCredentials?>(new AccountCredentialsRead(name)).ConfigureAwait(false);
         if (existing != null) return await Check(existing).ConfigureAwait(false);
+        // A ban outlives its account (deleting an account keeps its ban row), so a banned name is refused before it is
+        // registered again.
+        if (await UnlessBannedAsync(name, "registration").ConfigureAwait(false) == null) return new(LoginResult.Banned, name);
         byte[] salt = RandomNumberGenerator.GetBytes(16);
         byte[] hash = await Task.Run(() => AccountHash.Hash(password, salt)).ConfigureAwait(false);
         if (await WriteAsync<bool>(new AccountRegisterPlan(name, hash, salt, DateTime.UtcNow.ToString("O"))).ConfigureAwait(false))
