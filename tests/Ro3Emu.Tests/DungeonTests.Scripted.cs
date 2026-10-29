@@ -184,6 +184,9 @@ public sealed partial class DungeonTests
         Assert.Equal(9, (await Next(alice, WorldInteractionService.Change3C, Change3CNtf.Parser)).CfgId); // VehicleSeatConfig 5300005
         if (exitByButton)
         {
+            // An old put-down (another ride's token) leaves the seat alone.
+            await Service<GameLoop>().InvokeAsync(() => Service<WorldInteractionService>().PutDownFromSceneActorAsync(Session(alice), -1));
+            Assert.True(Service<WorldInteractionService>().IsSeatedOnSceneActor(Session(alice)));
             await alice.SendGameAsync(WorldInteractionService.Action, new UseInteractActionReq { ButtonId = 26 });
             Assert.Equal(0, (await Next(alice, WorldInteractionService.Action, UseInteractActionRes.Parser)).Result);
             Service<IOptions<ServerOptions>>().Value.ScriptedScenePacePercent = 10;
@@ -219,6 +222,7 @@ public sealed partial class DungeonTests
 
         await Beside(alice, deniro.X, deniro.Y, deniro.Z);
         Assert.Equal(0, await Interact(alice, deniro, 5300005)); // the Deniro's own ride, not this step's event
+        Assert.False(Service<WorldInteractionService>().IsSeatedOnSceneActor(Session(alice))); // ...so it seats nobody
         Assert.Equal(1, Session(alice).DungeonAttempt!.Wave + 1);
         Assert.Equal(ErrorCodes.NpcParameter, await Interact(alice, deniro, 5300028)); // not one of the Deniro's
 
@@ -247,7 +251,13 @@ public sealed partial class DungeonTests
             // The reverse dungeon's client reports the NPC's place (31089) before each interaction (LC_DAL_Interact.SyncNpcPos).
             await alice.SendGameAsync(WorldCoreService.TeleportObject, new ClientTeleportObject
             { TargetUid = actor.Uid, TargetPos = new Vec3 { X = actor.X, Y = actor.Y, Z = actor.Z } });
-            if (step != 1) { Assert.Equal(0, await Interact(alice, actor, chain[step].Interaction)); continue; }
+            if (step != 1)
+            {
+                Assert.Equal(0, await Interact(alice, actor, chain[step].Interaction));
+                // Only the first Ride has a vehicle status: the ride to the depths seats nobody.
+                Assert.False(Service<WorldInteractionService>().IsSeatedOnSceneActor(Session(alice)));
+                continue;
+            }
             await SeatedOnTheDeniroAsync(alice, actor, chain[step].Interaction, exitByButton);
         }
         // ... and gets no error tip for it.

@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Ro3Emu.Server.Data.Config;
 using Ro3Emu.Server.Game;
 
 namespace Ro3Emu.Tests;
@@ -39,5 +41,19 @@ public class DungeonRideTests
     {
         Assert.Equal(DungeonService.RideAt(Route, 1).Face, DungeonService.RideAt(Route, 4).Face);
         Assert.NotEqual(DungeonService.RideAt(Route, 4).Face, DungeonService.RideAt(Route, 8).Face);
+    }
+
+    [Fact]
+    public void ARouteIsReadWithItsPointsAndABrokenOneIsDropped()
+    {
+        using var file = JsonDocument.Parse("""
+            { "m_kGuidePoints": {
+              "1": { "Id": 1, "pointList": [ { "x": 1, "y": 2, "z": 3 }, { "x": 4, "y": 5, "z": 6 } ] },
+              "2": { "Id": 2, "pointList": [ { "x": 1, "y": 2, "z": 3 } ] },
+              "3": { "Id": 3, "pointList": [ { "x": 1, "y": 2, "z": 3 }, { "x": 4, "z": 6 } ] } } }
+            """);
+        var paths = SceneEditorGuides.Paths(file.RootElement);
+        Assert.Equal([(1f, 2f, 3f), (4f, 5f, 6f)], paths[1]);
+        Assert.Equal([1L], paths.Keys); // one point is no route; a point without y would read as 0
     }
 }

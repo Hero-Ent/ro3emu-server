@@ -19,10 +19,16 @@ public static class SceneEditorGuides
             if (!long.TryParse(guide.Name, NumberStyles.Integer, CultureInfo.InvariantCulture, out long id)
                 || !guide.Value.TryGetProperty("pointList", out var points) || points.ValueKind != JsonValueKind.Array
                 || points.GetArrayLength() < 2) continue;
+            if (points.EnumerateArray().Any(p => !HasCoordinates(p))) continue; // a point without x, y or z would read as 0
             paths[id] = [.. points.EnumerateArray().Select(p => (Component(p, "x"), Component(p, "y"), Component(p, "z")))];
         }
         return paths;
     }
+
+    private static readonly string[] Axes = ["x", "y", "z"];
+
+    private static bool HasCoordinates(JsonElement point) =>
+        Axes.All(n => point.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.Number);
 
     private static float Component(JsonElement point, string name) =>
         point.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetSingle() : 0f;

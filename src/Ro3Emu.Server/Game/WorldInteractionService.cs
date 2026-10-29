@@ -20,7 +20,8 @@ public sealed class WorldInteractionService
         public static Anchor Of(WorldNpc npc) => new(npc.Uid, npc.SceneEntry, npc.NpcId);
     }
 
-    private sealed record Active(Anchor Npc, int InteractionId, int StatusId, int StatusType, int SeatIndex, bool Scripted = false);
+    private sealed record Active(Anchor Npc, int InteractionId, int StatusId, int StatusType, int SeatIndex, bool Scripted = false, long Token = 0);
+    private long _seatToken;
     private readonly Dictionary<GameSession, Active> _active = new();
     private readonly Dictionary<(long Scene, long Npc, int Seat), GameSession> _seats = new();
     private readonly GameData _data;
@@ -243,26 +244,32 @@ public sealed class WorldInteractionService
 
     /// <summary>
     /// Seats a player on a scripted dungeon's scene actor (a Deniro that carries riders), by the interaction's own
-    /// status and seat (_iStatusLocation) and the actor's VehicleConfig. The dungeon script already decided the
-    /// interaction is open (its buffs and step), so the predicates of <see cref="ValidateInteraction"/> are not asked
-    /// again. False when the player is in a state already, the NPC is no vehicle or the seat is taken.
+    /// status and seat (_iStatusLocation) and the actor's VehicleConfig. The caller has decided the interaction is open
+    /// (the dungeon: the current step waits on it), so the predicates of <see cref="ValidateInteraction"/> are not asked
+    /// again. Returns the seat's token, 0 when the player is in a state already, the NPC is no vehicle or the seat is taken.
     /// </summary>
-    public async Task<bool> SeatOnSceneActorAsync(GameSession s, long actorUid, int npcId, int interactionId)
+    public async Task<long> SeatOnSceneActorAsync(GameSession s, long actorUid, int npcId, int interactionId)
     {
         if (!InWorld(s) || _active.ContainsKey(s) || !IsRide(interactionId)
-            || _data.Row("NPCInteractConfig", interactionId) is not { } interaction) return false;
+            || _data.Row("NPCInteractConfig", interactionId) is not { } interaction) return 0;
         int statusId = Id(interaction, "_iStatusID"), seat = Id(interaction, "_iStatusLocation") - 1;
-        var state = new Active(new Anchor(actorUid, s.SceneEntry, npcId), interactionId, statusId, 3, seat, Scripted: true);
+        var state = new Active(new Anchor(actorUid, s.SceneEntry, npcId), interactionId, statusId, 3, seat, Scripted: true, Token: ++_seatToken);
         int[] seats = VehicleSeats(state);
-        if (seat < 0 || seat >= seats.Length || _data.Row("VehicleSeatConfig", seats[seat]) == null || !SeatFree(s, actorUid, seat)) return false;
+        if (seat < 0 || seat >= seats.Length || _data.Row("VehicleSeatConfig", seats[seat]) == null || !SeatFree(s, actorUid, seat)) return 0;
         _active[s] = state;
         _seats[(s.WorldScene, actorUid, seat)] = s;
         await NotifyAsync(s, state, false);
         await Send3CAsync(s, state);
-        return true;
+        return state.Token;
     }
 
-    /// <summary>Puts a player down from a scripted ride; a world vehicle's rider, or nobody, is left alone.</summary>
-    public Task PutDownFromSceneActorAsync(GameSession s) =>
-        _active.TryGetValue(s, out var state) && state.Scripted ? ExitAsync(s, false) : Task.CompletedTask;
+    /// <summary>
+    /// Puts a player down from the scripted ride <paramref name="token"/> (from <see cref="SeatOnSceneActorAsync"/>); a
+    /// world vehicle's rider, a later ride of the same player or nobody is left alone.
+    /// </summary>
+    public Task PutDownFromSceneActorAsync(GameSession s, long token) =>
+        _active.TryGetValue(s, out var state) && state.Scripted && state.Token == token ? ExitAsync(s, false) : Task.CompletedTask;
+
+    /// <summary>Whether the player is seated on a scripted dungeon's scene actor.</summary>
+    internal bool IsSeatedOnSceneActor(GameSession s) => _active.TryGetValue(s, out var state) && state.Scripted;
 }

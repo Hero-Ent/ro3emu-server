@@ -342,7 +342,11 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
                     || CompanionUnit.Build(data, monsters, c.NpcId) == null)) return [];
             if (step.Story != 0 && data.Row("PlotInterpretation", step.Story) == null) return [];
             if (step.TeleportAfter != 0 && !map.Points.ContainsKey(step.TeleportAfter)) return [];
-            if (step.RideAfter != 0 && !map.GuidePaths.ContainsKey(step.RideAfter)) return [];
+            // A ride needs its route, an actor that walks (a UnitConfig speed) and an actor interaction that completes the step.
+            if (step.RideAfter != 0 && (!map.GuidePaths.ContainsKey(step.RideAfter)
+                || !step.Complete.Any(t => t.Kind is ReconstructedDungeons.TriggerKind.Interaction or ReconstructedDungeons.TriggerKind.Message)
+                || !step.Actors.Any(a => data.Row("NPCConfig", a.NpcId) is { } n && data.Row("UnitConfig", GameData.Int(n, "_iUnitID")) is { } u
+                    && u.TryGetProperty("_fSpeed", out var v) && GameData.Number(v) > 0))) return [];
             foreach (var t in step.Complete.Concat(step.Ignore))
             {
                 bool known = t.Kind switch

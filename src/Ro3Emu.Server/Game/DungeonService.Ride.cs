@@ -1,4 +1,5 @@
 using Romsg;
+using Kind = Ro3Emu.Server.Game.ReconstructedDungeons.TriggerKind;
 using Ro3Emu.Server.Data;
 using Ro3Emu.Server.Maps;
 
@@ -9,7 +10,8 @@ namespace Ro3Emu.Server.Game;
 /// editor (m_kGuidePoints) and the participants move with it, before the step's teleport and the next step. The client
 /// has no ride rule: the route and the scene's camera animation are data without a trigger, and the original's server
 /// script is not shipped. So (inferred) the carrier walks at its own UnitConfig._fSpeed, both it and the players are
-/// moved in short forced-position steps, and the camera animation is not played.
+/// moved in short forced-position steps, and the camera animation is not played. The carrier stays where the route ends
+/// (only a scene's last step has a ride, so no later step shows it again).
 /// </summary>
 public sealed partial class DungeonService
 {
@@ -24,11 +26,18 @@ public sealed partial class DungeonService
     /// puts the player in the actor's seat, the client's own gameplay state; the actor puts them down after
     /// <see cref="SeatedRideMs"/>, or when they leave the scene, or at once through the client's exit button.
     /// </summary>
-    private async Task SeatRiderAsync(GameSession s, SceneActorUnit actor, int interaction)
+    private async Task SeatRiderAsync(Attempt a, GameSession s, SceneActorUnit actor, int interaction)
     {
-        if (!_vehicles.IsRide(interaction) || !await _vehicles.SeatOnSceneActorAsync(s, actor.Uid, actor.NpcId, interaction)) return;
-        _loop.ScheduleLegacy(Paced(SeatedRideMs), () => _vehicles.PutDownFromSceneActorAsync(s), "dungeon rider put down");
+        // Only the interaction the current step waits on seats anyone: the client may send any of an actor's interactions.
+        if (!_vehicles.IsRide(interaction) || !StepWaitsOn(a, interaction)) return;
+        long token = await _vehicles.SeatOnSceneActorAsync(s, actor.Uid, actor.NpcId, interaction);
+        if (token != 0) _loop.ScheduleLegacy(Paced(SeatedRideMs), () => _vehicles.PutDownFromSceneActorAsync(s, token), "dungeon rider put down");
     }
+
+    /// <summary>Whether the running step is completed by this actor interaction, directly or by its dungeon message.</summary>
+    private bool StepWaitsOn(Attempt a, long interaction) => !a.StepDone && Step(a) is { } step
+        && step.Complete.Any(t => t.Kind == Kind.Interaction && t.Id == interaction
+            || t.Kind == Kind.Message && _catalog.DungeonMessage(interaction) == t.Id);
 
     private sealed record Ride(IReadOnlyList<(float X, float Y, float Z)> Path, SceneActorUnit Carrier, float Length,
         int Generation, long StartMs, double DurationMs);
@@ -80,19 +89,30 @@ public sealed partial class DungeonService
         return true;
     }
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Scripted scene {Scene} ride: moving unit {Npc} failed")]
+    private partial void LogRideMoveFailed(Exception e, long scene, int npc);
+
     private async Task RideTickAsync(Attempt a, Ride ride, Func<Task> arrived)
     {
         if (a.Settled || a.Room.Closed || a.StepGeneration != ride.Generation) return;
         double done = Math.Min(1.0, (MonsterService.NowMs - ride.StartMs) / Math.Max(1.0, ride.DurationMs));
         var at = RideAt(ride.Path, (float)(done * ride.Length));
-        ride.Carrier.X = at.X; ride.Carrier.Y = at.Y; ride.Carrier.Z = at.Z; ride.Carrier.Face = at.Face;
-        await _world.MoveUnitAsync(ride.Carrier, new MovementChangeNtf
+        // A move that fails for one unit must not strand the step: the ride goes on and arrives.
+        try
         {
-            Uid = ride.Carrier.Uid, TransType = MovementTransitionType.MoveTransForceTeleport,
-            MovementInfo = new MovementInfo { Pos = new Vec3 { X = at.X, Y = at.Y, Z = at.Z }, Face = at.Face, ServerTime = MonsterService.NowMs },
-        });
+            ride.Carrier.X = at.X; ride.Carrier.Y = at.Y; ride.Carrier.Z = at.Z; ride.Carrier.Face = at.Face;
+            await _world.MoveUnitAsync(ride.Carrier, new MovementChangeNtf
+            {
+                Uid = ride.Carrier.Uid, TransType = MovementTransitionType.MoveTransForceTeleport,
+                MovementInfo = new MovementInfo { Pos = new Vec3 { X = at.X, Y = at.Y, Z = at.Z }, Face = at.Face, ServerTime = MonsterService.NowMs },
+            });
+        }
+        catch (Exception e) { LogRideMoveFailed(e, a.Plan.SceneEntry, ride.Carrier.NpcId); }
         foreach (var member in Present(a).Where(m => a.Loaded.Contains(m) && !m.SceneLoading))
-            await _scenes.TeleportInMapAsync(member, new MapPoint(at.X, at.Y, at.Z, at.Face));
+        {
+            try { await _scenes.TeleportInMapAsync(member, new MapPoint(at.X, at.Y, at.Z, at.Face)); }
+            catch (Exception e) { LogRideMoveFailed(e, a.Plan.SceneEntry, 0); }
+        }
         if (done >= 1) await arrived();
         else _loop.ScheduleLegacy(Paced(RideTickMs), () => RideTickAsync(a, ride, arrived), "dungeon ride");
     }
