@@ -62,7 +62,11 @@ public sealed class LauncherLink
     [JsonPropertyName("icon")] public string? Icon { get; set; }
 }
 
-/// <summary>Per-user choices (%APPDATA%\RO3Emu\launcher-settings.json).</summary>
+/// <summary>
+/// Per-user choices, one file per launcher under %APPDATA%\RO3Emu: launcher-settings-ro3emu.json for RO3Emu's own app,
+/// launcher-settings-&lt;repository&gt;.json for a server's launcher. Two servers' launchers on one PC must not share the
+/// game folder they installed and patched, nor delete each other's on Uninstall.
+/// </summary>
 public sealed class UserSettings
 {
     [JsonPropertyName("clientDirectory")] public string? ClientDirectory { get; set; }
@@ -78,26 +82,54 @@ public sealed class UserSettings
     /// <summary>RO3Emu mode: the app version whose release notes were shown; a newer running version shows its notes once.</summary>
     [JsonPropertyName("appNotesSeenVersion")] public string? AppNotesSeenVersion { get; set; }
 
-    static string FilePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RO3Emu", "launcher-settings.json");
+    static string Folder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RO3Emu");
 
-    public static UserSettings Load()
+    /// <summary>Before launchers had a file each, every one used this file.</summary>
+    static string LegacyPath => Path.Combine(Folder, "launcher-settings.json");
+
+    [JsonIgnore] string _path = "";
+
+    /// <summary>RO3Emu's own app.</summary>
+    public static UserSettings ForApp() => Load(Path.Combine(Folder, "launcher-settings-ro3emu.json"), legacy: false);
+
+    /// <summary>
+    /// A server's launcher, keyed by its repository address. The first start after the change takes over the shared
+    /// file's choices once, so a player keeps the game folder the launcher already installed.
+    /// </summary>
+    public static UserSettings ForRepository(string repositoryUrl) =>
+        Load(Path.Combine(Folder, "launcher-settings-" + FileKey(repositoryUrl) + ".json"), legacy: true);
+
+    /// <summary>The repository address as a file name: host and path, anything else replaced by '_'.</summary>
+    internal static string FileKey(string repositoryUrl)
     {
+        string key = Uri.TryCreate(repositoryUrl, UriKind.Absolute, out var uri)
+            ? uri.Host + (uri.IsDefaultPort ? "" : "_" + uri.Port) + uri.AbsolutePath : repositoryUrl;
+        var chars = key.Select(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' ? char.ToLowerInvariant(c) : '_').ToArray();
+        return new string(chars).Trim('_', '.');
+    }
+
+    static UserSettings Load(string path, bool legacy)
+    {
+        UserSettings settings;
         try
         {
-            return File.Exists(FilePath) ? JsonSerializer.Deserialize<UserSettings>(File.ReadAllBytes(FilePath)) ?? new() : new();
+            string? source = File.Exists(path) ? path : legacy && File.Exists(LegacyPath) ? LegacyPath : null;
+            settings = source != null ? JsonSerializer.Deserialize<UserSettings>(File.ReadAllBytes(source)) ?? new() : new();
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
         {
-            return new();
+            settings = new();
         }
+        settings._path = path;
+        return settings;
     }
 
     public void Save()
     {
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(this));
+            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+            File.WriteAllText(_path, JsonSerializer.Serialize(this));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }

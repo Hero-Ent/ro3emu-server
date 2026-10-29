@@ -92,8 +92,10 @@ Set `repository` to the public URL of your repository folder and `server` to you
   copies itself).
 - **Play** hides the launcher to a tray icon; it comes back when the game closes and checks for updates again. Tray
   menu: Show launcher / Exit. The game does not need the launcher while it runs.
-- Player choices live in `%APPDATA%\RO3Emu\launcher-settings.json` (`clientDirectory`, `shortcutsAsked`,
-  `notesSeenVersion`, `ownedDirectory`).
+- Player choices live in `%APPDATA%\RO3Emu\launcher-settings-<repository>.json` (`clientDirectory`, `shortcutsAsked`,
+  `notesSeenVersion`, `ownedDirectory`), one file per server's launcher, so two servers' launchers on one PC keep
+  their own game folders. RO3Emu's own app uses `launcher-settings-ro3emu.json`. The first start of a launcher that
+  used the old shared `launcher-settings.json` takes over its choices once.
 
 ## Releasing
 

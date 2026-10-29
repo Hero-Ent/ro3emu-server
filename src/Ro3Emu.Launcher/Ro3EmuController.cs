@@ -23,7 +23,7 @@ public sealed class Ro3EmuController : ILauncherController, IUiSink
     readonly Action<object> _post;
     readonly Func<string, string?> _pickFolder;
     readonly Action<bool> _gameRunningChanged;
-    readonly UserSettings _user = UserSettings.Load();
+    readonly UserSettings _user = UserSettings.ForApp();
     readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(20) };
     readonly HttpClient _ping = new() { Timeout = TimeSpan.FromSeconds(3) };
     readonly GitHubReleases _github;
@@ -42,6 +42,8 @@ public sealed class Ro3EmuController : ILauncherController, IUiSink
     bool _appUpdateLater;
     Flows.LocalServer? _server;
     string? _serverKind;
+    /// <summary>The address and GM accounts the running host server was started with ("" for local play).</summary>
+    string _serverSetup = "";
     bool _serverStarting;
     Process? _game;
     string _unit = "bytes";
@@ -134,7 +136,7 @@ public sealed class Ro3EmuController : ILauncherController, IUiSink
             await LoadReleasesAsync();
         }
         else PostNews();
-        if (GameRunning()) PostState("running");
+        if (GameRunning()) ShowForeignGame();
         else await CheckAsync();
     }
 
@@ -190,7 +192,7 @@ public sealed class Ro3EmuController : ILauncherController, IUiSink
         }
         if (GameRunning())
         {
-            PostState("running");
+            ShowForeignGame();
             return;
         }
         // RO3Emu's own client DLLs (client\ next to the exe) missing is a broken RO3Emu folder, not an old game.
@@ -284,7 +286,9 @@ public sealed class Ro3EmuController : ILauncherController, IUiSink
         _busy = true;
         try
         {
-            if (_server == null || _serverKind != kind || _server.Process is { HasExited: true })
+            // Hosting again with another address or other GM accounts needs a server started with them.
+            string setup = kind == "host" ? $"{publicAddress}|{string.Join(',', gms)}" : "";
+            if (_server == null || _serverKind != kind || _serverSetup != setup || _server.Process is { HasExited: true })
             {
                 await StopServerAsync();
                 _unit = "items";
@@ -300,6 +304,7 @@ public sealed class Ro3EmuController : ILauncherController, IUiSink
                 var server = await Task.Run(() => Flows.StartServerAsync(client, kind == "host", publicAddress, gms, _options.Ports));
                 _server = server;
                 _serverKind = kind;
+                _serverSetup = setup;
                 _serverStarting = false;
                 PostServer();
                 PostSettings();
@@ -369,6 +374,32 @@ public sealed class Ro3EmuController : ILauncherController, IUiSink
     }
 
     static bool GameRunning() => Process.GetProcessesByName("ro3").Length > 0;
+
+    /// <summary>
+    /// A game this launcher did not start (open before it, or started some other way): "running" until it closes, then
+    /// the usual check. Without the watch the page stayed on Running after that game closed.
+    /// </summary>
+    void ShowForeignGame()
+    {
+        PostState("running");
+        foreach (var process in Process.GetProcessesByName("ro3"))
+        {
+            if (_game != null && process.Id == _game.Id) { process.Dispose(); continue; }
+            try
+            {
+                process.EnableRaisingEvents = true;
+                process.Exited += (_, _) => System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
+                {
+                    process.Dispose();
+                    if (_game == null && !GameRunning()) await CheckAsync();
+                });
+            }
+            catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                process.Dispose();
+            }
+        }
+    }
 
     async Task StopServerAsync()
     {

@@ -18,7 +18,7 @@ public sealed partial class LauncherController : ILauncherController
     readonly Action<object> _post;
     readonly Func<string, string?> _pickFolder;
     readonly Action<bool> _gameRunningChanged;
-    readonly UserSettings _settings = UserSettings.Load();
+    readonly UserSettings _settings;
     readonly RepositoryClient _repo;
     readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(5) };
     readonly string _version = typeof(LauncherController).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
@@ -38,6 +38,7 @@ public sealed partial class LauncherController : ILauncherController
         _post = post;
         _pickFolder = pickFolder;
         _gameRunningChanged = gameRunningChanged;
+        _settings = UserSettings.ForRepository(config.RepositoryUrl);
         _repo = new RepositoryClient(new Uri(config.RepositoryUrl));
         _layout = new InstallLayout(_settings.ClientDirectory ?? Path.Combine(Path.GetDirectoryName(exePath)!, "Client"));
     }
