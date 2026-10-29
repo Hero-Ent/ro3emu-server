@@ -84,6 +84,7 @@ public sealed partial class CombatService
         bool turret = TurretSkill?.Invoke(s, req.SkillId) == true;
         if (turret) TurretAim?.Invoke(s, req);
         var row = EffectiveSkillRow(s, req.SkillId);
+        if (row is { } trapRow && SceneTrap(s, req, trapRow)) return; // CombatService.SceneTraps: the passage's ant eggs
         var owned = req.OpUnitId == 0 || req.OpUnitId == s.Role?.Id ? null
             : s.SkillObjects.FirstOrDefault(u => u.Uid == req.OpUnitId && u.WorldScene == s.WorldScene && u.ExpiresMs > Now);
         int error = s.Role == null || s.Progress == null || s.Dead || s.SceneLoading ? ErrorCodes.SkillBadState
@@ -335,7 +336,8 @@ public sealed partial class CombatService
         if (turret) return 0;
         float height = GameData.Int(row, "_iHeightRange") / 100f;
         if (height > 0 && MathF.Abs(origin.Y - targetPosition.Y) > height) return ErrorCodes.SkillHeight;
-        if (GameData.Int(row, "_iPassBlock") == 2 && _worldData.Map(s.SceneEntry)?.Nav is { } nav
+        if (GameData.Int(row, "_iPassBlock") == 2 && !FieldMonsterTarget(s, release, monster)
+            && _worldData.Map(s.SceneEntry)?.Nav is { } nav
             && !nav.CanWalk(origin.X, origin.Y, origin.Z, targetPosition.X, targetPosition.Z)
             && (release != 1 || monster == null
                 || BlockedMonsterEndpointAllowed?.Invoke(s, monster, origin, targetPosition) != true))

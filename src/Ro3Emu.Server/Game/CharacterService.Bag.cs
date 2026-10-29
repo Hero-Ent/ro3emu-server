@@ -308,13 +308,20 @@ public sealed partial class CharacterService
         await SyncItemsAsync(session);
     }
 
+    /// <summary>
+    /// A pack as 5009 carries it. sortedIndex is the item's rank in the pack (1..n, by the saved Sort, then GUID), not
+    /// the saved Sort itself: LC_DAL_Knapsack.OnPackItemSortedIndexUpdate, which runs on the first packInfo change
+    /// after a 31301 reply, indexes an array by these values and walks it with ipairs, so a gap (an item that left the
+    /// pack leaves a hole in the saved Sorts) or two equal values hide every later item until the next login.
+    /// </summary>
     private DBPackInfo FullPack(IEnumerable<InvItem> items)
     {
         var pack = new DBPackInfo();
-        foreach (var item in items)
+        int rank = 0;
+        foreach (var item in items.OrderBy(i => i.Sort).ThenBy(i => i.Guid))
         {
             pack.Items[item.Guid] = ItemInfo(item);
-            pack.SortedIndex[item.Guid] = item.Sort;
+            pack.SortedIndex[item.Guid] = ++rank;
             pack.PackCapacity = PackCapacity(item.Pack);
         }
         return pack;

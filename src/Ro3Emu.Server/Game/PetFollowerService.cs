@@ -8,7 +8,7 @@ namespace Ro3Emu.Server.Game;
 /// Roster-to-world projection.
 /// The selected setup plan, not ownership alone, determines a visible type-7 actor (inferred).
 /// </summary>
-public sealed class PetFollowerService(World world, GameData data, FunctionService functions)
+public sealed class PetFollowerService(World world, GameData data, FunctionService functions, WorldData? worldData = null)
 {
     private long _nextActorId = 1L << 52; // Separate from role IDs and monster IDs (1L << 41).
 
@@ -39,7 +39,8 @@ public sealed class PetFollowerService(World world, GameData data, FunctionServi
                     next = new PetFollowerActor(
                         Interlocked.Increment(ref _nextActorId), role.Id, slot.Value, npcId,
                         Math.Max(1, GameData.Int(npc, "_iCamp")), session.Position.Clone(), session.Face, // friendly fallback (inferred)
-                        GameData.Int(npc, "_iSpeed"), (int)GameData.Int(npc, "_iElement"));
+                        GameData.Int(npc, "_iSpeed"), (int)GameData.Int(npc, "_iElement"),
+                        worldData == null ? null : scene => worldData.Map(scene)?.Nav);
                 break;
             }
         }
@@ -49,12 +50,14 @@ public sealed class PetFollowerService(World world, GameData data, FunctionServi
 
 /// <summary>One server-driven AOI projection; no inferred pet combat, skill AI or damage.</summary>
 public sealed class PetFollowerActor(long uid, long ownerId, int petId, int npcTemplateId, long camp, Vec3 position, float face,
-    long npcSpeed = 0, int element = 0)
+    long npcSpeed = 0, int element = 0, Func<long, NavGrid?>? nav = null)
 {
     // Config/ComplexConfig/PublicParamConfig.lua:8896-8901: PetConfigFollow = 300.
     // Centimetres and the diagonal side/back placement are (inferred);
     // neither the original server's placement nor its follow cadence is available in the client scripts.
     private const float FollowDistance = 3f;
+    // Offset scales tried on the chosen side, then on the two sides turned by 90 degrees (inferred).
+    private static readonly float[] OffsetScales = [1f, 0.5f];
     private float _offsetX, _offsetZ;
 
     public long Uid { get; } = uid;
@@ -81,7 +84,7 @@ public sealed class PetFollowerActor(long uid, long ownerId, int petId, int npcT
         PreviousPosition = Position.Clone();
         Teleported = forceTeleport || dx * dx + dz * dz > 100f; // same 10-unit transition as player AOI
         if (Teleported) SetOffset(walk.Face);
-        Position = new Vec3 { X = owner.Position.X + _offsetX, Y = owner.Position.Y, Z = owner.Position.Z + _offsetZ };
+        Position = Place(owner, PreviousPosition);
         bool wasMoving = IsMoving;
         IsMoving = !walk.BStop && !Teleported && owner.Speed > 0 && walk.SpeedRate > 0f;
         HasUpdate = Teleported || Position.X != PreviousPosition.X || Position.Y != PreviousPosition.Y
@@ -92,7 +95,7 @@ public sealed class PetFollowerActor(long uid, long ownerId, int petId, int npcT
     public void AtOwner(GameSession owner)
     {
         SetOffset(owner.Face);
-        Position = new Vec3 { X = owner.Position.X + _offsetX, Y = owner.Position.Y, Z = owner.Position.Z + _offsetZ };
+        Position = Place(owner, null);
         PreviousPosition = Position.Clone();
         Face = owner.Face;
         Teleported = false;
@@ -105,6 +108,39 @@ public sealed class PetFollowerActor(long uid, long ownerId, int petId, int npcT
         bool changed = Face != face;
         Face = face;
         return changed;
+    }
+
+    /// <summary>
+    /// The owner's position plus the follow offset, kept on the map's walkable ground (#bug-reports: the pet clipped into
+    /// slopes and walls). With the map's nav grid (the client's *_dynamicmapdata walkability, NavGrid), a spot counts
+    /// only when the straight line from the owner to it is walkable (NavGrid.CanWalk, the client's direct-walk check) and
+    /// its y is that cell's walkable layer, not the owner's y. When no offset spot qualifies, the last spot stays while it
+    /// is still walkable and near, else the pet stands on the owner's spot (inferred). Without a nav grid, or when the owner's
+    /// own cell has no walkable layer, the plain offset at the owner's height is kept.
+    /// </summary>
+    private Vec3 Place(GameSession owner, Vec3? previous)
+    {
+        float ox = owner.Position.X, oy = owner.Position.Y, oz = owner.Position.Z;
+        // Without a nav grid, or with an owner on a cell the grid has no walkable layer for (a GM jump, a spot off the
+        // baked layers), the plain offset at the owner's height is kept.
+        if (nav?.Invoke(owner.SceneEntry) is not { } grid || grid.WalkHeight(ox, oz, oy) == null)
+            return new Vec3 { X = ox + _offsetX, Y = oy, Z = oz + _offsetZ };
+        (float X, float Z)[] sides = [(_offsetX, _offsetZ), (_offsetZ, -_offsetX), (-_offsetZ, _offsetX)];
+        foreach (var (sx, sz) in sides)
+        {
+            foreach (float scale in OffsetScales)
+            {
+                float x = ox + sx * scale, z = oz + sz * scale;
+                if (grid.CanWalk(ox, oy, oz, x, z) && grid.WalkHeight(x, z, oy) is { } y) return new Vec3 { X = x, Y = y, Z = z };
+            }
+        }
+        if (previous != null)
+        {
+            float dx = previous.X - ox, dz = previous.Z - oz;
+            if (dx * dx + dz * dz <= 4f * FollowDistance * FollowDistance && grid.IsWalkable(previous.X, previous.Y, previous.Z))
+                return previous.Clone();
+        }
+        return new Vec3 { X = ox, Y = grid.WalkHeight(ox, oz, oy) ?? oy, Z = oz };
     }
 
     private void SetOffset(float face)

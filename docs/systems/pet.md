@@ -46,6 +46,12 @@ Explicitly unavailable:
   A 31081 walk starts at that distinct position and uses the same finite one-second projection as
   the owner's AOI movement. Both projected trajectories remain separated. This synchronized
   formation policy and cadence are **(inferred)**, not recovered original pet AI.
+- Keep the follow spot on walkable ground when the map has a nav grid (`*_dynamicmapdata`, `NavGrid`): the
+  offset spot counts only when the straight line from the owner is walkable (`NavGrid.CanWalk`), and its height
+  is that cell's walkable layer rather than the owner's height. Otherwise half the offset, then the two sides
+  turned by 90 degrees, are tried; failing those the last spot stays while it is walkable and within 6 m, else the
+  pet stands on the owner's spot. When the owner's own cell has no walkable layer (a GM jump off the baked ground)
+  the plain offset at the owner's height is kept. The fallback order is **(inferred)** (`PetFollowerActor.Place`).
 - Send start/stop state changes even when coordinates are identical, refresh moving keepalives,
   and suppress repeated unchanged idle stops. Use 31014 for pet turns so turning does not restart
   the pet's movement clock. `SceneService.TeleportInMapAsync` explicitly signals a pet teleport,
@@ -55,7 +61,7 @@ Explicitly unavailable:
   stat formula, incubation rule or pendant configuration is introduced.
 
 This keeps the pet from sharing the owner's position. Native-client visual acceptance, exact original
-server cadence/offset policy, and pet navigation around obstacles remain unqualified. Packet geometry
+server cadence/offset policy, and pathing around obstacles between two follow spots remain unqualified. Packet geometry
 cannot guarantee separate name boards from every possible camera angle.
 
 ## Tests

@@ -169,7 +169,7 @@ public sealed partial class CharacterService
         else if (item != null && (int)req.Opr == 0 && item.Grid == 0 && data.Row("ItemConfig", item.Entry) is { } row && GameData.Int(row, "_iType") == ItemTypeEquip)
         {
             int part = (int)GameData.Int(row, "_iEquipPart");
-            var grids = GridsFor(part);
+            var grids = EquipGridsFor(session, part);
             if (grids.Length > 0)
             {
                 if (!grids.Contains(grid)) grid = grids.FirstOrDefault(g => staged.Where(i => i.Grid > 0 && i.Pack == 2 && i.Grid <= 8).All(e => e.Grid != g), grids[0]);

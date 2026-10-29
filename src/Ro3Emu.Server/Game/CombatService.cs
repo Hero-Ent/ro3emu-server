@@ -373,16 +373,30 @@ public sealed partial class CombatService : IGameTicker
     /// <summary>LC_Pendant_Wolf._effectData: a Wolf-track (m_eBulletType 8) effect's run time to the target, from
     /// m_kBulletWolf.m_iToTargetSpeed (control type 1) or m_iToTargetTime (ms). Null when it is not a Wolf pendant charge.
     /// The speed's unit is (inferred) metres per second.</summary>
-    private int? WolfRunMs(int effectId, float distance)
+    private int? WolfRunMs(int effectId, float distance) => PendantRunMs(effectId, distance, WolfTrack);
+
+    /// <summary>
+    /// A pendant-track effect's run to its target in ms, null when the effect's m_kBulletData is on neither
+    /// <paramref name="track"/> nor <paramref name="otherTrack"/> (enum_BulletTrackType: 8 Wolf reads m_kBulletWolf; 3 Falcon reads m_kBulletFalcon;
+    /// 7 FalconArc the bullet's life time, inferred). m_iBulletControlType 1 (Speed) is distance / m_iToTargetSpeed,
+    /// otherwise m_iToTargetTime (LC_Pendant_Wolf / LC_Pendant_Falcon.ChangeState).
+    /// </summary>
+    private int? PendantRunMs(int effectId, float distance, int track, int otherTrack = -1)
     {
         var effects = _data.SkillTemplateTable("Lua_Config_EffectData");
         if (!effects.TryGetValue(effectId.ToString(), out var e) || !e.TryGetProperty("m_kDamage", out var dmg)
             || !dmg.TryGetProperty("m_kBulletData", out var b) || !b.TryGetProperty("m_eBulletType", out var type)
-            || !type.TryGetInt32(out int kind) || kind != 8 || !b.TryGetProperty("m_kBulletWolf", out var wolf)) return null;
+            || !type.TryGetInt32(out int kind) || (kind != track && kind != otherTrack)) return null;
+        if (kind == FalconArcTrack)
+            return b.TryGetProperty("m_fBulletLifeTime", out var life) && life.ValueKind == JsonValueKind.Number
+                ? (int)life.GetDouble() : 0;
+        bool wolf = kind == WolfTrack;
+        if (!b.TryGetProperty(wolf ? "m_kBulletWolf" : "m_kBulletFalcon", out var run)) return wolf ? null : 0;
         if (b.TryGetProperty("m_iBulletControlType", out var c) && c.TryGetInt32(out int control) && control == 1
-            && wolf.TryGetProperty("m_iToTargetSpeed", out var speed) && speed.GetDouble() > 0)
+            && run.TryGetProperty("m_iToTargetSpeed", out var speed) && speed.ValueKind == JsonValueKind.Number
+            && speed.GetDouble() > 0)
             return (int)Math.Round(distance / speed.GetDouble() * 1000);
-        return wolf.TryGetProperty("m_iToTargetTime", out var t) && t.TryGetInt32(out int ms) ? ms : 0;
+        return run.TryGetProperty("m_iToTargetTime", out var t) && t.TryGetInt32(out int ms) ? ms : 0;
     }
 
     private int BulletLifeTime(int bulletEffectId, float distance = 10f)

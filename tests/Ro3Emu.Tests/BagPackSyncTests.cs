@@ -100,6 +100,32 @@ public sealed class BagPackSyncTests
         Assert.Equal(gear.Entry, update.PackInfo[2].All.Items[gear.Guid].ItemEntry);
     }
 
+    [Fact]
+    public async Task SortedIndexIsTheRankInThePackWithoutGaps()
+    {
+        await using var host = await SyntheticHost.StartAsync();
+        await using var bot = host.NewBot();
+        await bot.LoginAsync("alice", "pw");
+        await bot.EnterGateAsync();
+        long role = (await bot.CreateRoleAsync("Alice")).RoleBaseInfo.Id;
+        var roles = host.Service<RoleStore>();
+        var progress = roles.LoadProgress(role);
+        progress.StarterKit = true;
+        roles.SaveProgress(role, progress);
+        var store = host.Service<ItemStore>();
+        // Saved sorts with a hole (an item that left the pack) and a tie: LC_DAL_Knapsack.OnPackItemSortedIndexUpdate
+        // walks the values with ipairs, so the client needs 1..n.
+        var first = new InvItem { Entry = 1000000, Stack = 50, Pack = 1, Sort = 2 };
+        var second = new InvItem { Entry = 1000000, Stack = 7, Pack = 1, Sort = 5 };
+        var third = new InvItem { Entry = 1004000, Stack = 1, Pack = 1, Sort = 5 };
+        foreach (var item in new[] { first, second, third }) store.Insert(role, item);
+        await bot.EnterWorldAsync(role);
+        var sorted = (await Next(bot)).PackInfo[1].All.SortedIndex;
+        Assert.Equal(new long[] { 1, 2, 3 }, sorted.Values.Order());
+        Assert.Equal(1L, sorted[first.Guid]);
+        Assert.Equal(second.Guid < third.Guid, sorted[second.Guid] < sorted[third.Guid]);
+    }
+
     private static async Task Unequip(BotClient bot, InvItem item)
     {
         await bot.SendGameAsync(CharacterService.EquipItemOpr, new EquipItemOprReq

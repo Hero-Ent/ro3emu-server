@@ -25,7 +25,8 @@ public sealed partial class DungeonService
     private void StartCues(Attempt a, ReconstructedDungeons.ScriptedStep step)
     {
         int generation = a.StepGeneration;
-        foreach (var cue in step.Cues ?? [])
+        // A region cue waits for its region instead (DungeonService.Story.RegionCuesAsync).
+        foreach (var cue in (step.Cues ?? []).Where(c => c.Region == 0))
             StepLater(a, generation, cue.HpBelow > 0 ? 0 : cue.AtMs, () => CueAsync(a, generation, cue), whileFighting: true);
     }
 
@@ -50,6 +51,8 @@ public sealed partial class DungeonService
 
     private async Task PlayCueAsync(Attempt a, ReconstructedDungeons.Cue cue)
     {
+        if (cue.Remove != 0) { await RemoveActorAsync(a, cue.Remove); return; }
+        if (cue.Buff != 0 || cue.PlayerCast != 0) { await PlayerCueAsync(a, cue); return; }
         if (cue.Chat != 0)
             await BroadcastAsync(a, SystemBroadcast, new SystemBoardCastMsgNtf
             {

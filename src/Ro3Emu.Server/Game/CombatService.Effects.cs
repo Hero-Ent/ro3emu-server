@@ -270,20 +270,26 @@ public sealed partial class CombatService
         }
         if (!CanApplyMoreEffects()) return; // player publication can yield before any monster hit is committed
         int bulletEffect = BulletEffect(show);
-        if (bulletEffect > 0 && field == null && WolfRunMs(bulletEffect, 0) != null)
+        bool highLevel = GameData.Int(row, "_iSkillEffectLevel") > 0;
+        int skillConfigId = (int)GameData.Int(row, "_iID");
+        // A Falcon-track "bullet" is the owner's falcon flying to the target and back (CombatService.Falcon).
+        if (bulletEffect > 0 && field == null && FalconFlightMs(bulletEffect, 0) != null)
+        {
+            if (!await FalconFlightAsync(s, action, skillConfigId, highLevel, bulletEffect, targets, playerTargets, CanApplyMoreEffects)) return;
+        }
+        else if (bulletEffect > 0 && field == null && WolfRunMs(bulletEffect, 0) != null)
         {
             // A Wolf-track "bullet" (m_eBulletType 8) is the owner's Wolf pendant charging (verified in the client:
             // LC_PerformEffect_Mgr.PlayPendantShow -> LC_Pendant_Manager.PendantPerform -> LC_Pendant_Wolf Perform). It is a
             // SkillEffectDisplayNotify of type 5 (enum_DisplayEffectType.PendantShow); as a SkillFixTimeBulletNotify it
             // drew nothing (Wolf has no bullet track), so unmounted Warg Strike showed no wolf running to the target.
-            bool highLevel = GameData.Int(row, "_iSkillEffectLevel") > 0;
             int run = 0;
             foreach (var target in targets)
             {
                 await SendSkillEffectAsync(s, new SkillEffectDisplayNotify
                 {
                     SourceId = s.Role.Id, MasterId = s.Role.Id, TargetId = target.Uid, TargetPos = target.Pos.Clone(),
-                    EffectId = bulletEffect, EffectType = 5, SkillId = (int)GameData.Int(row, "_iID"),
+                    EffectId = bulletEffect, EffectType = 5, SkillId = skillConfigId,
                 }, highLevel);
                 run = Math.Max(run, WolfRunMs(bulletEffect, Distance(s.Position, target.Pos)) ?? 0);
             }
@@ -301,7 +307,6 @@ public sealed partial class CombatService
                 .Concat(playerTargets.Select(p => Distance(origin, p.Position)))
                 .DefaultIfEmpty(10f).Max();
             int flyTime = BulletLifeTime(bulletEffect, maxDist);
-            bool highLevel = GameData.Int(row, "_iSkillEffectLevel") > 0;
             foreach (var target in targets)
             {
                 var bullet = new SkillFixTimeBulletNotify
@@ -312,7 +317,7 @@ public sealed partial class CombatService
                     FixedTime = flyTime,
                     Split = split,
                     TargetPosition = target.Pos,
-                    SkillConfigId = (int)GameData.Int(row, "_iID"),
+                    SkillConfigId = skillConfigId,
                     MasterId = action.SourceId,
                     SourcePosition = action.Turret?.Origin ?? action.Origin,
                     StartTimestampMs = Now,
@@ -329,7 +334,7 @@ public sealed partial class CombatService
                     FixedTime = flyTime,
                     Split = split,
                     TargetPosition = pTarget.Position,
-                    SkillConfigId = (int)GameData.Int(row, "_iID"),
+                    SkillConfigId = skillConfigId,
                     MasterId = action.SourceId,
                     SourcePosition = action.Turret?.Origin ?? action.Origin,
                     StartTimestampMs = Now,

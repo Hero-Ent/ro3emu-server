@@ -204,9 +204,10 @@ public sealed partial class DungeonTests
     }
 
     [ClientDataFact]
-    public async Task TheVortexScenePlaysFromTheCorridorThroughTheJumpToTheEndOfThePassage()
+    public async Task TheVortexScenePlaysFromTheCorridorThroughTheSlideIntoTheNextScene()
     {
         const long scene = 1000201;
+        Service<IOptions<ServerOptions>>().Value.ScriptedScenePacePercent = 10;
         await using var alice = await InWorld("Alice");
         await Gm(alice, "!quest accept 10104290"); // Enter the Ant Queen's Nest: [101018, 1000201, 1]
         Assert.Equal(0, await Enter(alice, new EnterDungeonReq { SceneEntry = scene }));
@@ -215,10 +216,12 @@ public sealed partial class DungeonTests
         var bobo = Assert.Single(await ActorsIn(alice, 1));
         Assert.Equal((5300027, 1), (bobo.NpcId, bobo.EntityType)); // Bobo, a monster-type unit the client creates
 
-        // Explore ahead: the corridor region 25 (where guide point 24 ends) is the server's to notice.
+        // Explore ahead: the corridor region 25 (where guide point 24 ends) is the server's to notice. Bobo then flies
+        // to the pit and is sucked in, on the scene's clock.
         var map = Service<WorldData>().Map(scene)!;
         await WalkInto(alice, map.Regions[25]);
-        await Stage(alice, 2, quest: 2);
+        await Stage(alice, 2, quest: 1);
+        await Stage(alice, 3, quest: 2);
         var vortex = Assert.Single(await ActorsIn(alice, 1, a => a.NpcId == 5300030));
         Assert.DoesNotContain(await ActorsIn(alice, 1), a => a.NpcId == 5300027); // Bobo was sucked in
 
@@ -226,64 +229,104 @@ public sealed partial class DungeonTests
         Assert.Equal(ErrorCodes.NpcTooFar, await Interact(alice, vortex, 5300030)); // not from the corridor's far end
         await Beside(alice, vortex.X, vortex.Y, vortex.Z);
         Assert.Equal(0, await Interact(alice, vortex, 5300030));
-        await Stage(alice, 3, quest: 3);
+        // The jump ('Jump into the Cave', 2067 ms) plays out before the teleport, on the step's clock.
+        await Stage(alice, 4, quest: 3);
         var top = map.Points[21];
         Assert.True(MonsterService.Distance(Session(alice).Position.X, Session(alice).Position.Z, top.X, top.Z) < 1,
             "the jump lands at point 21, the top of the passage");
+        // The slide (LC_Movement_Controller_Slide): the locked view, its camera and speeds, then the state.
+        var slide = await Next(alice, WorldCoreService.CustomChange, CustomDataChange.Parser,
+            c => c.CustomDatas.Any(d => d.Id == DungeonService.SlideStateData && d.CustomParam.LongParam == 1));
+        Assert.Equal([DungeonService.SlideViewModeData, DungeonService.SlideCameraData, DungeonService.SlideSpeedData,
+            DungeonService.SlideStateData], slide.CustomDatas.Select(d => d.Id));
+        Assert.Equal([1000L, 3200L], slide.CustomDatas.Single(d => d.Id == DungeonService.SlideSpeedData).CustomParam.ListLongParam);
         await ActorsIn(alice, 0); // nothing is shown now
 
-        await WalkInto(alice, map.Regions[22]); // the bottom of the passage
+        // The bottom of the passage: the walk report there ends the slide (and the fall moves the player on at once).
+        var end = map.Regions[22];
+        await Beside(alice, end.X - 1.5f, end.Y, end.Z);
+        await alice.SendGameAsync(MsgId.Walk, new WalkReq { Pos = new Vec3 { X = end.X, Y = end.Y, Z = end.Z }, BStop = true, SpeedRate = 1 });
+        await Next(alice, WorldCoreService.CustomChange, CustomDataChange.Parser,
+            c => c.CustomDatas.Any(d => d.Id == DungeonService.SlideStateData && d.CustomParam.LongParam == 0));
+        // ... and falls into the hole, down to the final drop position 27 (MainStory_Falldown).
+        var fall = await Next(alice, GameAoiSink.MovementChange, MovementChangeNtf.Parser,
+            m => m.Uid == Session(alice).Role!.Id && m.TransType == MovementTransitionType.MoveTransFallDown);
+        var bottom = map.Points[27];
+        Assert.Equal((bottom.X, bottom.Y, bottom.Z), (fall.MovementInfo.Pos.X, fall.MovementInfo.Pos.Y, fall.MovementInfo.Pos.Z));
         var result = await Next(alice, DungeonService.Result, DungeonResNotify.Parser);
         Assert.Equal((DungeonRes)1, result.Res);
         await StoryMovesOn(alice, 10104290, 10104300);
-        Assert.DoesNotContain(Service<World>().AllUnits(), u => u.InstanceId == instance);
+        // The chain goes on into the Deniro's scene without returning the player.
+        await Load(alice, 1000301);
+        // On the loop: the next scene's units are being placed meanwhile.
+        Assert.False(await Service<GameLoop>().InvokeAsync(() =>
+            Task.FromResult(Service<World>().AllUnits().Any(u => u.InstanceId == instance))));
+    }
+
+    [ClientDataFact]
+    public async Task AnAntEggHitsTheSlidingPlayerForAThirdOfItsHealth()
+    {
+        const long scene = 1000201;
+        await using var alice = await InWorld("Alice");
+        await Gm(alice, "!quest accept 10104290");
+        Assert.Equal(0, await Enter(alice, new EnterDungeonReq { SceneEntry = scene }));
+        await Load(alice, scene);
+        await Stage(alice, 1, quest: 1);
+        long max = await Service<GameLoop>().InvokeAsync(() => Task.FromResult((long)Service<CharacterService>().Stats(Session(alice))[101]));
+        // LC_LocalSkillComponent._checkDamage: the egg's damage skill on the local player, as an extra skill.
+        await alice.SendGameAsync(CombatService.UseSkill, new CastSkillReq
+        { SkillId = 5363101, TargetId = Session(alice).Role!.Id, IsExtraSkill = true });
+        for (int i = 0; i < 100 && (Session(alice).CurrentHp ?? max) == max; i++) await Task.Delay(20);
+        Assert.Equal(max - (max + 2) / 3, Session(alice).CurrentHp);
+        Assert.DoesNotContain(alice.Inbox.Snapshot(), e => e.IsGame(99999)
+            && APIErrorMsg.Parser.ParseFrom(e.Body).OriginMsgId == CombatService.UseSkill);
     }
 
     [ClientDataFact]
     public async Task TheDeniroSceneOpensOneInteractionPerStepUntilTheRideToTheDepths()
     {
         const long scene = 1000301;
+        Service<IOptions<ServerOptions>>().Value.ScriptedScenePacePercent = 10;
         await using var alice = await InWorld("Alice");
         await Gm(alice, "!quest accept 10104300"); // Explore the Ant Queen's Nest: [101018, 1000301, 1]
         Assert.Equal(0, await Enter(alice, new EnterDungeonReq { SceneEntry = scene }));
         await Load(alice, scene);
         await Stage(alice, 1, quest: 1);
-        var actors = await ActorsWhen(alice, shown => shown.Count == 2 && shown.Any(a => a.Buffs.Count > 0));
-        var bobo = actors.Single(a => a.NpcId == 5300041);
-        var deniro = actors.Single(a => a.NpcId == 5300005);
-        // Bobo carries buff group 53014, the NPC condition of 'Rescue Bobo'; the Deniro carries nothing yet.
+        // Bobo carries buff group 53014, the NPC condition of 'Rescue Bobo'; the Deniro has not come yet.
+        var bobo = Assert.Single(await ActorsWhen(alice, shown => shown.Count == 1 && shown[0].Buffs.Count > 0));
+        Assert.Equal(5300041, bobo.NpcId);
         Assert.Equal([5301401], bobo.Buffs.Select(b => b.ConfigId));
-        Assert.Empty(deniro.Buffs);
         var seen = alice.Inbox.Snapshot().Where(e => e.IsGame(GameAoiSink.SyncAoiView))
             .SelectMany(e => AoIViewChangeData.Parser.ParseFrom(e.Body).Bases).Last(b => b.Uuid == (ulong)bobo.Uid);
         Assert.Equal((5300041UL, 1, 5301401), (seen.EntityTemplateID, seen.EntityType, seen.BuffData.AddBuffs.Single().ConfigId));
 
-        await Beside(alice, deniro.X, deniro.Y, deniro.Z);
-        Assert.Equal(0, await Interact(alice, deniro, 5300005)); // the Deniro's own ride, not this step's event
-        Assert.Equal(1, Session(alice).DungeonAttempt!.Wave + 1);
-        Assert.Equal(ErrorCodes.NpcParameter, await Interact(alice, deniro, 5300028)); // not one of the Deniro's
-
         (int Npc, int Interaction, int Buff)[] chain =
         [
             (5300041, 5300028, 5301401), // help Bobo up
-            (5300005, 5300005, 5365401), // try to ride the Deniro
+            (5300005, 5300008, 5365101), // try to ride the Deniro
             (5300055, 5300010, 5365201), // collect the fluorescent substance
             (5300005, 5300009, 5365301), // feed the Deniro
-            (5300005, 5300008, 5365101), // ride to the depths
+            (5300005, 5300005, 5365401), // ride to the depths: the driver's seat
         ];
         for (int step = 0; step < chain.Length; step++)
         {
-            if (step > 0) await Stage(alice, step + 1, quest: step + 1); // the first one was awaited above
+            if (step == 1)
+            {
+                // The crawling ant is born: the client crawls it along patrol 25 by itself (NoviceDungeonBornPatrolNPCID).
+                await Stage(alice, 2, quest: 1);
+                var ant = (await Next(alice, GameAoiSink.SyncAoiView, AoIViewChangeData.Parser,
+                    v => v.Bases.Any(b => b.EntityTemplateID == 5300029))).Bases.Single(b => b.EntityTemplateID == 5300029);
+                Assert.Equal(1, ant.EntityType);
+                Assert.True(ant.BornTimeMs > 0, "a born monster-type unit, so LC_State_Unit_Born starts its crawl");
+            }
+            if (step > 0) await Stage(alice, step + 2, quest: step + 1);
             var (npc, buff) = (chain[step].Npc, chain[step].Buff);
             // exactly one interaction is open: the actor of this step carries its buff, no other actor carries one
-            var shown = await ActorsWhen(alice, all => all.Count == (step == 2 ? 3 : 2) && all.Count(a => a.Buffs.Count > 0) == 1
+            int count = step switch { 0 => 1, 2 => 3, _ => 2 };
+            var shown = await ActorsWhen(alice, all => all.Count == count && all.Count(a => a.Buffs.Count > 0) == 1
                 && all.Any(a => a.NpcId == npc && a.Buffs.Select(b => b.ConfigId).SequenceEqual([buff])));
             var actor = shown.Single(a => a.NpcId == npc);
             Assert.All(shown.Where(a => a != actor), a => Assert.Empty(a.Buffs));
-            if (step == 1)
-                // The kept Deniro got its buff in place (31104), without leaving and re-entering the view.
-                await Next(alice, BuffService.BuffUpdate, BuffUpdateNotify.Parser,
-                    n => n.UnitId == actor.Uid && n.Buffs.Any(b => b.ConfigId == 5365401));
             await Beside(alice, actor.X, actor.Y, actor.Z);
             // The reverse dungeon's client reports the NPC's place (31089) before each interaction (LC_DAL_Interact.SyncNpcPos).
             await alice.SendGameAsync(WorldCoreService.TeleportObject, new ClientTeleportObject
@@ -293,11 +336,18 @@ public sealed partial class DungeonTests
         // ... and gets no error tip for it.
         Assert.DoesNotContain(alice.Inbox.Snapshot(), e => e.IsGame(99999)
             && APIErrorMsg.Parser.ParseFrom(e.Body).OriginMsgId == WorldCoreService.TeleportObject);
+        // 'Ride the Deniro' seats the player as its driver (GameplayStatusConfig 3) with the seat's camera (_iChange3C 9).
+        var deniro = (await ActorsIn(alice, 1, a => a.NpcId == 5300005)).Single();
+        var seated = await Next(alice, WorldInteractionService.Change, InteractChangeNtf.Parser,
+            n => n.DataInfo.EType == InteractInfo.Types.EState.Vehicle);
+        Assert.Equal((3L, 5300005, deniro.Uid), (seated.DataInfo.StateId, seated.DataInfo.InteractConfigId, seated.DataInfo.ActiveObjId));
+        Assert.Equal(9, (await Next(alice, WorldInteractionService.Change3C, Change3CNtf.Parser)).CfgId);
+        await WalkInto(alice, Service<WorldData>().Map(scene)!.Regions[31]); // the ride ends in the end region
+        await Next(alice, WorldInteractionService.Change, InteractChangeNtf.Parser, n => n.DataInfo.EType == InteractInfo.Types.EState.Idle);
         var result = await Next(alice, DungeonService.Result, DungeonResNotify.Parser);
         Assert.Equal((DungeonRes)1, result.Res);
-        var end = Service<WorldData>().Map(scene)!.Points[31]; // the ride ends in the end region
-        Assert.True(MonsterService.Distance(Session(alice).Position.X, Session(alice).Position.Z, end.X, end.Z) < 1);
         await StoryMovesOn(alice, 10104300, 10104310);
+        await Load(alice, 1000401); // on into Maya's nest
     }
 
     [ClientDataFact]

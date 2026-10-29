@@ -31,6 +31,8 @@ namespace Ro3Emu.ClientHooks
     /// <item>Profile cards without stickers parse (LC_DAL_Personal.ParsePersonalInfo walks a nil list; PersonalCards).</item>
     /// <item>Hero Saga: 9 skill and 9 consumable slots on the PC bars, their keys and settings rows (HotbarExpansion).</item>
     /// <item>Hero Saga: the camera zooms out 30 % farther and keeps the player's zoom from map to map (CameraZoom).</item>
+    /// <item>Dialogue lines whose config names the wrong speaker, and a larger interaction key on the NPC option list
+    /// (NpcDialogFixes).</item>
     /// </list>
     /// </summary>
     public static class LuaPatches
@@ -123,6 +125,7 @@ namespace Ro3Emu.ClientHooks
                 PersonalCards.Install((Obf_R.Obf_Cf)env, Module(manager, global, "lc_dal_personal"));
                 HotbarExpansion.Install(manager, (Obf_R.Obf_Cf)env, global, name => Module(manager, global, name));
                 CameraZoom.Install(global, name => Module(manager, global, name));
+                NpcDialogFixes.Install(global, name => Module(manager, global, name));
                 Debug.Log("[Ro3Emu.LuaPatches] lc_itemshowfunc: " + added + " card show-func method(s) added; stall name limit "
                     + (param != null ? StallNameMaxLength.ToString() : "not set (publicparamconfig missing)"));
             }

@@ -5,6 +5,7 @@ namespace Ro3Emu.Server.Game;
 internal static class AttributeId
 {
     internal const int MaxHp = 101; // maxhp
+    internal const int MaxSp = 102; // maxsp
     internal const int Atk = 103; // atk
     internal const int Matk = 104; // matk
     internal const int Def = 105; // def

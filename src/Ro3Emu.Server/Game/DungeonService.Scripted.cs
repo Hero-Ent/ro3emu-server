@@ -120,6 +120,7 @@ public sealed partial class DungeonService
     {
         await DismountAllAsync(a, interrupt: false); // the previous step's cannons leave with it
         a.StepSeen.Clear();
+        a.FiredCues.Clear();
         // A fight-only step has no client event to wait for: its kills complete it.
         a.StepDone = step.Complete.Count == 0;
         await SyncSceneActorsAsync(a, step.Actors);
@@ -136,6 +137,7 @@ public sealed partial class DungeonService
                 StageNum = a.Wave + 1, LevelNum = 1, Vars = { new DungeonVar { VarId = StoryVar, Vi64 = { step.Story } } },
             });
         StartCues(a, step);
+        if (step.Slide is { } slide) await StartSlideAsync(a, slide);
         // A step that lasts a while on its own clock (After): it completes when the time is up, like a client event.
         foreach (var timer in step.Complete.Where(c => c.Kind == Kind.After))
             StepLater(a, a.StepGeneration, (int)timer.Id, () => StepEventAsync(a, null, [(Kind.After, timer.Id)]));
@@ -241,6 +243,7 @@ public sealed partial class DungeonService
         // Dracula's Lair: a bush search may find the key; its finder is the rescuer, the only one the cage opens for.
         if (a!.Dracula is { } dracula) await dracula.Owner.InteractedAsync(a, s, actor!.NpcId);
         await BoardCannonAsync(a!, s, actor!, req.InteractionId);
+        await TryRideAsync(a!, s, actor!, req.InteractionId); // a vehicle's driver seat (DungeonService.Story)
         var events = new List<(Kind, long)> { (Kind.Interaction, req.InteractionId) };
         if (_catalog.DungeonMessage(req.InteractionId) is { } message) events.Add((Kind.Message, message));
         await StepEventAsync(a!, s, events);
@@ -319,6 +322,7 @@ public sealed partial class DungeonService
     public async Task PlayerMovedAsync(GameSession s)
     {
         if (s.DungeonAttempt == null || Active(s) is not { } a || Step(a) is not { } step || a.StepDone) return;
+        await RegionCuesAsync(a, s, step); // before the completion: a cue of the step's end region still plays
         if (step.Seek != null) return; // a hiding place counts when the seeker looks (DungeonService.HideAndSeek)
         foreach (var t in step.Complete)
         {
@@ -343,6 +347,9 @@ public sealed partial class DungeonService
             if (step.Ignore.Any(Matches))
                 _log.LogInformation("Scripted scene {Scene} step {Step}: {Role} sent {Events}, which does not advance it",
                     a.Plan.SceneEntry, a.Wave + 1, s?.Role?.Id, string.Join(", ", events));
+            // An ignored event's answer (a wrong guess: "Sorry, wrong guess! Let's try again.").
+            foreach (var answer in step.Ignore.Where(t => t.Chat != 0 && Matches(t)))
+                await BroadcastAsync(a, SystemBroadcast, new SystemBoardCastMsgNtf { Source = MsgSource.Npc, ChatId = answer.Chat });
             return;
         }
         if (step.All)
@@ -358,9 +365,19 @@ public sealed partial class DungeonService
         a.StepDone = true;
         _log.LogInformation("Scripted scene {Scene} step {Step} '{Stage}' completed by {Role} ({Events})",
             a.Plan.SceneEntry, a.Wave + 1, step.Stage, s?.Role?.Id, string.Join(", ", events));
+        // A completion that waits (the vortex's jump plays out before the teleport): on the step's clock, which the
+        // completed step keeps.
+        if (step.AfterMs > 0) StepLater(a, a.StepGeneration, step.AfterMs, () => FinishStepAsync(a, step), whileFighting: true);
+        else await FinishStepAsync(a, step);
+    }
+
+    /// <summary>A completed step's teleport and end, then the next step or the settlement.</summary>
+    private async Task FinishStepAsync(Attempt a, ReconstructedDungeons.ScriptedStep step)
+    {
         if (step.TeleportAfter != 0 && _catalog.ScenePoint(a.Plan.SceneEntry, step.TeleportAfter) is { } to)
             foreach (var member in Present(a).Where(m => a.Loaded.Contains(m) && !m.SceneLoading))
                 await _scenes.TeleportInMapAsync(member, to);
+        await EndStepAsync(a, step); // its slide and ride stop, its show and fall play (DungeonService.Story)
         // The next step or the settlement runs in its own owner scope, like the room's timers: the message that
         // completed the step (a walk, an interaction, a plot end) reserves only what its own route needs.
         _loop.PostLegacy(() => AdvanceAsync(a), "dungeon scripted step");
