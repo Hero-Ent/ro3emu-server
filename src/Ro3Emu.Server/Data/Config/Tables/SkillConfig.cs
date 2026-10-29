@@ -30,6 +30,13 @@ public readonly partial record struct SkillConfig(JsonElement Row)
     [ConfigField("_iImportantSkill")] public partial long ImportantSkill { get; }
     [ConfigField("_iInitialLevel")] public partial long InitialLevel { get; }
     [ConfigField("_iIsNormalAtk")] public partial long IsNormalAtk { get; }
+
+    /// <summary>
+    /// Whether the skill is a career or monster normal attack. SkillConfig._iIsNormalAtk is 1 for most careers and
+    /// monsters, but the Archer series' normal attack (1300001 HunterAttack) has _iIsNormalAtk 0 in config.
+    /// </summary>
+    public bool IsNormalAttack => IsNormalAtk == 1 || Id == 1300001;
+
     [ConfigField("_iJob")] public partial long Job { get; }
     [ConfigField("_iLevel")] public partial long Level { get; }
     [ConfigField("_iMaxLevel")] public partial long MaxLevel { get; }
