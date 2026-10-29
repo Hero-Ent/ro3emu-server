@@ -357,6 +357,9 @@ public sealed class GameSession(PhonestChannel channel, TrafficLog traffic)
     /// <summary>GM test aid only: this role session may start a multi-dungeon match alone. Never persisted.</summary>
     public bool DungeonSoloMatch { get; set; }
 
+    /// <summary>GM panel GmPlayerAsset openallfunc: every FunctionConfig function counts as open. This role session only (inferred).</summary>
+    public bool GmAllFunctionsOpen { get; set; }
+
     /// <summary>Territory war role counters and the shared, guild-qualified battle instance.</summary>
     public TerritoryWarsService.RoleState? TerritoryWars { get; set; }
     public TerritoryWarsService.Battle? TerritoryBattle { get; set; }
