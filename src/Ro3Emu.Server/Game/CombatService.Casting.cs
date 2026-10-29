@@ -88,7 +88,7 @@ public sealed partial class CombatService
             else if (own == null && (owned != null ? !owned.Skills.Contains(req.SkillId) : !Learned(s, row!.Value))) error = ErrorCodes.SkillNotLearned;
             else if (!SkillModeAllowed(s, row!.Value)) error = ErrorCodes.SkillRequirements;
             else if (GameData.Int(row!.Value, "_iBasicType") != 1) error = ErrorCodes.SkillPassive;
-            else if (_buffs.HasForbidden(s, new SkillConfig(row.Value).IsNormalAttack
+            else if (_buffs.HasForbidden(s, new SkillConfig(row.Value).IsNormalAttack(_data)
                 ? ForbiddenState.NormalAttack : ForbiddenState.CastSkill)) error = ErrorCodes.SkillBadState;
             else if (req.SkillId == PublicSkill("WorldTreeSkillId") && _buffs.HasForbidden(s, ForbiddenState.UseItem)) error = ErrorCodes.ItemUseForbidden;
             else if (req.SkillId == PublicSkill("WorldTreeSkillId") && !ItemAllowedInMap(s, (int)PublicSkill("WorldTreeItemId"))) error = ErrorCodes.ItemUseAreaForbidden;
@@ -137,7 +137,7 @@ public sealed partial class CombatService
         // _iIfAutoAtk 2 (enum_AutoNormalAttackType.AutoNormalAttack) follows the cast with the career's normal attack
         // (LC_AutoAttackAppendState: GetNormalSkill). Repeating the cast skill itself bypassed its cooldown: Blade
         // Smash and Sonic Slash fired every swing.
-        int loopSkill = new SkillConfig(row!.Value).IsNormalAttack ? req.SkillId : _skills.NormalAttack(s.Progress!.Career);
+        int loopSkill = new SkillConfig(row!.Value).IsNormalAttack(_data) ? req.SkillId : _skills.NormalAttack(s.Progress!.Career);
         if (GameData.Int(row!.Value, "_iIfAutoAtk") == 2 && owned == null && target != null && CanHitMonster(s, target))
         {
             s.Attack = new AttackLoop
@@ -198,9 +198,9 @@ public sealed partial class CombatService
     /// ASPD-scaled action time (the normal attack shows' m_fInterruptTime is their whole length) from its own send, so
     /// network jitter can bring a legitimate next swing a little early: <see cref="SwingJitterMs"/> of slack (inferred).
     /// </summary>
-    private static bool SwingInFlight(ActiveSkillCast active, JsonElement row, CastSkillReq req) =>
+    private bool SwingInFlight(ActiveSkillCast active, JsonElement row, CastSkillReq req) =>
         req.TargetId != 0 && req.TargetId == active.Request.TargetId
-        && new Data.Config.SkillConfig(row).IsNormalAttack && new Data.Config.SkillConfig(active.Row).IsNormalAttack
+        && new Data.Config.SkillConfig(row).IsNormalAttack(_data) && new Data.Config.SkillConfig(active.Row).IsNormalAttack(_data)
         && Now < active.StartMs + active.ChantMs + active.ActionMs - SwingJitterMs;
 
     internal const int SwingJitterMs = 150;
