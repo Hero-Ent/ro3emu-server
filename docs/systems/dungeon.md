@@ -251,6 +251,11 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
   **(inferred)**: the client has no ride rule (the route and the scene's camera animation are data with no trigger, and
   the original's server script is not shipped), so the speed, the step size and the missing mount are guesses and the
   camera animation (`mianstorybingyicamera`) is not played.
+  An actor interaction whose `NPCInteractConfig._iStatusID` is a vehicle status (the Deniro's first Ride, 5300005)
+  seats the player in the actor's seat through `WorldInteractionService` (32702, seat 32704; the client's exit button
+  works as for any vehicle); the actor puts them down after 2 s (`SeatedRideMs`, **(inferred)**: nothing in the
+  client says how long the first, failing ride lasts) or when they leave the scene. The second Ride (5300008) has no
+  gameplay status, so the player is not seated during the ride to the depths.
 - Client events: 32700 on a scene actor (its own UID namespace) with one of the actor's `_iInteractID`, also counted as
   the dungeon message of that interaction's server-hosted action 210 `SendDungeonMessage` (the client never runs it);
   a walk into a server region (regionType 2; no client consumer registers them, so the client never reports them;

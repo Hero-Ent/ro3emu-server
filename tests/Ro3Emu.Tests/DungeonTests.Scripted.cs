@@ -172,8 +172,33 @@ public sealed partial class DungeonTests
 
     private static readonly int[] RideWaypoints = [0, 4, 8, 13];
 
-    [ClientDataFact]
-    public async Task TheDeniroSceneOpensOneInteractionPerStepUntilTheRideToTheDepths()
+    private async Task SeatedOnTheDeniroAsync(BotClient alice, DungeonService.SceneActorUnit actor, int interaction, bool exitByButton)
+    {
+        long me = Session(alice).Role!.Id;
+        if (exitByButton) Service<IOptions<ServerOptions>>().Value.ScriptedScenePacePercent = 1000; // the put-down is 20 s away
+        Assert.Equal(0, await Interact(alice, actor, interaction));
+        var seat = await Next(alice, WorldInteractionService.Change, InteractChangeNtf.Parser,
+            m => m.Uid == me && m.DataInfo.EType != InteractInfo.Types.EState.Idle);
+        Assert.Equal((InteractInfo.Types.EState.Vehicle, interaction, actor.Uid),
+            (seat.DataInfo.EType, seat.DataInfo.InteractConfigId, (long)seat.DataInfo.ActiveObjId));
+        Assert.Equal(9, (await Next(alice, WorldInteractionService.Change3C, Change3CNtf.Parser)).CfgId); // VehicleSeatConfig 5300005
+        if (exitByButton)
+        {
+            await alice.SendGameAsync(WorldInteractionService.Action, new UseInteractActionReq { ButtonId = 26 });
+            Assert.Equal(0, (await Next(alice, WorldInteractionService.Action, UseInteractActionRes.Parser)).Result);
+            Service<IOptions<ServerOptions>>().Value.ScriptedScenePacePercent = 10;
+        }
+        var down = await Next(alice, WorldInteractionService.Change, InteractChangeNtf.Parser,
+            m => m.Uid == me && m.DataInfo.EType == InteractInfo.Types.EState.Idle);
+        Assert.False(down.Interrupt); // put down, not interrupted by leaving
+    }
+
+    // The first ride (5300005, a vehicle gameplay status) seats the player on the Deniro, which puts them down by itself
+    // (inferred) or when the client's own exit button asks (VehicleSeatConfig 5300005 _kGameplayBtnId 26).
+    [ClientDataTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TheDeniroSceneOpensOneInteractionPerStepUntilTheRideToTheDepths(bool exitByButton)
     {
         const long scene = 1000301;
         Service<IOptions<ServerOptions>>().Value.ScriptedScenePacePercent = 10; // the ride lasts about 28 s at full pace
@@ -222,7 +247,8 @@ public sealed partial class DungeonTests
             // The reverse dungeon's client reports the NPC's place (31089) before each interaction (LC_DAL_Interact.SyncNpcPos).
             await alice.SendGameAsync(WorldCoreService.TeleportObject, new ClientTeleportObject
             { TargetUid = actor.Uid, TargetPos = new Vec3 { X = actor.X, Y = actor.Y, Z = actor.Z } });
-            Assert.Equal(0, await Interact(alice, actor, chain[step].Interaction));
+            if (step != 1) { Assert.Equal(0, await Interact(alice, actor, chain[step].Interaction)); continue; }
+            await SeatedOnTheDeniroAsync(alice, actor, chain[step].Interaction, exitByButton);
         }
         // ... and gets no error tip for it.
         Assert.DoesNotContain(alice.Inbox.Snapshot(), e => e.IsGame(99999)

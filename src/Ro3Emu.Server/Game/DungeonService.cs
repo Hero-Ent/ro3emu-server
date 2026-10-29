@@ -53,6 +53,7 @@ public sealed partial class DungeonService
     private readonly SeasonService _seasons;
     private readonly InstanceService _instances;
     private readonly TeamService _teams;
+    private readonly WorldInteractionService _vehicles;
     private readonly SessionRegistry _sessions;
     private readonly RewardService _rewards;
     private readonly AuctionService _auctions;
@@ -77,7 +78,7 @@ public sealed partial class DungeonService
         SessionRegistry sessions, RewardService rewards, AuctionService auctions, GuildStore guilds, MonsterService monsters, CombatService combat,
         SceneService scene, BuffService buffs, GameLoop loop, TimeProvider clock, ILogger<DungeonService> log, World world,
         GmCommands gm, AccountStore accounts, AwardService awards, Microsoft.Extensions.Options.IOptions<ServerOptions> options,
-        PraiseService praise)
+        PraiseService praise, WorldInteractionService vehicles)
     {
         this._accounts = accounts; this._awards = awards; this._options = options.Value; this._praise = praise;
         gm.Register("firstclear", "<bossId> [daysAgo] | <bossId> clear (Realm of the Gods test aid: the server's first clear "
@@ -92,6 +93,7 @@ public sealed partial class DungeonService
         this._buffs = buffs;
         this._scenes = scene;
         this._world = world;
+        this._vehicles = vehicles;
         gm.Register("actors", "[npcId | walk <x> <z> | use] (scripted scene test aid: the step's scene actors, jump beside one, arrive at x z as a walk would, or complete the step server-side)", ActorsGmAsync);
         teams.MultiDungeonInfo = TeamDungeonInfo;
         combat.DamageAdjusters.Add((s, m, _, _, damage) => BondDamage(s, m, damage, incoming: false));

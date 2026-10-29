@@ -14,7 +14,13 @@ public sealed class WorldInteractionService
     public const uint Change = 32702, Action = 32703, Change3C = 32704,
         SeatChange = 32708, VehicleSync = 31074;
 
-    private sealed record Active(WorldNpc Npc, int InteractionId, int StatusId, int StatusType, int SeatIndex);
+    /// <summary>The unit a role's gameplay state is on: a world NPC, or a scripted dungeon's scene actor (<see cref="Active.Scripted"/>).</summary>
+    private readonly record struct Anchor(long Uid, long SceneEntry, int NpcId)
+    {
+        public static Anchor Of(WorldNpc npc) => new(npc.Uid, npc.SceneEntry, npc.NpcId);
+    }
+
+    private sealed record Active(Anchor Npc, int InteractionId, int StatusId, int StatusType, int SeatIndex, bool Scripted = false);
     private readonly Dictionary<GameSession, Active> _active = new();
     private readonly Dictionary<(long Scene, long Npc, int Seat), GameSession> _seats = new();
     private readonly GameData _data;
@@ -44,10 +50,11 @@ public sealed class WorldInteractionService
         var dx = s.Position.X - npc.X; var dz = s.Position.Z - npc.Z;
         return dx * dx + dz * dz <= 36;
     }
+    // A scripted ride's actor lives as long as the dungeon room: leaving the scene ends the state (SceneService.Leaving).
     private bool StillHere(GameSession s, Active a) => InWorld(s) && a.Npc.SceneEntry == s.SceneEntry
-        && _worldData.Npc(a.Npc.Uid) == a.Npc;
-    private bool SeatFree(GameSession s, WorldNpc npc, int seat) =>
-        !_seats.TryGetValue((s.WorldScene, npc.Uid, seat), out var owner) || owner == s;
+        && (a.Scripted || _worldData.Npc(a.Npc.Uid) is { } npc && npc.NpcId == a.Npc.NpcId);
+    private bool SeatFree(GameSession s, long npcUid, int seat) =>
+        !_seats.TryGetValue((s.WorldScene, npcUid, seat), out var owner) || owner == s;
 
     /// <summary>Called before 32700 success is echoed. Unknown predicates are closed, not assumed true.</summary>
     public int ValidateInteraction(GameSession s, WorldNpc npc, NpcInteractionReq req)
@@ -71,7 +78,7 @@ public sealed class WorldInteractionService
         int seat = Id(interaction, "_iStatusLocation") - 1;
         int[] configuredSeats = Numbers(vehicle, "_kSeats");
         return seat >= 0 && seat < configuredSeats.Length && _data.Row("VehicleSeatConfig", configuredSeats[seat]) != null
-            && SeatFree(s, npc, seat) ? 0 : ErrorCodes.NpcParameter;
+            && SeatFree(s, npc.Uid, seat) ? 0 : ErrorCodes.NpcParameter;
     }
 
     // (inferred) Only the directly evidenced status/seat predicates are evaluated here. GVG permission,
@@ -92,7 +99,7 @@ public sealed class WorldInteractionService
         bool yes = type switch
         {
             12001 => _active.TryGetValue(s, out var state) && state.StatusType == arg,
-            12002 or 12003 => SeatFree(s, npc, seat >= 0 ? seat : arg),
+            12002 or 12003 => SeatFree(s, npc.Uid, seat >= 0 ? seat : arg),
             _ => false,
         };
         bool inverse = row.TryGetProperty("m_bInverse", out var inv) && inv.ValueKind == JsonValueKind.True;
@@ -110,7 +117,7 @@ public sealed class WorldInteractionService
         int statusId = Id(interaction, "_iStatusID");
         if (statusId == 0 || _data.Row("GameplayStatusConfig", statusId) is not { } status) return;
         int type = Id(status, "_iStatusType"), seat = type == 3 ? Id(interaction, "_iStatusLocation") - 1 : -1;
-        _active[s] = new Active(npc, req.InteractionId, statusId, type, seat);
+        _active[s] = new Active(Anchor.Of(npc), req.InteractionId, statusId, type, seat);
         if (seat >= 0) _seats[(s.WorldScene, npc.Uid, seat)] = s;
         await NotifyAsync(s, _active[s], false);
         if (seat >= 0) await Send3CAsync(s, _active[s]);
@@ -208,7 +215,7 @@ public sealed class WorldInteractionService
             int[] configured = VehicleSeats(state);
             if (req.SeatIdx >= 0 && req.SeatIdx < configured.Length && req.SeatIdx != state.SeatIndex
                 && _data.Row("VehicleSeatConfig", configured[req.SeatIdx]) != null
-                && SeatFree(s, state.Npc, req.SeatIdx))
+                && SeatFree(s, state.Npc.Uid, req.SeatIdx))
             {
                 _seats.Remove((s.WorldScene, state.Npc.Uid, state.SeatIndex));
                 _seats[(s.WorldScene, state.Npc.Uid, req.SeatIdx)] = s;
@@ -228,4 +235,34 @@ public sealed class WorldInteractionService
             || !StillHere(s, state)) return;
         await _world.TurnAsync(s, req.Face);
     }
+
+    /// <summary>Whether the interaction puts its user in a vehicle seat: NPCInteractConfig._iStatusID names a GameplayStatusConfig of type 3.</summary>
+    public bool IsRide(long interactionId) => _data.Row("NPCInteractConfig", interactionId) is { } interaction
+        && Id(interaction, "_iStatusID") is > 0 and var statusId
+        && _data.Row("GameplayStatusConfig", statusId) is { } status && Id(status, "_iStatusType") == 3;
+
+    /// <summary>
+    /// Seats a player on a scripted dungeon's scene actor (a Deniro that carries riders), by the interaction's own
+    /// status and seat (_iStatusLocation) and the actor's VehicleConfig. The dungeon script already decided the
+    /// interaction is open (its buffs and step), so the predicates of <see cref="ValidateInteraction"/> are not asked
+    /// again. False when the player is in a state already, the NPC is no vehicle or the seat is taken.
+    /// </summary>
+    public async Task<bool> SeatOnSceneActorAsync(GameSession s, long actorUid, int npcId, int interactionId)
+    {
+        if (!InWorld(s) || _active.ContainsKey(s) || !IsRide(interactionId)
+            || _data.Row("NPCInteractConfig", interactionId) is not { } interaction) return false;
+        int statusId = Id(interaction, "_iStatusID"), seat = Id(interaction, "_iStatusLocation") - 1;
+        var state = new Active(new Anchor(actorUid, s.SceneEntry, npcId), interactionId, statusId, 3, seat, Scripted: true);
+        int[] seats = VehicleSeats(state);
+        if (seat < 0 || seat >= seats.Length || _data.Row("VehicleSeatConfig", seats[seat]) == null || !SeatFree(s, actorUid, seat)) return false;
+        _active[s] = state;
+        _seats[(s.WorldScene, actorUid, seat)] = s;
+        await NotifyAsync(s, state, false);
+        await Send3CAsync(s, state);
+        return true;
+    }
+
+    /// <summary>Puts a player down from a scripted ride; a world vehicle's rider, or nobody, is left alone.</summary>
+    public Task PutDownFromSceneActorAsync(GameSession s) =>
+        _active.TryGetValue(s, out var state) && state.Scripted ? ExitAsync(s, false) : Task.CompletedTask;
 }

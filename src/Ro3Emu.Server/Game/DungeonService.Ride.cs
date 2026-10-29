@@ -15,6 +15,21 @@ public sealed partial class DungeonService
 {
     private const int RideTickMs = 100;
 
+    /// <summary>How long the Deniro keeps a rider seated on the first, failing ride before it puts them down (inferred: the
+    /// ride's skill 5362501 lasts 1 ms and nothing in the client says; the quest after it says the first ride fails).</summary>
+    private const int SeatedRideMs = 2000;
+
+    /// <summary>
+    /// An actor interaction that seats its user (NPCInteractConfig _iStatusID of a vehicle status, the Deniro's 5300005)
+    /// puts the player in the actor's seat, the client's own gameplay state; the actor puts them down after
+    /// <see cref="SeatedRideMs"/>, or when they leave the scene, or at once through the client's exit button.
+    /// </summary>
+    private async Task SeatRiderAsync(GameSession s, SceneActorUnit actor, int interaction)
+    {
+        if (!_vehicles.IsRide(interaction) || !await _vehicles.SeatOnSceneActorAsync(s, actor.Uid, actor.NpcId, interaction)) return;
+        _loop.ScheduleLegacy(Paced(SeatedRideMs), () => _vehicles.PutDownFromSceneActorAsync(s), "dungeon rider put down");
+    }
+
     private sealed record Ride(IReadOnlyList<(float X, float Y, float Z)> Path, SceneActorUnit Carrier, float Length,
         int Generation, long StartMs, double DurationMs);
 
