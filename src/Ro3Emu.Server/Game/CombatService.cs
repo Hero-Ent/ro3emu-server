@@ -233,7 +233,12 @@ public sealed partial class CombatService : IGameTicker
     public List<Func<GameSession, GameSession, Task>> PlayerKilled { get; } = new();
     public Func<GameSession, GameSession, bool>? PlayerHostile { get; set; }
     public Func<GameSession, MonsterUnit, bool>? MonsterTargetAllowed { get; set; }
-    public Func<GameSession, MonsterUnit, Vec3, Vec3, bool>? BlockedMonsterEndpointAllowed { get; set; }
+    /// <summary>
+    /// Whether something stands between the caster and the target of a skill that walls stop (_iPassBlock 2): the
+    /// monster aimed at (null for a ground or player target), the caster's and the target's positions. Unset, nothing
+    /// does (see <see cref="ValidateTarget"/>).
+    /// </summary>
+    public Func<GameSession, MonsterUnit?, Vec3, Vec3, bool>? SkillLineBlocked { get; set; }
 
     /// <summary>A monster damaged a player; the flag says the hit was lethal (MVP statistics).</summary>
     public List<Action<MonsterUnit, GameSession, long, bool>> Taken { get; } = new();

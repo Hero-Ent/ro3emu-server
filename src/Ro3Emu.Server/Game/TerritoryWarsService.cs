@@ -209,7 +209,7 @@ public sealed partial class TerritoryWarsService : IGameTicker
         combat.EventDamageRecorded.Add(SiegeDamageRecordedAsync);
         combat.PlayerHostile = Hostile;
         combat.MonsterTargetAllowed = CanHitObjective;
-        combat.BlockedMonsterEndpointAllowed = SiegeCrystalBlockedEndpointAllowed;
+        combat.SkillLineBlocked = SiegeSkillLineBlocked;
         combat.PvpDealtAsync.Add(PvpRecordedAsync);
         combat.PvpDealtAsync.Add(SiegePvpRecordedAsync);
         combat.HealedAsync.Add(BattleHealRecordedAsync);
