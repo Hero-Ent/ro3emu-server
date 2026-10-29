@@ -101,6 +101,7 @@ public sealed partial class TaskService
         cards.RequiredCollectionRefresh = RefreshCollectionRequiredAsync;
         character.GetKillTaskParticipantKeys = GetKillTaskParticipantKeys;
         character.StageKillTaskObligations = StageKillTaskObligations;
+        ExtraTasks.Add(DungeonRunTasks); // TaskService.DungeonTasks.cs
     }
 
     /// <summary>Delivered = completeTaskNum &gt; 0 or status 4 (the client's CheckTaskDeliveryed). Without quest state: true.</summary>

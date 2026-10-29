@@ -391,6 +391,12 @@ public static class ServerHost
         questTasks.BattleMeritPoints = territory.GloryPoints; // 106610
         territory.SiegeSettled.Add((role, _, _) => questTasks.OnGuildEventJoined(role, TaskService.GuildEvent.RoyalCity)); // 106010
         territory.BattleSettled.Add(questTasks.OnTerritoryBattleSettled); // 106010 Stronghold / Regional Capital War
+        territory.BattleSettled.Add((role, _) => questTasks.OnGuildWarScored(role)); // 106609
+        questTasks.GuildWarPoints = territory.GuildWarPoints; // 106609
+        // Dungeon task trackers (TaskService.DungeonTasks.cs): 210005, 200003, 210004, 200000; the siege's 200001, 210003.
+        app.Services.GetRequiredService<DungeonService>().RunTracked.Add(questTasks.OnDungeonRun);
+        territory.SiegeTracked.Add(questTasks.OnDungeonRun);
+        questTasks.DungeonRunValue = territory.SiegeTrackerValue;
         escort.CartStarted.Add(s => questTasks.OnGuildEventJoined(s, TaskService.GuildEvent.Escort)); // 106010 Escort
         app.Services.GetRequiredService<EmblemService>().Upgraded.Add(questTasks.OnEchoUpgraded); // 317002
         app.Services.GetRequiredService<TowerService>().Settled.Add(questTasks.OnTowerSettled); // 101007, 101010
