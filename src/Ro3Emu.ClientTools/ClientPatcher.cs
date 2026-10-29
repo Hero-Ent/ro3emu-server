@@ -6,6 +6,7 @@ namespace Ro3Emu.ClientTools;
 /// <summary>
 /// Repoints the RO3 client (the PC build) at an emulator by rewriting string literals in managed DLLs:
 ///   SDK login URL and server list URL (Happyengine.Network Obf_dI + callers, Assembly-CSharp MetaSDKUtil);
+///   GMT origin (Assembly-CSharp GMT.GMTManager, Lua GMTUrl()) and the gift card POST guard (Obf_dI);
 ///   gate RSA public key (Phonest.Common Utils.GenEncryptKeyFromToken);
 ///   and makes internal the private members the client's own code uses where they are not visible (AccessFixPatch).
 /// Originals are copied once to &lt;client&gt;\ro3emu-backup and every patch starts from them, so it is repeatable.
@@ -19,6 +20,19 @@ public static class ClientPatcher
     private const string ServerListPath = "/serverlist/v2/168/serverlist.json";
     private const string ServerListPathAndQuery = ServerListPath + "?inline=true&force_refresh=true";
     private const string PemMarker = "-----BEGIN RSA PUBLIC KEY-----";
+
+    /// <summary>
+    /// Lua LC_RedemptionCodeManager.UseGiftCard posts to GMTUrl() + this; HttpNetworkManager sends the POST only when
+    /// Obf_dI.RecoveryRedemption_IsAllowedPost finds the URL equal (Ordinal) to its literal origin + this.
+    /// </summary>
+    private const string GiftCardPath = "/gift-card/use/v2";
+
+    /// <summary>
+    /// GMTUrl() is GMTManager.Obf_wCA: RegionalBootstrap.RewriteUrl(origin literal); its notice GET (Obf_VCA) builds on
+    /// the same literal. RewriteUrl and NormalizeForGuard (RO3.SealedLoginFallback.SealedRuntimeSession) only map URLs
+    /// under the publisher's own origins and return any other URL unchanged, so the server's origin goes through as is.
+    /// </summary>
+    private const string GmtManagerType = "GMT.GMTManager";
 
     internal static readonly string[] PatchedFiles = ["Happyengine.Network.dll", "Assembly-CSharp.dll", "Phonest.Common.dll", "Happyengine.Base.Runtime.dll", "Unity.TextMeshPro.dll", "HUD.dll", "HappyEngine.Resource.dll", "UnityEngine.UI.dll", "UnityEngine.CoreModule.dll"];
 
@@ -285,11 +299,13 @@ public static class ClientPatcher
     /// The literals the patch rewrites, recognised by their role, not by the publisher's host: the publisher moved hosts
     /// between releases (52.8.99.195 and server.playragnarok3.com until 7 Oct 2026, server.genesis3.is from 16 Oct).
     /// </summary>
-    private static List<Rule> Rules(string serverBaseUrl, string pem) =>
+    internal static List<Rule> Rules(string serverBaseUrl, string pem) =>
     [
         new("SDK login URL (any host)/sdk/login", v => UrlPath(v) == LoginPath, serverBaseUrl + LoginPath),
         new("server list URL (any host)" + ServerListPath, v => UrlPath(v) == ServerListPath, serverBaseUrl + ServerListPathAndQuery),
         new(PemMarker, v => v.Contains(PemMarker, StringComparison.Ordinal), pem),
+        new("GMT origin (any host) in " + GmtManagerType, IsOrigin, serverBaseUrl, GmtManagerType),
+        new("gift card URL (any host)" + GiftCardPath, v => UrlPath(v) == GiftCardPath, serverBaseUrl + GiftCardPath),
     ];
 
     /// <summary>
@@ -309,8 +325,8 @@ public static class ClientPatcher
             var source = File.Exists(Path.Combine(BackupDir(clientDir), file)) ? Path.Combine(BackupDir(clientDir), file) : Path.Combine(managed, file);
             if (!File.Exists(source)) { problems.Add($"{file} is missing"); continue; }
             using var assembly = AssemblyDefinition.ReadAssembly(source, new ReaderParameters { InMemory = true });
-            foreach (var (_, value) in Literals(assembly))
-                foreach (var rule in rules.Where(r => r.Match(value))) rule.Hits++;
+            foreach (var (type, _, value) in Literals(assembly))
+                foreach (var rule in rules.Where(r => r.Applies(type, value))) rule.Hits++;
             if (file == "Assembly-CSharp.dll" && assembly.MainModule.GetType("NetworkLib.NW_ChatNetworkManager") == null) problems.Add("NW_ChatNetworkManager not found");
             if (file == "Assembly-CSharp.dll")
             {
@@ -423,7 +439,7 @@ public static class ClientPatcher
             catch (BadImageFormatException) { continue; }
             using (assembly)
             {
-                foreach (var (where, value) in Literals(assembly))
+                foreach (var (_, where, value) in Literals(assembly))
                 {
                     if (needles.Any(n => value.Contains(n, StringComparison.OrdinalIgnoreCase)))
                         Console.WriteLine($"{Path.GetFileName(path)}  {where}  \"{Shorten(value, 120)}\"");
@@ -442,20 +458,38 @@ public static class ClientPatcher
                 Console.WriteLine($"{t.FullName}::{m.Name}({string.Join(", ", m.Parameters.Select(p => p.ParameterType.Name + " " + p.Name))}) static={m.IsStatic} body={m.HasBody}");
     }
 
-    /// <summary>A literal rewrite: every literal <paramref name="Match"/> accepts becomes <paramref name="Replacement"/>.</summary>
-    private sealed record Rule(string Description, Func<string, bool> Match, string Replacement)
+    /// <summary>
+    /// A literal rewrite: every literal <paramref name="Match"/> accepts becomes <paramref name="Replacement"/>; with
+    /// <paramref name="InType"/>, only in that type's members and its nested types' (closures, iterators).
+    /// </summary>
+    internal sealed record Rule(string Description, Func<string, bool> Match, string Replacement, string? InType = null)
     {
         public int Hits { get; set; }
         /// <summary>The hosts of the URLs replaced, for the log.</summary>
         public HashSet<string> Hosts { get; } = new();
 
-        public bool Matches(string value)
+        /// <summary>Whether <paramref name="value"/>, a literal in a member of <paramref name="type"/>, is one this rule rewrites.</summary>
+        public bool Applies(TypeDefinition type, string value) => Match(value) && (InType == null || Within(type, InType));
+
+        public bool Matches(TypeDefinition type, string value)
         {
-            if (!Match(value)) return false;
+            if (!Applies(type, value)) return false;
             if (Uri.TryCreate(value, UriKind.Absolute, out var uri)) Hosts.Add(uri.Host);
             return true;
         }
+
+        private static bool Within(TypeDefinition? type, string fullName)
+        {
+            for (; type != null; type = type.DeclaringType)
+                if (type.FullName == fullName) return true;
+            return false;
+        }
     }
+
+    /// <summary>Whether a literal is an absolute http(s) origin and nothing more ("https://host", no slash, path or query).</summary>
+    private static bool IsOrigin(string value) =>
+        UrlPath(value) == "/" && Uri.TryCreate(value, UriKind.Absolute, out var uri)
+        && string.Equals(value, uri.GetLeftPart(UriPartial.Authority), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The path of an absolute http(s) URL literal, else null.</summary>
     private static string? UrlPath(string value) =>
@@ -535,32 +569,7 @@ public static class ClientPatcher
         using var resolver = new DefaultAssemblyResolver(); // disposing closes the DLLs it opened in Managed
         resolver.AddSearchDirectory(ManagedDir(clientDir));
         using var assembly = AssemblyDefinition.ReadAssembly(source, new ReaderParameters { AssemblyResolver = resolver, InMemory = true });
-        var changed = new List<string>();
-
-        string? Replace(string where, string value)
-        {
-            var rule = rules.FirstOrDefault(r => r.Matches(value));
-            if (rule == null) return null;
-            rule.Hits++;
-            changed.Add(where);
-            return rule.Replacement;
-        }
-
-        foreach (var type in assembly.MainModule.GetTypes())
-        {
-            foreach (var field in type.Fields)
-            {
-                if (field.HasConstant && field.Constant is string s && Replace(field.FullName, s) is { } r) field.Constant = r;
-            }
-            foreach (var method in type.Methods)
-            {
-                if (!method.HasBody) continue;
-                foreach (var instruction in method.Body.Instructions)
-                {
-                    if (instruction.OpCode == OpCodes.Ldstr && instruction.Operand is string s && Replace(method.FullName, s) is { } r) instruction.Operand = r;
-                }
-            }
-        }
+        var changed = RewriteLiterals(assembly.MainModule, rules);
 
         if (extra != null) changed.Add(extra(assembly.MainModule));
         changed.AddRange(AccessFixPatch.Patch(assembly.MainModule).Select(member => "made internal: " + member));
@@ -577,17 +586,52 @@ public static class ClientPatcher
         foreach (var where in changed) Console.WriteLine($"    {Shorten(where, 150)}");
     }
 
-    private static IEnumerable<(string Where, string Value)> Literals(AssemblyDefinition assembly)
+    /// <summary>
+    /// Replaces every string literal (field constant or ldstr) of <paramref name="module"/> that a rule accepts, the
+    /// first rule that does; returns the members changed, one entry per literal.
+    /// </summary>
+    internal static List<string> RewriteLiterals(ModuleDefinition module, IReadOnlyList<Rule> rules)
     {
-        foreach (var type in assembly.MainModule.GetTypes())
+        var changed = new List<string>();
+
+        string? Replace(TypeDefinition type, string where, string value)
+        {
+            var rule = rules.FirstOrDefault(r => r.Matches(type, value));
+            if (rule == null) return null;
+            rule.Hits++;
+            changed.Add(where);
+            return rule.Replacement;
+        }
+
+        foreach (var type in module.GetTypes())
         {
             foreach (var field in type.Fields)
-                if (field.HasConstant && field.Constant is string s) yield return (field.FullName, s);
+            {
+                if (field.HasConstant && field.Constant is string s && Replace(type, field.FullName, s) is { } r) field.Constant = r;
+            }
             foreach (var method in type.Methods)
             {
                 if (!method.HasBody) continue;
                 foreach (var instruction in method.Body.Instructions)
-                    if (instruction.OpCode == OpCodes.Ldstr && instruction.Operand is string s) yield return (method.FullName, s);
+                {
+                    if (instruction.OpCode == OpCodes.Ldstr && instruction.Operand is string s && Replace(type, method.FullName, s) is { } r) instruction.Operand = r;
+                }
+            }
+        }
+        return changed;
+    }
+
+    private static IEnumerable<(TypeDefinition Type, string Where, string Value)> Literals(AssemblyDefinition assembly)
+    {
+        foreach (var type in assembly.MainModule.GetTypes())
+        {
+            foreach (var field in type.Fields)
+                if (field.HasConstant && field.Constant is string s) yield return (type, field.FullName, s);
+            foreach (var method in type.Methods)
+            {
+                if (!method.HasBody) continue;
+                foreach (var instruction in method.Body.Instructions)
+                    if (instruction.OpCode == OpCodes.Ldstr && instruction.Operand is string s) yield return (type, method.FullName, s);
             }
         }
     }

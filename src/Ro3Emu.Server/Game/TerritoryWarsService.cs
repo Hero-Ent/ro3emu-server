@@ -368,7 +368,6 @@ public sealed partial class TerritoryWarsService : IGameTicker
             or StageNotify or History or ResultNotify or AuctionTimeNotify or MarkerNotify or Minimap or FatigueNotify
             or QueueNotify or QueueEnter or QueueCancel or QueueArea or SubmitDrop or Bid or AuctionQuery or AutoSet
             or AutoCancel or AutoQuery or AutoNotify or RankNotify or WarHall or SiegeBaseQuery or SiegeHistoryQuery or SiegeResultNotify
-            or SiegeToolAssign or SiegeToolExchange or SiegeToolList or SiegeToolPermissionNotify or SiegeToolChangeNotify
             or SiegeToolPrepay or SiegeToolBuild or SiegeToolCancel or SiegeToolAdd or SiegeVehicleUse
             or SetMark or GatherMark or CommandMark or TeleportResponse or GloryRankReward;
 
@@ -427,9 +426,6 @@ public sealed partial class TerritoryWarsService : IGameTicker
                 case WarHall: await WarHallAsync(s); break;
                 case SiegeBaseQuery: await SiegeBaseAsync(s, GetSiegeBaseInfoReq.Parser.ParseFrom(body.Span)); break;
                 case SiegeHistoryQuery: await SiegeHistoryAsync(s, SiegeCityHistoryInfoReq.Parser.ParseFrom(body.Span)); break;
-                case SiegeToolList: await SiegeToolListAsync(s); break;
-                case SiegeToolAssign: await SiegeToolAssignAsync(s, GuildWartimeToolBelongOperReq.Parser.ParseFrom(body.Span)); break;
-                case SiegeToolExchange: await SiegeToolExchangeAsync(s, GuildWartimeToolExchangeOperReq.Parser.ParseFrom(body.Span)); break;
                 case SiegeToolPrepay: await Send(s, id, new GuildWartimeStorePrepayResp { Result = ErrorCodes.FeatureUnavailable }); break;
                 case SiegeToolBuild: await Send(s, id, new GuildAttackCityBuildResp { Result = ErrorCodes.FeatureUnavailable }); break;
                 case SiegeToolCancel: await Send(s, id, new GuildWartimeStoreItemCancelUseResp { Result = ErrorCodes.FeatureUnavailable }); break;

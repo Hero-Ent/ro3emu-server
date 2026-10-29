@@ -95,6 +95,28 @@ Loading into the battle sends the side's commander marks, the party's own marks,
 
 **Inferred:** all the point rules (the client only displays results); an assist is a hit on the victim in the last 10 s; a death pays rather than costs (the record source enum names Kill, Assist and Death as ways points came); the state is the role's territory `RoleState.Glory`, per season. Not done: rank 10 (`_iRankCondition` 10, the top 10 of leaderboard 2102, which this client ships no LeaderBoardsConfig row for), the season-end SiegeSettlementHonorAward mail 1090, and the "Reach N Battle Merit" quests (target 106610).
 
+## War warehouse and machine permissions
+
+`GuildService.Wartime`, the guild's `guildWartimeInfo` (DBGuildData field 36). Only the warehouse view and the Tactics panel; building, firing and vehicles come later.
+
+| Message | Use |
+|---|---|
+| 32273 | The warehouse: every machine item and its count (`LC_DAL_Guild.ReceiveWartimeStoreItemNtf` -> `GNWartimeStoreItems`). The War Manager page counts firearms and vehicles from it, the siege battle bag lists it. Sent with every full guild info (login, join, refresh); a former member gets an empty one. |
+| 32284 | Both machine pages (Firearm 1, Vehicle 2), each a list of operator slots (`roleGuildId`, `roleUsingToolId`). The client stores slot *i* at list position *i*, and later messages address it as `bagIndex`. Any member may read it: the guild window's War Machine page asks too. |
+| 32282 | Put a member in a slot or clear it (`roleGuildId` 0). |
+| 32283 | Swap two slots of one page: dragging a name onto another slot; an empty slot moves the name. |
+| 32286 | The changed slots, to every online member. |
+| 32285 | To a member whose own page changed: the machine type they may use (`SiegePermissionSelfData`; the battle bag shows only that type), None when revoked. Also sent with the full guild info while the member holds a slot. |
+
+Editing needs GuildPermissionConfig 13 War Machine Management (`ErrorCodes.GuildPermission` 466); outside a guild every request is 6001 as before. A bad page or slot is 82, a non-member 454. A member who leaves or is kicked frees the slot.
+
+**Inferred:**
+- 10 slots per page. No config row gives a number and the panel shows what it receives.
+- A guild that never used its warehouse holds `SiegeInitItemList` (50 each of cannons 1006001-1006004).
+- A member holds at most one slot. The client only offers members without a slot; anything else is 82.
+- Slots are guild-wide: the siege `dungeonId` in 32282 is not used.
+- `roleUsingToolId` (the machine a member is in, which makes the client ask before revoking) stays 0 until machines can be built.
+
 ## Descriptor and runtime evidence boundaries
 
 The checked-in `MG_Guild.proto` defines `TerritoryWarsGuildData.occupyWarzone` and places auction fields inside `guildData`. `LC_DAL_TerritoryWars.lua:884-925,988-1008` reads `campDatas` and some wrapper-level auction fields instead. Implementation sends the supplied descriptor, plus the coherent modern 5013/84037 and deadline notifications; exact legacy panel decoding remains unverified. A new field number is not invented.

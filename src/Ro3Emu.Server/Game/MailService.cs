@@ -348,6 +348,23 @@ public sealed partial class MailService(AccountStore accounts, RoleStore roles, 
             attachments is { Count: > 0 } ? 30 : 7);
 
     /// <summary>
+    /// <see cref="SendRawAsync"/> delivered once per <paramref name="deliveryKey"/>, with the source's state saved by
+    /// <paramref name="persist"/> in the same SQLite transaction (as <see cref="SendTemplateOnceAsync"/>). A plan that
+    /// <paramref name="persist"/> adds may throw to refuse the delivery; nothing of it is then written.
+    /// </summary>
+    public Task<string> SendRawOnceAsync(long role, string title, string content, IReadOnlyList<Attachment> attachments,
+        string deliveryKey, Action<RoleItemPlanBuilder> persist)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(deliveryKey);
+        ArgumentNullException.ThrowIfNull(attachments);
+        ArgumentNullException.ThrowIfNull(persist);
+        return DeliverAsync(role, new Letter
+        {
+            Title = title, Content = content, DeliveryKey = deliveryKey, Attachments = [.. attachments]
+        }, null, attachments.Count > 0 ? 30 : 7, persist);
+    }
+
+    /// <summary>
     /// A member's guild group mail (GuildService.BroadEmail): raw Guild Mail (category 3) with the member as sender, kept
     /// MailTextTimeMax days like other text mail. The guild operation holds every recipient, so it delivers in its context.
     /// </summary>
