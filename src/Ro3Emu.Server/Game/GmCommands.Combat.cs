@@ -44,7 +44,7 @@ public sealed partial class GmCommands
         switch (op)
         {
             case OpChangeHp: // target, heal, damage
-                return await ChangeHpAsync(Target(s, args, 0), Arg(args, 1), Arg(args, 2));
+                return await ChangeHpAsync(Target(s, args, 0), NumArg(args, 1), NumArg(args, 2));
             case OpAddNpc:
                 return await AddNpcAsync(s, I(args[0]));
             case OpKillEntity:
@@ -52,28 +52,28 @@ public sealed partial class GmCommands
             case OpDumpEntityAttr:
                 return ShowAttributes(Target(s, args, 0), 0);
             case OpShowAttr: // attribute, target
-                return ShowAttributes(Target(s, args, 1), (int)Arg(args, 0));
+                return ShowAttributes(Target(s, args, 1), (int)NumArg(args, 0));
             case OpSetEntityAttr: // target, attribute, value
                 return await SetAttributeAsync(Target(s, args, 0), I(args[1]), L(args[2]), delta: false);
             case OpChangeEntityAttr: // unit, attribute, change
                 return await SetAttributeAsync(Target(s, args, 0), I(args[1]), L(args[2]), delta: true);
             case OpAddBuff: // buff, duration (0: the buff's own), target
-                return await AddBuffAsync(s, Target(s, args, 2), I(args[0]), (int)Arg(args, 1));
+                return await AddBuffAsync(s, Target(s, args, 2), I(args[0]), (int)NumArg(args, 1));
             case OpRemoveBuff: // buff, target, by stacks, stacks
-                return await RemoveBuffAsync(Target(s, args, 1), I(args[0]), Arg(args, 2) != 0, (int)Arg(args, 3));
+                return await RemoveBuffAsync(Target(s, args, 1), I(args[0]), NumArg(args, 2) != 0, (int)NumArg(args, 3));
             case OpShowBuff:
                 return ShowBuffs(Target(s, args, 0));
             case OpNoCd:
-                return await SwitchAsync(s, GmCombatSwitches.NoCooldown, Arg(args, 0) != 0);
+                return await SwitchAsync(s, GmCombatSwitches.NoCooldown, NumArg(args, 0) != 0);
             case OpDamageFix: // the panel's options: 1 = variance off, 0 = on
-                return await SwitchAsync(s, GmCombatSwitches.FixedDamage, Arg(args, 0) != 0);
+                return await SwitchAsync(s, GmCombatSwitches.FixedDamage, NumArg(args, 0) != 0);
             case OpUnlimit:
                 // The presets pass (on, kind): 1 = no cooldown (10000 "无CD"), 2 = invincible without costs (10001
                 // "无敌无消耗"). The button ("无敌") has one parameter, so a missing kind is 2 (inferred).
-                return Arg(args, 1) switch
+                return NumArg(args, 1) switch
                 {
-                    1 => await SwitchAsync(s, GmCombatSwitches.NoCooldown, Arg(args, 0) != 0),
-                    0 or 2 => await SwitchAsync(s, GmCombatSwitches.Unlimited, Arg(args, 0) != 0),
+                    1 => await SwitchAsync(s, GmCombatSwitches.NoCooldown, NumArg(args, 0) != 0),
+                    0 or 2 => await SwitchAsync(s, GmCombatSwitches.Unlimited, NumArg(args, 0) != 0),
                     _ => throw new ArgumentException("kind 1 (no cooldown) or 2 (invincible, no costs)"),
                 };
             case OpCastSkill: // the GM casts at herself
@@ -81,7 +81,7 @@ public sealed partial class GmCommands
             case OpTargetCastSkill: // skill, caster: the target casts, at the GM
                 return await CastAsync(s, Target(s, args, 1), I(args[0]));
             case OpSetEntityCamp:
-                return await SetCampAsync(Target(s, args, 0), (int)Arg(args, 1));
+                return await SetCampAsync(Target(s, args, 0), (int)NumArg(args, 1));
             case OpReloadSkillBlueprint:
                 return "GmReloadSkillBlueprint: skills are read from the exported client data at start; restart the server to reload them.";
             case OpOpenLog:
@@ -96,7 +96,7 @@ public sealed partial class GmCommands
     /// <summary>The target id at <paramref name="index"/>: 0 or empty is the GM's own role, else an online role or a unit.</summary>
     private Entity Target(GameSession s, string[] args, int index)
     {
-        long uid = Arg(args, index);
+        long uid = NumArg(args, index);
         if (uid == 0 || uid == s.Role?.Id) return new(s, null, s.Role?.Id ?? 0);
         if (sessions.All().FirstOrDefault(p => p.Role?.Id == uid) is { } player) return new(player, null, uid);
         // The GM's own map first: what she clicks is beside her (another map's unit still answers, inferred).
@@ -104,7 +104,7 @@ public sealed partial class GmCommands
         return new(null, unit, uid);
     }
 
-    private static long Arg(string[] args, int index) => args.Length > index && args[index].Length > 0 ? L(args[index]) : 0;
+    private static long NumArg(string[] args, int index) => args.Length > index && args[index].Length > 0 ? L(args[index]) : 0;
 
     private string Name(Entity e) => e.Player?.Role?.Name
         ?? (e.Unit is MonsterUnit m ? $"{Monsters.NpcName(m.Template.NpcId)} ({m.Uid})" : $"unit {e.Uid}");
