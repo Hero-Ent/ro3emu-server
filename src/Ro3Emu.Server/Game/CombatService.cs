@@ -336,8 +336,8 @@ public sealed partial class CombatService : IGameTicker
         int first = 0;
         for (long id = scriptShow * 100; id < scriptShow * 100 + 100; id++)
         {
-            if (!effects.TryGetValue(id.ToString(), out var e) || !e.TryGetProperty("m_kDamage", out var damage)) continue;
-            if (damage.ValueKind == JsonValueKind.Object && damage.TryGetProperty("m_kActionDamge", out _)) return (int)id;
+            if (SkillEffectData.Find(effects, id) is not { HasDamage: true } effect) continue;
+            if (effect.HasHitReaction) return (int)id;
             if (first == 0) first = (int)id;
         }
         return first != 0 ? first : 1000002;

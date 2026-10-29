@@ -197,14 +197,10 @@ public sealed partial class CombatService
     /// </summary>
     private int BulletEffect(long scriptShow) => _bulletEffects.GetOrAdd(scriptShow, show =>
     {
-        if (_data.SkillTemplate(show) is { } template && template.TryGetProperty("m_kClientPoints", out _)) return 0;
+        if (_data.SkillTemplate(show) is { } template && SkillEffectData.HasClientPoints(template)) return 0;
         var effects = _data.SkillTemplateTable("Lua_Config_EffectData");
         for (long id = show * 100; id < show * 100 + 100; id++)
-            if (effects.TryGetValue(id.ToString(System.Globalization.CultureInfo.InvariantCulture), out var e) && e.TryGetProperty("m_kDamage", out var damage)
-                && damage.ValueKind == JsonValueKind.Object && damage.TryGetProperty("m_kBulletData", out var bullet)
-                && bullet.ValueKind == JsonValueKind.Object && bullet.TryGetProperty("m_kBulletName", out var name)
-                && name.ValueKind == JsonValueKind.String && name.GetString() is { Length: > 0 })
-                return (int)id;
+            if (SkillEffectData.Find(effects, id)?.BulletName != null) return (int)id;
         return 0;
     });
 
@@ -233,10 +229,7 @@ public sealed partial class CombatService
     }
 
     private int BulletLifeTime(int effect) =>
-        _data.SkillTemplateTable("Lua_Config_EffectData").TryGetValue(effect.ToString(System.Globalization.CultureInfo.InvariantCulture), out var e)
-        && e.TryGetProperty("m_kDamage", out var d) && d.TryGetProperty("m_kBulletData", out var b)
-        && b.TryGetProperty("m_fBulletLifeTime", out var life) && life.TryGetDouble(out double ms) && ms > 0
-            ? (int)ms : 0;
+        SkillEffectData.Find(_data.SkillTemplateTable("Lua_Config_EffectData"), effect)?.BulletLifeTime ?? 0;
 
     /// <summary>Reflect a real target eligibility transition for an AOI-visible unit (31122).</summary>
     public async Task SetSkillTargetSelectionAsync(GameSession viewer, WorldUnit target, int skillTag, bool white, bool enabled)
