@@ -104,11 +104,13 @@ public sealed partial class TerritoryWarsService
 
     private bool CannonSubCondition(GameSession s, CannonUnit unit, LCConditionList sub)
     {
-        if (sub.Data is not [var type, var arg, ..]) return false;
+        if (sub.Data is not [var type, ..]) return false;
         bool? yes = type switch
         {
-            CheckBuilder => (unit.Builder == s.Role!.Id) == (arg == 1),
-            CheckCamp => (unit.Camp == CampOf(s)) == (arg == 1),
+            // LC_CommonCondition.CheckBuilder and CheckCamp ignore their argument: the unit's Owner is the player, and
+            // the unit and the player share a camp.
+            CheckBuilder => unit.Builder == s.Role!.Id,
+            CheckCamp => unit.Camp == CampOf(s),
             // (inferred) 12001 with argument 0: the player is in any gameplay status (here: operating a cannon).
             InStatus => _operators.ContainsKey(s),
             _ => null,
