@@ -29,6 +29,19 @@ public sealed partial class AccountStore
         return null;
     }
 
+    /// <summary>
+    /// <paramref name="name"/>, or null when a ban matches it in any case. A ban outlives its account, and a name is
+    /// registered when no account matches it in any case, so a case variant of a banned name must be refused too, or
+    /// the original spelling would then sign in to the new account.
+    /// </summary>
+    internal async Task<string?> UnlessBannedForRegistrationAsync(string name)
+    {
+        long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        if (!await ReadAsync<bool>(new AccountBanRead(name, now, anyCase: true)).ConfigureAwait(false)) return name;
+        Refused(name, "registration");
+        return null;
+    }
+
     private string? UnlessBanned(string? account, string path)
     {
         if (account == null || !IsBanned(account)) return account;

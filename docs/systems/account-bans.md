@@ -35,7 +35,9 @@ server is too old to enforce bans.
 
 A ban outlives its account: deleting an account (for example from the panel) keeps its `account_ban` row, so the
 player cannot escape a ban by recreating the account. `/sdk/login` registers unknown names, but a name with an active
-ban is refused before it is registered, so no new account is created for it.
+ban is refused before it is registered, so no new account is created for it. That check ignores case, as the account
+lookup and the registration's uniqueness do: otherwise `bob` could be registered while `Bob` is banned, and `Bob` would
+then sign in to it. For an existing account the ban is matched exactly against its stored name.
 
 ## Where the server checks
 

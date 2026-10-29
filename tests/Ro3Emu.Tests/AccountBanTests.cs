@@ -154,6 +154,21 @@ public sealed class AccountBanTests : IAsyncLifetime
         }
     }
 
+    [Fact]
+    public async Task ABanOutlivesItsAccountWhateverCaseTheNameIsTypedIn()
+    {
+        // The account lookup and the registration's uniqueness ignore case (AccountPlans): a case variant of a banned
+        // name with no account must not create one, or the original spelling would sign in to it.
+        Ban("Ban-Ghost-Case");
+        Assert.Equal(401, (await SdkLoginAsync("ban-ghost-case", "pw")).Code);
+        Assert.Equal(401, (await SdkLoginAsync("BAN-GHOST-CASE", "pw")).Code);
+        Assert.Equal(401, (await SdkLoginAsync("Ban-Ghost-Case", "pw")).Code);
+        using var db = PanelConnection();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM account WHERE name='Ban-Ghost-Case' COLLATE NOCASE";
+        Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
+    }
+
     private async Task<string> SdkLoginBodyAsync(string identity, string credential)
     {
         using var form = new FormUrlEncodedContent(new Dictionary<string, string> { ["identity"] = identity, ["credential"] = credential });

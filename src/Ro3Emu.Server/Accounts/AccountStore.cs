@@ -515,7 +515,7 @@ public sealed partial class AccountStore : IDisposable
         if (existing != null) return await Check(existing).ConfigureAwait(false);
         // A ban outlives its account (deleting an account keeps its ban row), so a banned name is refused before it is
         // registered again.
-        if (await UnlessBannedAsync(name, "registration").ConfigureAwait(false) == null) return new(LoginResult.Banned, name);
+        if (await UnlessBannedForRegistrationAsync(name).ConfigureAwait(false) == null) return new(LoginResult.Banned, name);
         byte[] salt = RandomNumberGenerator.GetBytes(16);
         byte[] hash = await Task.Run(() => AccountHash.Hash(password, salt)).ConfigureAwait(false);
         if (await WriteAsync<bool>(new AccountRegisterPlan(name, hash, salt, DateTime.UtcNow.ToString("O"))).ConfigureAwait(false))
