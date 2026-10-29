@@ -18,8 +18,15 @@ This page explains how to host your own patch repository and publish to it.
   - `manifests/`: one immutable manifest per published version;
   - `chunks/`: the content-addressed, compressed data chunks;
   - `launcher/<version>/Ro3EmuLauncher.exe`: published launcher builds for self-update;
-  - optional `news.json` for the launcher page:
-    `{ "items": [ { "tag", "color": "blue|green|orange|red", "title", "text" } ] }`.
+  - optional `news.json` for the launcher page, newest first: the first item is shown big, the next three in the
+    "More news" list:
+    `{ "items": [ { "tag", "color": "blue|green|orange|red|grey", "date": "2026-10-12", "title", "text", "url" } ] }`
+    (`date`, `url` and `color` are optional; with a `url` the item gets "Read more" and opens in the browser);
+  - optional `channels/<channel>-notes.json`, the "What's new" sheet shown once after an update:
+    `{ "versions": { "<version>": [ "Fixed …", "Added …" ] } }`. Upload it with the channel file. The launcher
+    remembers the version installed at its first check, so a fresh install shows nothing and the next update shows the
+    notes of the version it installed;
+  - optional `hero.jpg`, the large picture beside the news (see `hero` below).
 - The launcher pings `<server>/ro3emu/status` (player count only) for the online indicator.
 
 ## Configure the launcher
@@ -35,11 +42,45 @@ local repository.
   "channel": "test",
   // The game server's HTTP base; the launcher pings it for the online indicator.
   "server": "http://127.0.0.1:5380",
-  "serverName": "RO3Emu"
+  // Your server's name: title bar, built-in hero picture, tray icon, shortcuts.
+  "serverName": "RO3Emu",
+  // Optional: the hero picture. A file beside the exe ("hero.jpg") or a URL relative to the repository
+  // ("art/hero-2026-10.jpg"; an absolute https URL works too). Leave it out to use <repository>/hero.jpg when it exists.
+  "hero": null,
+  // Optional: links on the title bar, opened in the player's browser. None by default.
+  "links": [
+    { "label": "Website", "url": "https://example.com/" },
+    { "label": "Discord", "url": "https://discord.gg/example" }
+  ]
 }
 ```
 
 Set `repository` to the public URL of your repository folder and `server` to your game server's public HTTP address.
+
+- `serverName` and `links` are all the branding there is: a fork for another server changes `launcher.json`, not the
+  page. A link may set `"icon"` (`globe`, `chat`, `book`, `trophy`, `flag`, `link`); otherwise the page picks one from
+  the label (Discord gets the chat bubble, a wiki or guide the book).
+- The **hero** is the big framed picture. In order: `hero` from `launcher.json`, else `<repository>/hero.jpg`, else a
+  built-in parchment map with a compass rose and `serverName` (no art needed). JPEG, PNG or WebP up to 8 MB; about
+  1300 × 1050 px fills the frame on high-DPI screens, and the picture is cropped to the frame (centre, slightly above
+  the middle). The launcher downloads it and serves it to the page itself, so an `http://` repository works, and keeps
+  the last one in `%LOCALAPPDATA%\RO3Emu\hero.cache` for starts without the repository. Use art you have the rights
+  to.
+
+## What the player sees
+
+- **Install / Update / Play** in the bottom bar, with the installed and available version, the status, and the
+  progress (speed, time left, Pause; a paused download continues where it stopped).
+- **Settings** (the gear): the game folder (change, open), Repair, Desktop / Start menu shortcuts, where to report
+  problems (in the game: Menu → Feedback or `/bug`, see [feedback.md](feedback.md)) and **Uninstall**. Uninstall is
+  offered only for a folder the launcher installed into while it was empty or new; a folder that already held a client
+  (for example the player's official ROO_PC) is never deleted.
+- On the first run the launcher asks once whether to add Desktop / Start menu shortcuts to itself (it never moves or
+  copies itself).
+- **Play** hides the launcher to a tray icon; it comes back when the game closes and checks for updates again. Tray
+  menu: Show launcher / Exit. The game does not need the launcher while it runs.
+- Player choices live in `%APPDATA%\RO3Emu\launcher-settings.json` (`clientDirectory`, `shortcutsAsked`,
+  `notesSeenVersion`, `ownedDirectory`).
 
 ## Releasing
 
@@ -79,6 +120,8 @@ sync). Also put a copy of `Ro3EmuLauncher.exe` at the repository root (for examp
 ## Development
 
 - `RO3EMU_LAUNCHER_UI=<path to src/Ro3Emu.Launcher/ui>` serves the launcher page from disk and enables the dev tools.
-- `ui/index.html?mock=install|update|ready|downloading|repair|offline` previews the page in a normal browser.
+- `ui/index.html?mock=install|update|ready|downloading|repair|offline|error|checking|running` previews the page in a
+  normal browser (serve the `ui` folder over HTTP); add `&panel=settings`, `&notes=1` (What's new), `&first=1` (the
+  shortcuts question), `&hero=<image url>`, `&links=0` or `&fast=10` (a faster fake download).
 - A `launcher.json` beside the exe overrides the built-in one (for example a local repository such as
   `http://localhost:8790/`).
