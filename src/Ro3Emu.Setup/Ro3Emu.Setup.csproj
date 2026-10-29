@@ -40,6 +40,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Ro3Emu.Setup.Tests" />
+    <!-- The launcher (Ro3EmuLauncher.exe) drives the same flows from its window. -->
+    <InternalsVisibleTo Include="Ro3EmuLauncher" />
   </ItemGroup>
 
 </Project>
