@@ -140,11 +140,14 @@ public sealed partial class TerritoryWarsService
             return unit.Uid;
         }
 
-        public bool Standing(long cannon) => owner._cannons.TryGetValue(cannon, out var c) && !c.Unit.Removed && !c.Room.Closed;
+        public Task<long> RaiseVehicleAsync(GameSession vehicleOwner, int npcId) => owner.RaiseVehicleAsync(vehicleOwner, npcId);
 
-        public async Task RemoveAsync(long cannon)
+        public bool Standing(long machine) => owner._cannons.TryGetValue(machine, out var c) && !c.Unit.Removed && !c.Room.Closed
+            || owner.VehicleStanding(machine);
+
+        public async Task RemoveAsync(long machine)
         {
-            if (!owner._cannons.TryRemove(cannon, out var c)) return;
+            if (await owner.RemoveVehicleAsync(machine) || !owner._cannons.TryRemove(machine, out var c)) return;
             await owner.EjectCannonOperatorAsync(c.Unit);
             await owner._instances.RemovePropAsync(c.Room, c.Unit);
         }

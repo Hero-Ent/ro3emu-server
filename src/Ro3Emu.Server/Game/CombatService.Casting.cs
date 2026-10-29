@@ -85,7 +85,8 @@ public sealed partial class CombatService
             req.SkillId = (int)GameData.Int(row!.Value, "_iID");
             own = owned == null ? OwnSkillAdmit?.Invoke(s, req.SkillId) : null;
             if (own is { } ownError && ownError != 0) error = ownError;
-            else if (own == null && (owned != null ? !owned.Skills.Contains(req.SkillId) : !Learned(s, row!.Value))) error = ErrorCodes.SkillNotLearned;
+            else if (own == null && (owned != null ? !owned.Skills.Contains(req.SkillId)
+                : !Learned(s, row!.Value) && !GrantedSkill.Exists(granted => granted(s, req.SkillId)))) error = ErrorCodes.SkillNotLearned;
             else if (!SkillModeAllowed(s, row!.Value)) error = ErrorCodes.SkillRequirements;
             else if (GameData.Int(row!.Value, "_iBasicType") != 1) error = ErrorCodes.SkillPassive;
             else if (_buffs.HasForbidden(s, new SkillConfig(row.Value).IsNormalAttack(_data)
