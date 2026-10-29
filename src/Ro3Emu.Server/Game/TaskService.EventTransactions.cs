@@ -17,7 +17,7 @@ public sealed partial class TaskService
 
     internal CharacterService.FirstCardSightPlan? StageOnePieceReward(GameSession session, string source)
         => StageEventTarget(session, "one-piece/" + source,
-            target => target[0] == TOnePieceCount && target.Length >= 4 && target[1] == 200);
+            target => target[0] == TOnePieceCount && target.Length >= 4 && target[1] == 200 || VaultTarget(target));
 
     private CharacterService.FirstCardSightPlan? StageEventTarget(GameSession session, string source, Func<long[], bool> matches)
         => StageEventTarget(session, source, target => matches(target) ? 1 : 0);

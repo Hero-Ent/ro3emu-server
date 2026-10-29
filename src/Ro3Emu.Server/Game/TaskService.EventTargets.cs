@@ -23,14 +23,14 @@ public sealed partial class TaskService
     {
         [TGuildWarPoints, var n] => n,
         [TMovement, > 0, var n] => n,
-        _ => -1,
+        _ => MiscRequired(t), // TaskService.MiscTargets.cs
     };
 
     private long EventTargetValue(GameSession s, long[] t) => t switch
     {
         [TGuildWarPoints, _] => GuildWarPoints?.Invoke(s) ?? -1,
         [TMovement, var phase, _] => MovementRate(s, phase) is var rate and >= 0 ? rate / 100 : -1,
-        _ => -1,
+        _ => MiscPassive(s, t), // TaskService.MiscTargets.cs
     };
 
     /// <summary>A World Exploration phase's totalRate (basis points), -1 before the activity's state exists.</summary>

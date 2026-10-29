@@ -403,6 +403,13 @@ public static class ServerHost
         app.Services.GetRequiredService<PersonalService>().Upvoted.Add(questTasks.OnProfileLiked); // 106902
         app.Services.GetRequiredService<GuildCampfireService>().Joined.Add(questTasks.OnCampfireJoined); // 106018
         app.Services.GetRequiredService<GuildService>().MembershipChanged.Add(questTasks.OnStateChanged); // 104007
+        // The remaining targets (TaskService.MiscTargets.cs).
+        app.Services.GetRequiredService<TradeService>().Bought.Add(questTasks.OnExchangeBought); // 103002
+        app.Services.GetRequiredService<AuctionService>().GuildBid.Add(questTasks.OnGuildAuctionBid); // 103003
+        app.Services.GetRequiredService<GuildCampfireService>().Joined.Add(questTasks.OnBonfireJoined); // 103013
+        league.MatchCommitted.Add(questTasks.OnGuildLeagueFought); // 103015
+        app.Services.GetRequiredService<ChatService>().TextSent.Add(questTasks.OnChatSent); // 103020
+        app.Services.GetRequiredService<MountService>().RideChanged.Add(s => { questTasks.OnStateChanged(s); return Task.CompletedTask; }); // 101021
         app.Services.GetRequiredService<GuildService>().MembershipChanged.Add(app.Services.GetRequiredService<GuildVoiceService>().OnMembershipChanged);
         app.Services.GetRequiredService<GuildService>().RightsChanged.Add(app.Services.GetRequiredService<GuildVoiceService>().OnRightsChanged);
         var social = app.Services.GetRequiredService<Micro.SocialOwnerCache>();

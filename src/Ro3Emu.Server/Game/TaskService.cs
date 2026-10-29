@@ -102,6 +102,7 @@ public sealed partial class TaskService
         character.GetKillTaskParticipantKeys = GetKillTaskParticipantKeys;
         character.StageKillTaskObligations = StageKillTaskObligations;
         ExtraTasks.Add(DungeonRunTasks); // TaskService.DungeonTasks.cs
+        QuestDelivered.Add(AddFactionPoints); // 101022 (TaskService.MiscTargets.cs)
     }
 
     /// <summary>Delivered = completeTaskNum &gt; 0 or status 4 (the client's CheckTaskDeliveryed). Without quest state: true.</summary>
@@ -655,7 +656,7 @@ public sealed partial class TaskService
             }
         }
         return accepted + AcceptGrowthTitle(session) + AcceptGrowthClass(session) + AcceptActivityTasks(session)
-            + AcceptChickenTasks(session) + AcceptRootTasks(session);
+            + AcceptChickenTasks(session) + AcceptRootTasks(session) + AcceptMiscTasks(session);
     }
 
     private bool Ready(GameSession session, TaskDef def) =>
@@ -666,6 +667,7 @@ public sealed partial class TaskService
     {
         session.Tasks!.Infos[id] = NewInfo(id, Running);
         StartLoginTargets(session, id);
+        StartMiscTargets(session, id);
         // Same current-step selection as LC_TaskHelper.DealAcception (inferred for server host).
         // Extra slots are retained, never treated as sequential instructions.
         EvaluatePassive(session);

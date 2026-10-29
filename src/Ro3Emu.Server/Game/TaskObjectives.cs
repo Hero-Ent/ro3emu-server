@@ -247,7 +247,7 @@ public sealed partial class TaskService
             TLeagueJoin => t[1] is >= 0 and <= 3,
             TLeagueScore => t[1] is >= 0 and <= 2 && t[2] >= 0,
             TSiegeScore => t[1] >= 0,
-            _ => true, // Only the explicit formatter cases above can reach here.
+            _ => MiscSupported(t), // Only the explicit formatter cases above can reach here.
         };
     }
 
