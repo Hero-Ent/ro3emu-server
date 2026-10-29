@@ -403,6 +403,11 @@ public static class ServerHost
         questTasks.LoadFriendCount = async s => s.Role is { } role
             ? (await social.LoadSocialAsync([role.Id])).GetValueOrDefault(role.Id)?.Friends.LongLength : null; // 103019
         app.Services.GetRequiredService<Micro.FriendService>().RelationChanged.Add(questTasks.OnRelationChanged);
+        // Connect quests (TaskService.Connect.cs): party-mates, the raid boss clears and 116's intimacy.
+        questTasks.PartyMembers = app.Services.GetRequiredService<TeamService>().MembersOf;
+        app.Services.GetRequiredService<DungeonService>().MultiBossCleared.Add(questTasks.OnConnectBossClearedAsync); // 107005
+        questTasks.GainIntimacy = app.Services.GetRequiredService<FriendExtraService>().GainIntimacy;
+        questTasks.QuestDelivered.Add(questTasks.OnConnectDelivered);
         app.Services.GetRequiredService<ReconnectService>(); // hooks the handover and registers !netdrop
         app.Services.GetRequiredService<CardEffects>(); // socketed-card passives and procs (sockets, scene loads, hits)
         app.Services.GetRequiredService<TalentProcs>(); // profession talent procs (cast resolutions)
