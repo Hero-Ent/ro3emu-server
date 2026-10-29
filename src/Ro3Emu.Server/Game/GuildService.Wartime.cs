@@ -1,6 +1,7 @@
 using Romsg;
 using Ro3Emu.Server.Accounts;
 using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 
 namespace Ro3Emu.Server.Game;
 
@@ -75,7 +76,7 @@ public sealed partial class GuildService
 
     /// <summary>The cannon items GVGCannonConfig builds (_iItemID): the machines 32270 reserves.</summary>
     private bool IsCannonItem(int item) => item > 0
-        && data.Table("GVGCannonConfig").Values.Any(r => GameData.Int(r, "_iItemID") == item);
+        && data.Table("GVGCannonConfig").Values.Any(r => new GVGCannonConfig(r).ItemId == item);
 
     /// <summary>The guild's own stock from now on: the initial list becomes its starting stock (inferred).</summary>
     private void Stock(GuildStore.State g)
