@@ -1,4 +1,5 @@
 using System.Text;
+using Ro3Emu.ClientTools;
 
 namespace Ro3Emu.Setup;
 
@@ -36,6 +37,8 @@ internal static class Program
           --http-port <n> --micro-port <n> --game-port <n>   server ports (default 5380, 20000, 33100)
           --voice-port <n>   turn on party voice chat on this TCP port, for example 33101 (off by default)
           --home <folder>    where RO3Emu keeps data, logs and settings (default: next to RO3Emu.exe)
+          --purchase-url <address>  the in-game purchase / recharge buttons open this http(s) address (start,
+                             host, join; give it every time). Without it they open nothing, never the publisher's store
         """;
 
     /// <summary>Ctrl+C or Q while the server runs: the wait ends and the server is stopped cleanly.</summary>
@@ -143,6 +146,7 @@ internal sealed class Options
     public bool NoLaunch { get; private set; }
     public bool Yes { get; private set; }
     public string? PublicHost { get; private set; }
+    public string? PurchaseUrl { get; private set; }
     public List<string> GmAccounts { get; } = [];
     public string? Only { get; private set; }
     public bool ListInputs { get; private set; }
@@ -174,6 +178,10 @@ internal sealed class Options
                 case "--no-launch": o.NoLaunch = true; break;
                 case "--yes": case "-y": o.Yes = true; break;
                 case "--public": o.PublicHost = Value("--public"); break;
+                case "--purchase-url":
+                    o.PurchaseUrl = Value("--purchase-url") is var url && OpenUrlPatch.IsPurchaseUrl(url) ? url
+                        : throw new SetupException($"--purchase-url needs an http or https address, not '{url}'.", "Run RO3Emu.exe help.");
+                    break;
                 case "--gm": o.GmAccounts.Add(Value("--gm")); break;
                 case "--only": o.Only = Value("--only"); break;
                 case "--list-inputs": o.ListInputs = true; break;
