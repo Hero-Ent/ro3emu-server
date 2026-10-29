@@ -36,6 +36,8 @@ A reverse proxy on the same machine makes every request arrive from loopback. Do
   set. Behind a reverse proxy every player shares the proxy's address, so raise the limit there.
 - `/sdk/login` returns a token. The client presents it to `LoginService.verifySdk` on the micro gate, which binds
   the account to that connection.
+- A banned account cannot sign in. The admin panel writes the `account_ban` table and the server reads it on every
+  password, token and gate-bind check; a ban is refused like a wrong credential. See [account bans](account-bans.md).
 - The client sends the password over the HTTP port. That is plain HTTP unless the client was patched with an
   `https://` server address and a TLS-terminating proxy stands in front of the server. Tell players not to reuse a
   password they use elsewhere.
