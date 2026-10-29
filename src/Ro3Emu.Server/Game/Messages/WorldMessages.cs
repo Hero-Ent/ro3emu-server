@@ -32,6 +32,9 @@ public sealed class WorldMessages(Maps.World world, CombatService combat, SceneS
         routes.Intercept("territory/battle", DungeonStatistics, territory.SharedAsync);
         routes.Intercept("escort/actors", id => id is 32287 || NpcInteraction(id), escort.HandleSharedAsync); // guild goods, cargo NPCs
         routes.Intercept("territory/world", NpcInteraction, territory.WorldSharedAsync);
+        // A siege cannon is an NPC of the siege room; its operator's buttons are 32703.
+        routes.Intercept("territory/cannon", id => NpcInteraction(id) || id == WorldInteractionService.Action,
+            territory.CannonSharedAsync);
 
         routes.Map(1031, "common", async (session, msgId, body) =>
         {

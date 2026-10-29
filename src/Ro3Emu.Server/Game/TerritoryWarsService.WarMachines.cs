@@ -48,8 +48,15 @@ public sealed partial class TerritoryWarsService
         public required long Builder { get; init; }
         public required long Camp { get; init; }
         public required string Name { get; init; }
+        /// <summary>Its GVGCannonConfig row.</summary>
+        public required long ConfigId { get; init; }
         public MonsterTemplate? Template { get; init; }
         public List<BuffInfo> Buffs { get; } = [];
+        /// <summary>The player on it (its builder), shots left (_iBulletNumLimit) and the cannon skill's cooldown.</summary>
+        public GameSession? Operator { get; set; }
+        public long Bullets { get; set; }
+        public long CdStartMs { get; set; }
+        public long ReadyMs { get; set; }
 
         public override EntityBase Entity()
         {
@@ -66,6 +73,7 @@ public sealed partial class TerritoryWarsService
                 foreach (var (idx, value) in new (long, long)[] { (101, t.MaxHp), (2000, t.MaxHp), (2002, t.Level) })
                     entity.Property.Add(new AoIProperty { Idx = idx, Data = value, BaseData = value });
             if (Buffs.Count > 0) entity.BuffData = new AoIBuffInfo { AddBuffs = { Buffs.Select(b => b.Clone()) } };
+            entity.CustomDatas.Add(CannonLong(BulletRestNum, Bullets));
             return entity;
         }
     }
@@ -117,7 +125,8 @@ public sealed partial class TerritoryWarsService
                 Uid = CannonUidBase | Interlocked.Increment(ref owner._cannonSerial), SceneEntry = builder.SceneEntry,
                 InstanceId = battle.Room.Id, X = at.X, Y = at.Y, Z = at.Z, Face = face, NpcId = npcId, Builder = role.Id,
                 Camp = builder.EventFaction > 0 ? builder.EventFaction : 1, Name = new NPCConfig(npc).Name is [var nameId, ..] ? owner._data.Text(nameId) : "",
-                Template = owner._monsters.Template(npcId),
+                Template = owner._monsters.Template(npcId), ConfigId = new GVGCannonConfig(cannon).Id,
+                Bullets = new GVGCannonConfig(cannon).BulletNumLimit,
             };
             foreach (long[] entry in new NPCConfig(npc).BornEventBuff)
                 if (entry is [var buff, ..] && buff > 0 && owner._data.Row("BuffConfig", buff) != null)
@@ -135,7 +144,9 @@ public sealed partial class TerritoryWarsService
 
         public async Task RemoveAsync(long cannon)
         {
-            if (owner._cannons.TryRemove(cannon, out var c)) await owner._instances.RemovePropAsync(c.Room, c.Unit);
+            if (!owner._cannons.TryRemove(cannon, out var c)) return;
+            await owner.EjectCannonOperatorAsync(c.Unit);
+            await owner._instances.RemovePropAsync(c.Room, c.Unit);
         }
     }
 
