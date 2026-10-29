@@ -225,7 +225,7 @@ internal static class Flows
         {
             var serverUrl = $"http://{(publicHost.Contains(':') ? "[" + publicHost + "]" : publicHost)}:{ports.Http}";
             var pem = await http.GetStringAsync($"http://127.0.0.1:{ports.Http}/ro3emu/gate-key.pem");
-            PatchClient(client, serverUrl, pem);
+            PatchClient(client, serverUrl, pem, options.PurchaseUrl);
 
             if (host)
             {
@@ -321,10 +321,10 @@ internal static class Flows
     }
 
     /// <summary>Patches the client for the server and writes the English text map next to it.</summary>
-    private static void PatchClient(string client, string serverUrl, string pem)
+    private static void PatchClient(string client, string serverUrl, string pem, string? purchaseUrl)
     {
         Ui.Step("Patching the game for this server");
-        try { Quiet(() => { ClientPatcher.Patch(client, serverUrl, pem, HooksDll, LocDll); return 0; }); }
+        try { Quiet(() => { ClientPatcher.Patch(client, serverUrl, pem, HooksDll, LocDll, purchaseUrl); return 0; }); }
         catch (UnauthorizedAccessException e)
         {
             throw new SetupException("The game folder cannot be written: " + e.Message,
@@ -388,7 +388,7 @@ internal static class Flows
         }
         Ui.Ok("the server answers");
         EnsureLocMap(client);
-        PatchClient(client, serverUrl, pem);
+        PatchClient(client, serverUrl, pem, options.PurchaseUrl);
         if (!options.NoLaunch) LaunchGame(client);
         Ui.Info($"Next time, run RO3Emu.exe join {address} again. This window can be closed.");
         if (Ui.OwnsConsole() && Ui.Interactive) await Task.Delay(8000);
