@@ -1,6 +1,7 @@
 using Romsg;
 using Ro3Emu.Server.Accounts;
 using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 
 namespace Ro3Emu.Server.Game;
 
@@ -19,6 +20,14 @@ public sealed partial class GuildService
 {
     public const uint WartimeStore = 32273, ToolAssign = 32282, ToolExchange = 32283, ToolList = 32284,
         ToolPermission = 32285, ToolChange = 32286;
+    public const uint Prepay = 32270, CancelPrepay = 32272;
+
+    /// <summary>
+    /// Set by TerritoryWarsService: the side (1 attack, 2 defense) the role fights for in an active siege it is loaded
+    /// into, else 0. Machines are reserved and built only there (inferred: the battle bag that offers them is the
+    /// siege's, LC_WartimeItemHelper.TryBuildCannon).
+    /// </summary>
+    public Func<GameSession, int>? WarSideOf { get; set; }
     private const int MachineRight = 13;
 
     /// <summary>(inferred) Operator slots per machine type: no config row sets them, and the panel shows as many as it
@@ -63,6 +72,103 @@ public sealed partial class GuildService
                     && GameData.Number(pair[0]) is { } item && GameData.Number(pair[1]) is { } count && count > 0)
                     stock[(int)item] = stock.GetValueOrDefault((int)item) + (int)count;
         return stock;
+    }
+
+    /// <summary>The cannon items GVGCannonConfig builds (_iItemID): the machines 32270 reserves.</summary>
+    private bool IsCannonItem(int item) => item > 0
+        && data.Table("GVGCannonConfig").Values.Any(r => new GVGCannonConfig(r).ItemId == item);
+
+    /// <summary>The guild's own stock from now on: the initial list becomes its starting stock (inferred).</summary>
+    private void Stock(GuildStore.State g)
+    {
+        if (g.WartimeStocked) return;
+        g.WartimeItems = new Dictionary<int, int>(WartimeStock(g));
+        g.WartimeStocked = true;
+    }
+
+    /// <summary>A member's reserved machine back into the warehouse; false when there was none.</summary>
+    private static bool ReturnPrepay(GuildStore.State g, long role)
+    {
+        if (!g.WartimePrepay.Remove(role, out int item)) return false;
+        g.WartimeItems[item] = g.WartimeItems.GetValueOrDefault(item) + 1;
+        return true;
+    }
+
+    /// <summary>32273 with the current warehouse to every online member.</summary>
+    private async Task PushStoreAsync(GuildStore.State g)
+    {
+        var ntf = StoreOf(g);
+        foreach (var m in g.Members.Values)
+            if (Online(m.RoleId) is { } peer) await peer.SendGameAsync(WartimeStore, ntf);
+    }
+
+    public Task PrepayAsync(GameSession s, GuildWartimeStorePrepayReq req) =>
+        RunGuildAsync(s, [], [], () => PrepayCoreAsync(s, req));
+    public Task CancelPrepayAsync(GameSession s) => RunGuildAsync(s, [], [], () => CancelPrepayCoreAsync(s));
+
+    /// <summary>
+    /// 32270, the cannon item clicked in the siege battle bag: one machine leaves the warehouse for the member, and the
+    /// answer's prepayItem starts the blueprint (LC_DAL_Guild.ReceiveWartimeStoreItemPrepay -> DoPrepayAction ->
+    /// LC_GVGBuildCannon.StartBuild); a refusal shows its code instead (LC_AssetManager DecodeError). (inferred) The
+    /// member needs the Firearm permission of the Tactics panel (the battle bag only lists that type, 32285), the item a
+    /// cannon of GVGCannonConfig, stock left (535 "Not enough guild supplies") and a running siege; a reservation it
+    /// already holds goes back first, and it always reserves one machine.
+    /// </summary>
+    private async Task PrepayCoreAsync(GameSession s, GuildWartimeStorePrepayReq req)
+    {
+        var g = Own(s);
+        int item = req.Item?.ItemId ?? 0;
+        int code = g == null ? ErrorCodes.TerritoryGuild
+            : WarSideOf?.Invoke(s) is not > 0 ? ErrorCodes.FeatureUnavailable
+            : !IsCannonItem(item) ? ErrorCodes.Parameter
+            : ToolOf(g, s.Role!.Id) != WartimeToolType.Firearm ? ErrorCodes.GuildPermission : 0;
+        if (code == 0)
+        {
+            Stock(g!);
+            long role = s.Role!.Id;
+            int available = g!.WartimeItems.GetValueOrDefault(item) + (g.WartimePrepay.GetValueOrDefault(role) == item ? 1 : 0);
+            if (available <= 0) code = ErrorCodes.GuildSupplies;
+            else
+            {
+                ReturnPrepay(g, role);
+                g.WartimeItems[item]--;
+                g.WartimePrepay[role] = item;
+            }
+        }
+        if (code != 0)
+        {
+            await s.SendGameAsync(Prepay, new GuildWartimeStorePrepayResp { Result = code });
+            return;
+        }
+        await SaveGuildAsync(g!);
+        await s.SendGameAsync(Prepay, new GuildWartimeStorePrepayResp
+        { PrepayItem = new GuildWartimeItem { ItemId = item, ItemCount = 1 } });
+        await PushStoreAsync(g!);
+    }
+
+    /// <summary>
+    /// 32272, Esc on the blueprint (LC_GVGBuildCannon.onClickEsc -> LC_WartimeItemHelper.CancelPrepay): the reserved
+    /// machine goes back. Nothing reserved is not an error (inferred): the client sends it without checking and has no
+    /// handler for the answer, so a refusal would only pop an error up.
+    /// </summary>
+    private async Task CancelPrepayCoreAsync(GameSession s)
+    {
+        var g = Own(s);
+        if (g == null)
+        {
+            await s.SendGameAsync(CancelPrepay, new GuildWartimeStoreItemCancelUseResp { Result = ErrorCodes.TerritoryGuild });
+            return;
+        }
+        int item = g.WartimePrepay.GetValueOrDefault(s.Role!.Id);
+        if (!ReturnPrepay(g, s.Role.Id))
+        {
+            await s.SendGameAsync(CancelPrepay, new GuildWartimeStoreItemCancelUseResp());
+            return;
+        }
+        await SaveGuildAsync(g);
+        await s.SendGameAsync(CancelPrepay, new GuildWartimeStoreItemCancelUseResp
+        { Item = new GuildWartimeItem { ItemId = item, ItemCount = 1 } });
+        await PushStoreAsync(g);
     }
 
     private GuildWartimeStoreItemNtf StoreOf(GuildStore.State? g)

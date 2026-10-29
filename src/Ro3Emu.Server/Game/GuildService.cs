@@ -707,6 +707,7 @@ public sealed partial class GuildService(GameData data, GuildStore store, RoleSt
             g.Members.Remove(member.RoleId);
             bool elite = DropElite(g, member.RoleId);
             var machines = DropWartime(g, member.RoleId);
+            bool returned = ReturnPrepay(g, member.RoleId);
             var impeach = DropImpeacher(g, [member]);
             if (g.Members.Count == 0) await DeleteGuildAsync(g, [member.RoleId]);
             else
@@ -715,6 +716,7 @@ public sealed partial class GuildService(GameData data, GuildStore store, RoleSt
                 await SaveGuildAsync(g, [member.RoleId]);
                 if (elite) await PushElitesAsync(g, LeagueElites(g).Values.ToHashSet());
                 await PushToolChangesAsync(g, machines);
+                if (returned) await PushStoreAsync(g);
                 if (impeach != null) await impeach();
             }
             await s.SendGameAsync(Leave, new GuildMemberLeaveResp { Result = 0 });
@@ -735,6 +737,7 @@ public sealed partial class GuildService(GameData data, GuildStore store, RoleSt
         var targetViews = new List<(GuildStore.Member Member, GameSession? Session, DBRoleGuildInfo Personal)>();
         bool eliteDropped = false;
         var machines = new List<(WartimeToolType Type, int Index)>();
+        bool returned = false;
         Func<Task>? impeach = null;
         if (code == 0 && g != null)
         {
@@ -761,6 +764,7 @@ public sealed partial class GuildService(GameData data, GuildStore store, RoleSt
                     g.Members.Remove(m.RoleId);
                     eliteDropped |= DropElite(g, m.RoleId);
                     machines.AddRange(DropWartime(g, m.RoleId));
+                    returned |= ReturnPrepay(g, m.RoleId);
                     Journal(g, EvKicked, [kicker.RoleId, m.RoleId], Str(kicker.Name), Str(m.Name));
                 }
                 impeach = DropImpeacher(g, removed);
@@ -794,6 +798,7 @@ public sealed partial class GuildService(GameData data, GuildStore store, RoleSt
             }
         if (code == 0 && g != null && eliteDropped) await PushElitesAsync(g, LeagueElites(g).Values.ToHashSet());
         if (code == 0 && g != null) await PushToolChangesAsync(g, machines);
+        if (code == 0 && g != null && returned) await PushStoreAsync(g);
         if (impeach != null) await impeach();
         await s.SendGameAsync(Kick, resp);
     }

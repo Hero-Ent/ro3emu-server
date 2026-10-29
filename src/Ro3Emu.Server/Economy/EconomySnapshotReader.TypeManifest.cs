@@ -77,8 +77,9 @@ public static partial class EconomySnapshotReader
     // currency 15 in the purse, granted by the earner's event/battle-glory receipt with this state; a rank reward is
     // its event/battle-glory-rank receipt, whose claimed marker is that receipt's once-only source.
     // War warehouse: guild WartimeItems/WartimeStocked (GuildService.Wartime) hold the guild's war machines, which only
-    // leave the warehouse by being built on a war map; WartimeSlots are operator permissions. No balance and no asset:
-    // machines never reach a bag, a purse or a trade.
+    // leave the warehouse by being built on a war map; WartimeSlots are operator permissions and WartimePrepay the
+    // machines a member reserved for the blueprint they place. No balance and no asset: machines never reach a bag, a
+    // purse or a trade.
     public const string ExpectedFormatManifestHash = "BA5E8395604B3C714F797006E333C5049C1890E5468ED623A68D953FB65ED5E7";
     public static string FormatManifestHash => State.FormatManifestHash;
 

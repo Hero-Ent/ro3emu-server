@@ -8,8 +8,7 @@ namespace Ro3Emu.Server.Game;
 public sealed partial class TerritoryWarsService
 {
     public const uint SiegeBaseQuery = 44402, SiegeHistoryQuery = 44403, SiegeResultNotify = 44404;
-    public const uint SiegeToolPrepay = 32270, SiegeToolBuild = 32271, SiegeToolCancel = 32272,
-        SiegeToolAdd = 32275, SiegeVehicleUse = 32281;
+    public const uint SiegeToolBuild = 32271, SiegeToolAdd = 32275, SiegeVehicleUse = 32281;
     private const int SiegeActivity = 115;
     private bool? _siegeTestOpen;
     private long _siegeTestStart;
