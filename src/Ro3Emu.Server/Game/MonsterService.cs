@@ -19,6 +19,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     private readonly ILogger<MonsterService> _log;
     private readonly ReconstructedDungeons? _reconstructed;
     private readonly BossSkillOptions _bossOptions;
+    private readonly Dictionary<(long Scene, int Npc), int> _spawnLimits;
 
     public MonsterService(World world, WorldData worldData, GameData data, GameLoop loop, ILogger<MonsterService> log,
         ReconstructedDungeons? reconstructed = null, Microsoft.Extensions.Options.IOptions<ServerOptions>? options = null)
@@ -26,6 +27,8 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         this._reconstructed = reconstructed;
         _bossOptions = options?.Value.BossSkills ?? new BossSkillOptions();
         _ro1Aggressive = Ro1Aggressive(options?.Value); // MonsterService.Ro1Aggression
+        _spawnLimits = (options?.Value.SpawnLimits ?? []).Where(r => r.Npc > 0 && r.Max >= 0)
+            .GroupBy(r => (r.Scene, r.Npc)).ToDictionary(g => g.Key, g => g.Last().Max);
         this._world = world;
         this._worldData = worldData;
         this._data = data;
@@ -184,6 +187,9 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
 
     // ---- spawning ----
 
+    /// <summary>A pool group's rolled count under a <see cref="ServerOptions.SpawnLimits"/> rule (a negative limit: none).</summary>
+    internal static int LimitedCount(int count, int limit) => limit < 0 ? count : Math.Min(count, limit);
+
     /// <summary>Compatibility entry point for the original public map, line 1.</summary>
     public Task EnsureSpawnedAsync(long scene) => EnsureSpawnedAsync(RuntimeMapKey.Public(scene));
 
@@ -208,7 +214,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
                     {
                         if (state.Retired) break;
                         if (Template(npcId) == null) continue;
-                        int n = _random.Next(min, max + 1);
+                        int n = LimitedCount(_random.Next(min, max + 1), _spawnLimits.GetValueOrDefault((runtime.SceneEntry, npcId), -1));
                         for (int i = 0; i < n && !state.Retired; i++) count += await SpawnAsync(runtime, state, map, group, npcId) ? 1 : 0;
                     }
                 }
