@@ -29,8 +29,9 @@ public sealed partial class TerritoryWarsService
 
     private sealed record Rider(VehicleUnit Unit, int Seat, long Interaction);
 
-    /// <summary>A war vehicle: its owner (the member who used the item), camp, seats and the gunners' aim.</summary>
-    internal sealed class VehicleUnit : WorldUnit
+    /// <summary>A war vehicle: its owner (the member who used the item), camp, seats and the gunners' aim. A monster unit
+    /// for the combat, as a cannon.</summary>
+    internal sealed class VehicleUnit : MonsterUnit
     {
         public required int NpcId { get; init; }
         public required long Owner { get; init; }
@@ -39,7 +40,6 @@ public sealed partial class TerritoryWarsService
         /// <summary>VehicleSeatConfig rows of the seats, in VehicleConfig _kSeats order.</summary>
         public required long[] SeatRows { get; init; }
         public required GameSession?[] Seats { get; init; }
-        public MonsterTemplate? Template { get; init; }
         public List<BuffInfo> Buffs { get; } = [];
         public Dictionary<int, float> FireDirs { get; } = [];
         /// <summary>enum_PassengerType of each seat (VehicleSeatConfig _iType).</summary>
@@ -69,15 +69,14 @@ public sealed partial class TerritoryWarsService
             var entity = new EntityBase
             {
                 Uuid = (ulong)Uid, EntityTemplateID = (ulong)NpcId, EntityType = 2, Name = Name, EntityCamp = Camp,
-                Owner = Owner, Face = Face, State = EntityState.Alive, NotifyType = EntityBase.Types.NotifyType.All,
+                Owner = Owner, Face = Face, State = Dead ? EntityState.Dead : EntityState.Alive,
+                NotifyType = EntityBase.Types.NotifyType.All,
                 MovementInfo = new MovementInfo
                 {
                     Pos = Pos, Face = Face, ServerTime = MonsterService.NowMs, MoveType = MovementType.MoveTypeNone
                 },
             };
-            if (Template is { } t)
-                foreach (var (idx, value) in new (long, long)[] { (101, t.MaxHp), (2000, t.MaxHp), (2002, t.Level) })
-                    entity.Property.Add(new AoIProperty { Idx = idx, Data = value, BaseData = value });
+            AddMachineHealth(entity, this);
             if (Buffs.Count > 0) entity.BuffData = new AoIBuffInfo { AddBuffs = { Buffs.Select(b => b.Clone()) } };
             var carries = new AoICarryInfo();
             for (int seat = 0; seat < Seats.Length; seat++)
@@ -96,17 +95,20 @@ public sealed partial class TerritoryWarsService
     {
         if (owner.SiegeBattle is not { } battle || owner.Role is not { } role
             || NPCConfig.Get(_data, npcId) is not { NPCSubType: 103 } npc
-            || VehicleConfig.Get(_data, npc.SubTypeValue) is not { Seats: { Length: > 0 } seats }) return 0;
+            || VehicleConfig.Get(_data, npc.SubTypeValue) is not { Seats: { Length: > 0 } seats }
+            || _monsters.MachineTemplate(npcId) is not { } template) return 0;
         foreach (var (uid, old) in _vehicles)
             if (old.Unit.Removed || old.Room.Closed) _vehicles.TryRemove(uid, out _);
         float rad = owner.Face * MathF.PI / 180f;
         var spot = new MapPoint(owner.Position.X + 2 * MathF.Sin(rad), owner.Position.Y, owner.Position.Z + 2 * MathF.Cos(rad), owner.Face);
         if (_maps.Map(owner.SceneEntry) is { } map) spot = map.Grounded(spot);
+        var (group, home) = MachineHome(npcId, spot);
         var unit = new VehicleUnit
         {
             Uid = VehicleUidBase | Interlocked.Increment(ref _vehicleSerial), SceneEntry = owner.SceneEntry, InstanceId = battle.Room.Id,
             X = spot.X, Y = spot.Y, Z = spot.Z, Face = owner.Face, NpcId = npcId, Owner = role.Id, Camp = CampOf(owner),
-            Name = npc.Name is [var nameId, ..] ? _data.Text(nameId) : "", Template = _monsters.Template(npcId),
+            CampOverride = (int)CampOf(owner), Name = npc.Name is [var nameId, ..] ? _data.Text(nameId) : "",
+            Template = template, Group = group, Home = home, Hp = template.MaxHp, BornTimeMs = MonsterService.NowMs,
             SeatRows = seats, Seats = new GameSession?[seats.Length],
             SeatTypes = [.. seats.Select(seat => VehicleSeatConfig.Get(_data, seat)?.Type ?? 0)],
         };

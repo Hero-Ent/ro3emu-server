@@ -74,13 +74,26 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
 
     public MonsterTemplate? Template(int npcId)
     {
-        if (!_templates.TryGetValue(npcId, out var t)) _templates[npcId] = t = Build(npcId);
+        if (!_templates.TryGetValue(npcId, out var t)) _templates[npcId] = t = Build(npcId, machine: false);
         return t;
     }
 
-    private MonsterTemplate? Build(int npcId)
+    private readonly Dictionary<int, MonsterTemplate?> _machineTemplates = [];
+
+    /// <summary>
+    /// A siege war machine's stats: the cannons and vehicles are NPCConfig _iNPCType 2 rows (sub types 102 and 103), whose
+    /// _iAttributeVariated and _iLevel select an AttriMonsterConfig row as a monster's do (222059: 69 170 HP). The client
+    /// shows its HP bar from properties 101 and 2000 like a monster's.
+    /// </summary>
+    public MonsterTemplate? MachineTemplate(int npcId)
     {
-        if (_data.Row("NPCConfig", npcId) is not { } npc || GameData.Int(npc, "_iNPCType") != 1) return null;
+        if (!_machineTemplates.TryGetValue(npcId, out var t)) _machineTemplates[npcId] = t = Build(npcId, machine: true);
+        return t;
+    }
+
+    private MonsterTemplate? Build(int npcId, bool machine)
+    {
+        if (_data.Row("NPCConfig", npcId) is not { } npc || !machine && GameData.Int(npc, "_iNPCType") != 1) return null;
         int level = (int)GameData.Int(npc, "_iLevel");
         long attrId = GameData.Int(npc, "_iAttribute");
         if (attrId == 0) attrId = GameData.Int(npc, "_iAttributeVariated") * 1000 + level;

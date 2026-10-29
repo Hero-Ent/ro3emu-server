@@ -23,8 +23,9 @@ public sealed record MonsterTemplate(
     public bool AnswersBattleCall { get; init; }
 }
 
-/// <summary>A live monster on a map (entityType 1): HP, home point, current walk segment and AI state.</summary>
-public sealed class MonsterUnit : WorldUnit
+/// <summary>A live monster on a map (entityType 1): HP, home point, current walk segment and AI state. The siege war
+/// machines derive from it (TerritoryWarsService.CannonUnit, VehicleUnit): they take damage and die as monsters do.</summary>
+public class MonsterUnit : WorldUnit
 {
     public required MonsterTemplate Template { get; init; }
     /// <summary>Instance-specific final outgoing damage rate; 10000 leaves field and dungeon monsters unchanged.</summary>

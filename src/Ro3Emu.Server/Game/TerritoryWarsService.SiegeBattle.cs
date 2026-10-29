@@ -206,7 +206,8 @@ public sealed partial class TerritoryWarsService
         && SiegeMember(b, battle) && OwnId(a) != OwnId(b);
 
     private bool SiegeCanHit(GameSession s, MonsterUnit m, SiegeRun battle)
-        => m != battle.Crystal || SiegeActive(battle) && SiegeMember(s, battle) && OwnId(s) == battle.State.Attack;
+        => MachineCamp(m) is { } camp ? MachineHittable(s, battle, camp)
+            : m != battle.Crystal || SiegeActive(battle) && SiegeMember(s, battle) && OwnId(s) == battle.State.Attack;
 
     /// <summary>The configured crystal sits in a blocked navigation footprint at point 44. Preserve
     /// straight-line path checks up to its target cell, and allow only that terminal cell to be blocked
