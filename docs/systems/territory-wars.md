@@ -95,6 +95,75 @@ Loading into the battle sends the side's commander marks, the party's own marks,
 
 **Inferred:** all the point rules (the client only displays results); an assist is a hit on the victim in the last 10 s; a death pays rather than costs (the record source enum names Kill, Assist and Death as ways points came); the state is the role's territory `RoleState.Glory`, per season. Not done: rank 10 (`_iRankCondition` 10, the top 10 of leaderboard 2102, which this client ships no LeaderBoardsConfig row for), the season-end SiegeSettlementHonorAward mail 1090, and the "Reach N Battle Merit" quests (target 106610).
 
+## War warehouse and machine permissions
+
+`GuildService.Wartime`, the guild's `guildWartimeInfo` (DBGuildData field 36): the warehouse view, the Tactics panel, reserving and building a cannon; firing and vehicles come later.
+
+| Message | Use |
+|---|---|
+| 32273 | The warehouse: every machine item and its count (`LC_DAL_Guild.ReceiveWartimeStoreItemNtf` -> `GNWartimeStoreItems`). The War Manager page counts firearms and vehicles from it, the siege battle bag lists it. Sent with every full guild info (login, join, refresh); a former member gets an empty one. |
+| 32284 | Both machine pages (Firearm 1, Vehicle 2), each a list of operator slots (`roleGuildId`, `roleUsingToolId`). The client stores slot *i* at list position *i*, and later messages address it as `bagIndex`. Any member may read it: the guild window's War Machine page asks too. |
+| 32282 | Put a member in a slot or clear it (`roleGuildId` 0). |
+| 32283 | Swap two slots of one page: dragging a name onto another slot; an empty slot moves the name. |
+| 32286 | The changed slots, to every online member. |
+| 32285 | To a member whose own page changed: the machine type they may use (`SiegePermissionSelfData`; the battle bag shows only that type), None when revoked. Also sent with the full guild info while the member holds a slot. |
+
+Editing needs GuildPermissionConfig 13 War Machine Management (`ErrorCodes.GuildPermission` 466); outside a guild every request is 6001 as before. A bad page or slot is 82, a non-member 454. A member who leaves or is kicked frees the slot.
+
+**Inferred:**
+- 10 slots per page. No config row gives a number and the panel shows what it receives.
+- A guild that never used its warehouse holds `SiegeInitItemList` (50 each of cannons 1006001-1006004).
+- A member holds at most one slot. The client only offers members without a slot; anything else is 82.
+- Slots are guild-wide: the siege `dungeonId` in 32282 is not used.
+- `roleUsingToolId` (the machine a member is in, which makes the client ask before revoking) stays 0 until machines can be built.
+
+### Reserving a machine (32270, 32272)
+
+Clicking a cannon in the siege battle bag (`LC_WartimeItemHelper.TryBuildCannon`) sends 32270 with that item. On
+success one machine leaves the warehouse and is held for the member (`prepayInfo`, `GuildStore.State.WartimePrepay`);
+the answer's `prepayItem` starts the blueprint (`ReceiveWartimeStoreItemPrepay` -> `DoPrepayAction` ->
+`LC_GVGBuildCannon.StartBuild` with the item's GVGCannonConfig row), and every online member gets the new 32273. A
+refusal shows its code instead (`LC_AssetManager` calls the DAL's `DecodeError` for a nonzero `result`). Esc on the
+blueprint sends 32272 (`LC_WartimeItemHelper.CancelPrepay`) and the machine goes back. Leaving or being kicked from the
+guild gives a held machine back too.
+
+Refusals: outside a guild 6001, not loaded into a running siege the member fights 28, an item that is not a cannon of
+GVGCannonConfig (`_iItemID`) 82, no Firearm permission 466, none left 535 "Not enough guild supplies".
+
+**Inferred:**
+- Reserving needs the Firearm permission: the battle bag only lists the member's own machine type (32285).
+- One machine per member: a second reservation gives the first one back.
+- The first reservation turns the initial list into the guild's own stock.
+- Cancelling with nothing held answers 0: the client sends it unconditionally and has no handler for the answer.
+- A machine held when the blueprint closes on death or a scene change (the client exits without 32272) stays held
+  until the member reserves again, cancels or builds.
+
+### Building a cannon (32271)
+
+Confirming the blueprint (`LC_GVGBuildCannon.Build`) sends 32271 with its position and facing. On success the reserved
+machine is used up and the answer closes the blueprint (`LC_DunGeon_Siege.GUILD_ATTACK_CITY_BUILD`). The builder then
+works for GVGCannonConfig `_iBuildTime` (3 s): 32702 `InteractChangeNtf` BuildingCannon (status 1, `_iBuildStatusID`)
+with `buildCannonInfo` {Building, the GVGCannonConfig id, the end time}, to the builder and everyone who sees it
+(`LC_GamePlayStatusMgr.BuildingCannon`). After it the cannon stands and the builder goes back to Idle.
+
+The cannon is the row's `_iNPCID` (NPCConfig type 2, sub type 102), a unit of the siege room, so it ends with the siege.
+Its entity names the builder as `owner` and carries the builder's camp, which interaction 4900005 checks (`CheckBuilder`
+reads the head info Owner, `CheckCamp` the EntityCamp), and wears the NPC's `_kBornEventBuff`. The builder's slot shows
+it as `roleUsingToolId` in 32284/32286 and in the builder's 32285. A member with a standing cannon who builds another
+loses the first (UIWords 61001, "Building another will destroy the current one").
+
+Refusals: 6001 outside a guild, 28 outside a running siege, 82 without a reserved machine or while building, 530
+"Cannot place this here." for a spot the client would refuse: farther than `_iBuildRadius` from the builder, not walkable,
+or inside another cannon's `_iExclusiveRadius` (both circles, as the client's `Circle.CheckCircleIntersection`).
+
+**Inferred:**
+- The server allows 3 m beyond `_iBuildRadius`: the builder may walk while placing.
+- No invalid areas: dungeon var 501 (`CInvalidBuildCannonAreasID`) is a server list the client does not hold.
+- A builder who dies or leaves the siege before the build time ends gets no cannon; the machine goes back to the
+  warehouse.
+- `roleUsingToolId` is not saved: cannons only stand during their siege.
+- Operating (32700 on the cannon, firing) and vehicles come next; until then a cannon only stands.
+
 ## Descriptor and runtime evidence boundaries
 
 The checked-in `MG_Guild.proto` defines `TerritoryWarsGuildData.occupyWarzone` and places auction fields inside `guildData`. `LC_DAL_TerritoryWars.lua:884-925,988-1008` reads `campDatas` and some wrapper-level auction fields instead. Implementation sends the supplied descriptor, plus the coherent modern 5013/84037 and deadline notifications; exact legacy panel decoding remains unverified. A new field number is not invented.

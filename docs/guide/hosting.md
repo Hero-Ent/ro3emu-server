@@ -32,3 +32,18 @@ Open TCP `5380`, `20000` and `33100`, and the voice port if you turn voice on wi
 | CPU | 2 cores | at most 2 cores used by the server |
 | RAM | 2 GB | at most 2 GB working set |
 | Disk | 3 GB plus the game | SSD recommended |
+
+## Purchase links
+
+The game's recharge, shop top-up and monthly-card buttons open the publisher's payment page. RO3Emu never sends a
+player there: a payment made there reaches the publisher, not your server. Without any option the buttons open
+nothing. To send players to your own page (donations, a store), give its address every time you patch the game:
+
+```
+RO3Emu.exe join 203.0.113.10 --purchase-url https://example.com/donate
+```
+
+`start` and `host` take the option too. Only an `http` or `https` address is accepted. The patcher writes it into the
+client hooks it installs; the redirect sits on `UnityEngine.Application.OpenURL`, the call every one of those buttons
+ends in (`OpenUrlPatch`, `Ro3Emu.ClientHooks.UrlRewrite`).
+

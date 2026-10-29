@@ -169,7 +169,7 @@ internal static class Flows
             var gm = Ui.Ask("Account names that get GM commands in game, separated by commas (Enter for nobody):");
             gms.AddRange(gm.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         }
-        var local = await StartServerAsync(client, host, options.PublicHost, gms, options.Ports);
+        var local = await StartServerAsync(client, host, options.PublicHost, gms, options.Ports, options.PurchaseUrl);
         var server = local.Process;
         try
         {
@@ -199,7 +199,7 @@ internal static class Flows
     /// it. Local play binds loopback only (PublicHost 127.0.0.1); a host binds every interface for its friends.
     /// </summary>
     internal static async Task<LocalServer> StartServerAsync(string client, bool host, string? publicHostOption, IReadOnlyList<string> gms,
-        ServerProcess.Ports ports)
+        ServerProcess.Ports ports, string? purchaseUrl = null)
     {
         var serverExe = ServerProcess.FindExecutable()
             ?? throw new SetupException("The server is missing (server\\Ro3Emu.Server.exe next to RO3Emu.exe).",
@@ -257,7 +257,7 @@ internal static class Flows
         {
             var serverUrl = $"http://{(publicHost.Contains(':') ? "[" + publicHost + "]" : publicHost)}:{ports.Http}";
             var pem = await http.GetStringAsync($"http://127.0.0.1:{ports.Http}/ro3emu/gate-key.pem");
-            PatchClient(client, serverUrl, pem);
+            PatchClient(client, serverUrl, pem, purchaseUrl);
             return new LocalServer(server, serverUrl, publicHost, ports);
         }
         catch
@@ -347,10 +347,10 @@ internal static class Flows
     }
 
     /// <summary>Patches the client for the server and writes the English text map next to it.</summary>
-    internal static void PatchClient(string client, string serverUrl, string pem)
+    internal static void PatchClient(string client, string serverUrl, string pem, string? purchaseUrl)
     {
         Ui.Step("Patching the game for this server");
-        try { Quiet(() => { ClientPatcher.Patch(client, serverUrl, pem, HooksDll, LocDll); return 0; }); }
+        try { Quiet(() => { ClientPatcher.Patch(client, serverUrl, pem, HooksDll, LocDll, purchaseUrl); return 0; }); }
         catch (UnauthorizedAccessException e)
         {
             throw new SetupException("The game folder cannot be written: " + e.Message,
@@ -400,7 +400,7 @@ internal static class Flows
         CheckClient(client, needExport: false);
         Ui.Ok("this game version works with RO3Emu");
 
-        await PrepareJoinAsync(client, serverUrl);
+        await PrepareJoinAsync(client, serverUrl, options.PurchaseUrl);
         if (!options.NoLaunch) LaunchGame(client);
         Ui.Info($"Next time, run RO3Emu.exe join {address} again. This window can be closed.");
         if (Ui.OwnsConsole() && Ui.Interactive) await Task.Delay(8000);
@@ -408,7 +408,7 @@ internal static class Flows
     }
 
     /// <summary>Contacts someone else's server and patches the game for it (its gate key, our English texts).</summary>
-    internal static async Task PrepareJoinAsync(string client, string serverUrl)
+    internal static async Task PrepareJoinAsync(string client, string serverUrl, string? purchaseUrl = null)
     {
         Ui.Step($"Contacting {serverUrl}");
         string pem;
@@ -424,7 +424,7 @@ internal static class Flows
         }
         Ui.Ok("the server answers");
         EnsureLocMap(client);
-        PatchClient(client, serverUrl, pem);
+        PatchClient(client, serverUrl, pem, purchaseUrl);
     }
 
     /// <summary>
