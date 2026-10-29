@@ -53,7 +53,7 @@ public sealed partial class SkillCombatTests
 
         var highTarget = await Target("archer", stationary: true, npcId: 5000007);
         var highHit = await CastDoubleStrafeAsync(archer, highTarget);
-        Assert.Equal(1300304, lowHit.ShowPoint); // the show's first damage effect: its bullet data flies the arrows
+        Assert.Equal(1300305, lowHit.ShowPoint); // the show's action hit (arrow hit sound, flinch); 1300304 is the arrows' bullet
         Assert.Equal(2, lowHit.Split);
         Assert.Equal(4, lowHit.SrcElement);
         Assert.True(Assert.Single(highHit.Dsts).Damage > Assert.Single(lowHit.Dsts).Damage,
@@ -84,7 +84,10 @@ public sealed partial class SkillCombatTests
         await bot.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = DoubleStrafe, TargetId = target.Uid });
         var accepted = await Next(bot, CombatService.UseSkill, CastSkillRsp.Parser);
         Assert.Equal(0, accepted.Result);
-        // The arrows' flight is the client's own (no server bullet 31120): the hit is what the server decides.
+        // The arrows fly from 31120 (Double Strafe's EffectData 1300304 bullet, split 2); the hit follows it.
+        var arrows = await Next(bot, CombatService.SkillBullet, SkillFixTimeBulletNotify.Parser, m => m.TargetId == target.Uid);
+        Assert.Equal(1300304, arrows.EffectId);
+        Assert.Equal(2, arrows.Split);
         return await Next(bot, CombatService.SkillHit, SkillHitInfo.Parser, m => m.SessionId == accepted.SessionId);
     }
 }
