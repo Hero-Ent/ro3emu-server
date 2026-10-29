@@ -214,6 +214,7 @@ public sealed partial class TerritoryWarsService : IGameTicker
         combat.PvpDealtAsync.Add(GloryHitAsync);
         character.StateChanged.Add(s => _ = SyncGloryAsync(s));
         guilds.WarSideOf = WarSide;
+        guilds.WarMachines = new MachineSite(this);
     }
 
     public sealed class RoleState
@@ -369,7 +370,7 @@ public sealed partial class TerritoryWarsService : IGameTicker
             or StageNotify or History or ResultNotify or AuctionTimeNotify or MarkerNotify or Minimap or FatigueNotify
             or QueueNotify or QueueEnter or QueueCancel or QueueArea or SubmitDrop or Bid or AuctionQuery or AutoSet
             or AutoCancel or AutoQuery or AutoNotify or RankNotify or WarHall or SiegeBaseQuery or SiegeHistoryQuery or SiegeResultNotify
-            or SiegeToolBuild or SiegeToolAdd or SiegeVehicleUse
+            or SiegeToolAdd or SiegeVehicleUse
             or SetMark or GatherMark or CommandMark or TeleportResponse or GloryRankReward;
 
     /// <summary>Route only shared packets that this territory family can actually consume.</summary>
@@ -427,7 +428,6 @@ public sealed partial class TerritoryWarsService : IGameTicker
                 case WarHall: await WarHallAsync(s); break;
                 case SiegeBaseQuery: await SiegeBaseAsync(s, GetSiegeBaseInfoReq.Parser.ParseFrom(body.Span)); break;
                 case SiegeHistoryQuery: await SiegeHistoryAsync(s, SiegeCityHistoryInfoReq.Parser.ParseFrom(body.Span)); break;
-                case SiegeToolBuild: await Send(s, id, new GuildAttackCityBuildResp { Result = ErrorCodes.FeatureUnavailable }); break;
                 case SiegeToolAdd: await Send(s, id, new GuildWartimeStoreItemAddResp { Result = ErrorCodes.FeatureUnavailable }); break;
                 case SiegeVehicleUse: await Send(s, id, new GuildVehicleUseRsp { Result = ErrorCodes.FeatureUnavailable }); break;
                 case SetMark: await SetMarkAsync(s, DungeonSetMarkPosReq.Parser.ParseFrom(body.Span)); break;

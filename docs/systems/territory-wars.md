@@ -97,7 +97,7 @@ Loading into the battle sends the side's commander marks, the party's own marks,
 
 ## War warehouse and machine permissions
 
-`GuildService.Wartime`, the guild's `guildWartimeInfo` (DBGuildData field 36): the warehouse view, the Tactics panel and reserving a machine; building, firing and vehicles come later.
+`GuildService.Wartime`, the guild's `guildWartimeInfo` (DBGuildData field 36): the warehouse view, the Tactics panel, reserving and building a cannon; firing and vehicles come later.
 
 | Message | Use |
 |---|---|
@@ -137,6 +137,32 @@ GVGCannonConfig (`_iItemID`) 82, no Firearm permission 466, none left 535 "Not e
 - Cancelling with nothing held answers 0: the client sends it unconditionally and has no handler for the answer.
 - A machine held when the blueprint closes on death or a scene change (the client exits without 32272) stays held
   until the member reserves again, cancels or builds.
+
+### Building a cannon (32271)
+
+Confirming the blueprint (`LC_GVGBuildCannon.Build`) sends 32271 with its position and facing. On success the reserved
+machine is used up and the answer closes the blueprint (`LC_DunGeon_Siege.GUILD_ATTACK_CITY_BUILD`). The builder then
+works for GVGCannonConfig `_iBuildTime` (3 s): 32702 `InteractChangeNtf` BuildingCannon (status 1, `_iBuildStatusID`)
+with `buildCannonInfo` {Building, the GVGCannonConfig id, the end time}, to the builder and everyone who sees it
+(`LC_GamePlayStatusMgr.BuildingCannon`). After it the cannon stands and the builder goes back to Idle.
+
+The cannon is the row's `_iNPCID` (NPCConfig type 2, sub type 102), a unit of the siege room, so it ends with the siege.
+Its entity names the builder as `owner` and carries the builder's camp, which interaction 4900005 checks (`CheckBuilder`
+reads the head info Owner, `CheckCamp` the EntityCamp), and wears the NPC's `_kBornEventBuff`. The builder's slot shows
+it as `roleUsingToolId` in 32284/32286 and in the builder's 32285. A member with a standing cannon who builds another
+loses the first (UIWords 61001, "Building another will destroy the current one").
+
+Refusals: 6001 outside a guild, 28 outside a running siege, 82 without a reserved machine or while building, 530
+"Cannot place this here." for a spot the client would refuse: farther than `_iBuildRadius` from the builder, not walkable,
+or inside another cannon's `_iExclusiveRadius` (both circles, as the client's `Circle.CheckCircleIntersection`).
+
+**Inferred:**
+- The server allows 3 m beyond `_iBuildRadius`: the builder may walk while placing.
+- No invalid areas: dungeon var 501 (`CInvalidBuildCannonAreasID`) is a server list the client does not hold.
+- A builder who dies or leaves the siege before the build time ends gets no cannon; the machine goes back to the
+  warehouse.
+- `roleUsingToolId` is not saved: cannons only stand during their siege.
+- Operating (32700 on the cannon, firing) and vehicles come next; until then a cannon only stands.
 
 ## Descriptor and runtime evidence boundaries
 
