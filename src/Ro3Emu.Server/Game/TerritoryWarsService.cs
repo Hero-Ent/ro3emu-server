@@ -261,6 +261,8 @@ public sealed partial class TerritoryWarsService : IGameTicker
         public Dictionary<int, long> WorldActivityRespawns { get; set; } = new();
         public Dictionary<int, long> WorldActivityOccurrences { get; set; } = new();
         public Dictionary<string, WorldPickupOccurrence> WorldPickupOccurrences { get; set; } = new();
+        /// <summary>Past seasons whose Battle Merit standings are still to be mailed (TerritoryWarsService.BattleGlorySeason).</summary>
+        public List<string> GlorySettle { get; set; } = [];
     }
     private static T Copy<T>(T value) => JsonSerializer.Deserialize<T>(JsonSerializer.SerializeToUtf8Bytes(value))!;
     private async Task SaveAsync(WorldState value, string kind = "state", GameSession? actor = null,
@@ -700,6 +702,7 @@ public sealed partial class TerritoryWarsService : IGameTicker
         try { await ReconcileLockedAsync(); }
         finally { stagedTerritoryState.Dispose(); _gate.Release(); reservation?.Dispose(); }
         await FlushActivityAsync();
+        await SettleGlorySeasonsAsync();
     }
     private async Task ReconcileLockedAsync()
     {

@@ -406,11 +406,12 @@ public sealed partial class MailService(AccountStore accounts, RoleStore roles, 
         int category = 1, int importantType = 0) =>
         SendTemplateAsync(role, templateId, ResolveTemplateAward(templateId), expiresAt, category, importantType);
 
-    /// <summary>Source-owned once-only delivery with the source's state saved in the same SQLite transaction.</summary>
+    /// <summary>Source-owned once-only delivery with the source's state saved in the same SQLite transaction;
+    /// <paramref name="contentParams"/> (strings or integers) fill the template's ${n}.</summary>
     public Task<string> SendTemplateOnceAsync(long role, int templateId, IReadOnlyList<Attachment> attachments,
         string sourceKey, Action<RoleItemPlanBuilder> persist, Ownership.OwnerContext? ownerContext = null,
         Action<EscrowEconomyIntent>? authorize = null,
-        Func<IReadOnlyList<EconomyEffect>, EconomyEnvelope>? parentEconomy = null)
+        Func<IReadOnlyList<EconomyEffect>, EconomyEnvelope>? parentEconomy = null, IReadOnlyList<object>? contentParams = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceKey);
         ArgumentNullException.ThrowIfNull(persist);
@@ -422,7 +423,7 @@ public sealed partial class MailService(AccountStore accounts, RoleStore roles, 
         return DeliverAsync(role, new Letter
         {
             TemplateId = templateId, SenderId = "0", DeliveryKey = sourceKey,
-            Attachments = attachments.ToList()
+            Attachments = attachments.ToList(), ContentParams = EncodeLanguageData(contentParams?.ToArray() ?? []),
         }, null, days > 0 ? days : 30, persist, ownerContext, authorize,
             parentEconomy);
     }
