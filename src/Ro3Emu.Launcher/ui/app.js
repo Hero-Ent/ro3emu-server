@@ -184,7 +184,7 @@
     switch (p) {
       case "install":
         title = pausedByUser ? "Installation paused" : "Ready to install";
-        sub = S.message || (dir ? "Version " + (rv || "") + (S.downloadBytes ? " (" + fmtBytes(S.downloadBytes) + ")" : "") + " will be installed to " + dir : "Install the game to start your adventure.");
+        sub = S.message || (dir ? "Version " + (rv || "") + (S.downloadBytes ? " (" + fmtBytes(S.downloadBytes) + " download)" : "") + " will be installed to " + dir : "Install the game to start your adventure.");
         ico = "i-download"; break;
       case "update":
         title = pausedByUser ? "Update paused" : "Update available";
@@ -390,7 +390,7 @@
       el.setAttribute("data-state", "online");
       var n = s.players;
       t.innerHTML = "<b>Online</b>" + (typeof n === "number"
-        ? " · " + n.toLocaleString("en-US") + (n === 1 ? " adventurer" : " adventurers") + " in Rune-Midgard" : "");
+        ? " · " + n.toLocaleString("en-US") + (n === 1 ? " adventurer" : " adventurers") : "");
     } else {
       el.setAttribute("data-state", "offline");
       t.innerHTML = "<b>Server offline</b>";
@@ -481,7 +481,8 @@
     ul.innerHTML = "";
     items.forEach(function (t) { var li = document.createElement("li"); li.textContent = String(t); ul.appendChild(li); });
     $("notes").hidden = false;
-    setTimeout(function () { $("notes-ok").focus(); }, 30);
+    // Focus without scrolling: a long list would otherwise open at its end, under the button.
+    setTimeout(function () { $("notes-ok").focus({ preventScroll: true }); }, 30);
   }
   function closeNotes() { $("notes").hidden = true; send({ cmd: "notesSeen" }); }
 
