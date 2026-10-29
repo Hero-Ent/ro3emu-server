@@ -30,7 +30,8 @@ public sealed record MonsterTemplate(
 /// machines derive from it (TerritoryWarsService.CannonUnit, VehicleUnit): they take damage and die as monsters do.</summary>
 public class MonsterUnit : WorldUnit
 {
-    public required MonsterTemplate Template { get; init; }
+    /// <summary>Its kind's stats; GmSetEntityAttr swaps in a changed copy for this one unit.</summary>
+    public required MonsterTemplate Template { get; set; }
     /// <summary>Instance-specific final outgoing damage rate; 10000 leaves field and dungeon monsters unchanged.</summary>
     public int DamageRatio { get; init; } = 10000;
     public required SpawnGroup Group { get; init; }
