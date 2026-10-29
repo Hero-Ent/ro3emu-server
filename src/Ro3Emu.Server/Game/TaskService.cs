@@ -675,7 +675,9 @@ public sealed partial class TaskService
         var info = session.Tasks.Infos[id];
         int step = Enumerable.Range(0, def.Targets.Length).FirstOrDefault(i => info.CompleteNum[i] != Required(session, def.Targets[i]), -1);
         if (step >= 0 && step < def.AcceptActions.Length && ServerOpcode(def.AcceptActions[step]) == 621) session.InCutScene = true;
-        _log.LogInformation("{Name} accepts task {Task} {TaskName}", session.Role?.Name, id, _data.TextOf(_data.Row("TaskConfig", id)!.Value, "_iName"));
+        // The 53 hidden Connect quests start together at login; at Information they would fill a /bug report's context.
+        _log.Log(def.Type == ConnectTaskType ? LogLevel.Debug : LogLevel.Information, "{Name} accepts task {Task} {TaskName}",
+            session.Role?.Name, id, _data.TextOf(_data.Row("TaskConfig", id)!.Value, "_iName"));
     }
 
     private TaskInfo NewInfo(long id, TaskState status)
