@@ -268,6 +268,12 @@ public sealed partial class CombatService : IGameTicker
     public Func<GameSession, int, int?>? OwnSkillAdmit { get; set; }
     public Func<GameSession, int, Task>? OwnSkillCast { get; set; }
     public Func<GameSession, JsonElement, Task>? OwnSkillLanded { get; set; }
+
+    /// <summary>
+    /// Skills a player may cast without learning them, resolved like any other (a war vehicle seat's skills,
+    /// VehicleSeatConfig _kMainSkills / _kSkills); their cooldowns are the ordinary SkillConfig ones.
+    /// </summary>
+    public List<Func<GameSession, int, bool>> GrantedSkill { get; } = [];
     /// <summary>World-core owns the dead player's explicit accept/decline invitation.</summary>
     public Func<GameSession, GameSession, JsonElement, Task>? ReviveOffer { get; set; }
     public Func<GameSession, int>? ReviveCheck { get; set; }

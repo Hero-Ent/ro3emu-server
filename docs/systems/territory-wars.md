@@ -201,7 +201,48 @@ Code: `TerritoryWarsService.CannonFire.cs`, `TerritoryWarsService.CannonShots.cs
 - An empty cannon stays standing.
 - PublicParamConfig `ArtilleryAttackCityGateReduceDamage` and `OutCannonHpPercent` are server parameters the client
   never reads. There are no city gates and no cannon HP yet, so neither is applied.
-- Vehicles (32281, VehicleConfig) come next.
+
+### War vehicles (32281, 32700, 32708, 31074)
+
+Code: `GuildService.WarVehicles.cs`, `TerritoryWarsService.WarVehicles.cs`.
+
+- **Using one.** A vehicle item of the siege battle bag (ItemConfig `_iSubType` 1402) sends 32281 from its "use" button
+  (`UI_Com_ItemTipsWidgetCtrl_Operation._gameplayUseVehicle` -> `LC_WartimeItemHelper.TryUseVehicle`). Its `_iUseEffect`
+  [606, skill] names a skill whose script `GVG_S0_BuildMecha` raises the NPC of its `_kLogicData[0]`: Tank 1006008 ->
+  4903501 -> NPC 4900301, Madogear 1006005..007 -> 4903201..401 -> 4900401..403, Jet Backpack 1006009 -> 4903601 ->
+  4900501. One leaves the warehouse (32273), and the member's slot and own permission name the vehicle
+  (`roleUsingToolId` in 32285 and 32286). The answer only clears the bag's busy state (`ReceiveGuildVehicleUseRsp`).
+  Refusals: 6001 outside a guild, 28 outside a running siege, 82 for an item that is not a vehicle, 466 without the
+  Vehicle permission, 535 without stock.
+- **The vehicle.** An NPC of `_iNPCSubType` 103 (`enum_NpcSubType.Vehicle`): `LC_Unit_NPC` gives it `LC_VehicleComponent`
+  with VehicleConfig `_iSubTypeValue` -> `_kSeats` (VehicleSeatConfig rows, 0-based seat index,
+  `LC_VehicleComponent.GetSeatConfig`). Its entity names its owner and camp and carries `_kBornEventBuff`.
+- **Seats.** The NPC's interactions 4900022..24 (NPCInteractConfig `_iStatusID` 3, GameplayStatusConfig type 3, seat
+  `_iStatusLocation`) take a seat. Their conditions are checked on the server: `CheckTakeOnVehicleSeat` 12003 (riding
+  nothing yet), `CheckGVGPermission` 2202 (the Vehicle permission), `VehicleHasEmptySeat` 12002 (a free seat of that
+  `enum_PassengerType` on a vehicle that is not an enemy) and `CheckCamp` 2200 (the same camp; the client ignores its
+  argument). Who sits where is AOI carry info (31036, `LC_VehicleHelper.ProcessVehicle`): the rider's `be_carried`
+  {vehicle, slot, `carry_type` = the seat's `_iType`} and the vehicle's `add_carries` / `remove_carries` (`all_carries` in
+  its entity). Then 32702 Vehicle (state 3, the interaction, the vehicle) and the seat's camera (32704 `_iChange3C`).
+- **Driving.** The driver controls the vehicle (`LC_PassengerComponent`: `ChangeControlUnit`), so its 31082 walks are
+  the vehicle's: the vehicle moves for everyone else, and the other riders follow it. 31074 turns the vehicle.
+- **Seat skills.** The seat's `_kMainSkills` and `_kSkills` are cast through 31102 like any skill, without being learned.
+- **Changing seats.** 32708 `ChangeVehicleSeatReq` with a free 0-based seat.
+- **Getting off.** The seat's `_iExitNpcAction` (4900025, ActionConfig 5004 QuitStatus, sent by
+  `LC_VehicleServer.QuitStatus` as an interaction on the vehicle) or a QuitStatus button of the seat. 32702 Idle goes
+  first (`LC_GamePlayStatusMgr.ExitVehicle` caches it on the passenger), then `be_carried` with id 0. Death, leaving the
+  scene and the vehicle's removal do the same.
+
+**Inferred:**
+- Using a vehicle needs the Vehicle permission, stock and a running siege, as for cannons. A second vehicle replaces
+  the member's first one (UIWords 61001 says so of cannons).
+- The vehicle stands 2 m in front of its owner: `GVG_S0_BuildMecha` is a server script. Nobody is seated by using it.
+- The vehicle moves at its driver's speed. The other riders' positions follow the driver's walks without a walk of
+  their own.
+- A gunner's 31074 face is its seat's `fire_dir` in the vehicle's AOI detail.
+- Any free seat can be changed to with 32708.
+- An empty vehicle keeps standing. Vehicles have no HP of their own yet; repair (1006010, `GVG_S0_RepairArea`) is not
+  simulated.
 
 ## Descriptor and runtime evidence boundaries
 

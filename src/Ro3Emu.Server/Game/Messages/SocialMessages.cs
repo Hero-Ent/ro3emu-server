@@ -302,6 +302,10 @@ public sealed class SocialMessages(ChatService chat, TeamService teams, EmblemSe
         {
             await guilds.CancelPrepayAsync(session);
         });
+        routes.Map(GuildService.VehicleUse, "guilds", async (session, msgId, body) =>
+        {
+            await guilds.VehicleUseAsync(session, GuildVehicleUseReq.Parser.ParseFrom(body.Span));
+        });
         routes.Map(GuildService.MergePull, "guilds", async (session, msgId, body) =>
         {
             await guilds.MergePullAsync(session);

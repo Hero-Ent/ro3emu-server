@@ -192,6 +192,7 @@ public sealed partial class TerritoryWarsService : IGameTicker
         scene.Leaving.Add(SiegeLeavingAsync);
         scene.Leaving.Add(GloryLeavingAsync);
         scene.Leaving.Add(CannonLeavingAsync);
+        scene.Leaving.Add(VehicleLeavingAsync);
         combat.Killed.Add(KilledAsync);
         combat.Killed.Add(SiegeKilledAsync);
         combat.Killed.Add(WorldKilledAsync);
@@ -200,6 +201,9 @@ public sealed partial class TerritoryWarsService : IGameTicker
         combat.ReviveInfoOwners.Add(s => s.TerritoryBattle is { } battle && s.Role is { } role && battle.State.Players.ContainsKey(role.Id));
         combat.PlayerDied.Add(WorldDiedAsync);
         combat.PlayerDied.Add(CannonDiedAsync);
+        combat.PlayerDied.Add(VehicleDiedAsync);
+        combat.GrantedSkill.Add(SeatSkill);
+        world.PlayerEntered.Add(VehicleRiderSeenAsync);
         combat.EventDamageRecorded.Add(DamageRecordedAsync);
         combat.EventDamageRecorded.Add(SiegeDamageRecordedAsync);
         combat.PlayerHostile = Hostile;
@@ -372,7 +376,7 @@ public sealed partial class TerritoryWarsService : IGameTicker
             or StageNotify or History or ResultNotify or AuctionTimeNotify or MarkerNotify or Minimap or FatigueNotify
             or QueueNotify or QueueEnter or QueueCancel or QueueArea or SubmitDrop or Bid or AuctionQuery or AutoSet
             or AutoCancel or AutoQuery or AutoNotify or RankNotify or WarHall or SiegeBaseQuery or SiegeHistoryQuery or SiegeResultNotify
-            or SiegeToolAdd or SiegeVehicleUse
+            or SiegeToolAdd
             or SetMark or GatherMark or CommandMark or TeleportResponse or GloryRankReward;
 
     /// <summary>Route only shared packets that this territory family can actually consume.</summary>
@@ -431,7 +435,6 @@ public sealed partial class TerritoryWarsService : IGameTicker
                 case SiegeBaseQuery: await SiegeBaseAsync(s, GetSiegeBaseInfoReq.Parser.ParseFrom(body.Span)); break;
                 case SiegeHistoryQuery: await SiegeHistoryAsync(s, SiegeCityHistoryInfoReq.Parser.ParseFrom(body.Span)); break;
                 case SiegeToolAdd: await Send(s, id, new GuildWartimeStoreItemAddResp { Result = ErrorCodes.FeatureUnavailable }); break;
-                case SiegeVehicleUse: await Send(s, id, new GuildVehicleUseRsp { Result = ErrorCodes.FeatureUnavailable }); break;
                 case SetMark: await SetMarkAsync(s, DungeonSetMarkPosReq.Parser.ParseFrom(body.Span)); break;
                 case GatherMark: await GatherAsync(s, DungeonGatherMarkPosReq.Parser.ParseFrom(body.Span)); break;
                 case CommandMark: await CommandMarkAsync(s, GvgWarUpdateCommandMarkReq.Parser.ParseFrom(body.Span)); break;

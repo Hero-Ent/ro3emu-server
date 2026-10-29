@@ -44,8 +44,12 @@ public sealed partial class GuildService
         Task BuildStateAsync(GameSession builder, BuildCannonState? state);
         /// <summary>The cannon raised for a builder still fighting there; its unit id, or 0.</summary>
         Task<long> RaiseAsync(GameSession builder, JsonElement cannon, Vec3 pos, float face);
-        bool Standing(long cannon);
-        Task RemoveAsync(long cannon);
+        /// <summary>The vehicle NPC <paramref name="npcId"/> raised beside its owner still fighting there; its unit id, or 0.</summary>
+        Task<long> RaiseVehicleAsync(GameSession owner, int npcId);
+        /// <summary>A cannon or vehicle of a running siege still stands.</summary>
+        bool Standing(long machine);
+        /// <summary>Destroys a standing cannon or vehicle; whoever is on it gets off first.</summary>
+        Task RemoveAsync(long machine);
     }
 
     /// <summary>Each member's standing cannon (the roleUsingToolId of its slot); runtime only, cannons end with the
@@ -55,9 +59,10 @@ public sealed partial class GuildService
     private readonly ConcurrentDictionary<long, long> _building = new();
     private long _buildSerial;
 
-    /// <summary>The cannon a member operates now, or 0.</summary>
-    private long CannonOf(long role) =>
-        _cannonOf.TryGetValue(role, out long uid) && WarMachines?.Standing(uid) == true ? uid : 0;
+    /// <summary>The machine a member uses now (the roleUsingToolId of its slot): its standing cannon or vehicle, or 0.</summary>
+    private long MachineOf(long role) =>
+        _cannonOf.TryGetValue(role, out long uid) && WarMachines?.Standing(uid) == true ? uid
+        : _vehicleOf.TryGetValue(role, out long vehicle) && WarMachines?.Standing(vehicle) == true ? vehicle : 0;
     private const int MachineRight = 13;
 
     /// <summary>(inferred) Operator slots per machine type: no config row sets them, and the panel shows as many as it
@@ -309,7 +314,7 @@ public sealed partial class GuildService
             for (int index = 1; index <= SlotCount(type); index++)
             {
                 long holder = Holder(g, type, index);
-                page.InfoList.Add(new GuildWartimeToolBelongInfo { RoleGuildId = holder, RoleUsingToolId = CannonOf(holder) });
+                page.InfoList.Add(new GuildWartimeToolBelongInfo { RoleGuildId = holder, RoleUsingToolId = MachineOf(holder) });
             }
             rsp.ItemPermissionAllData.Add(page);
         }
@@ -322,7 +327,7 @@ public sealed partial class GuildService
         await s.SendGameAsync(WartimeStore, StoreOf(g));
         if (s.Role != null && ToolOf(g, s.Role.Id) is var type && type != WartimeToolType.None)
             await s.SendGameAsync(ToolPermission,
-                new GuildWartimeToolRolePermissionNtf { ToolType = type, RoleUsingToolId = CannonOf(s.Role.Id) });
+                new GuildWartimeToolRolePermissionNtf { ToolType = type, RoleUsingToolId = MachineOf(s.Role.Id) });
     }
 
     /// <summary>A former member: an empty warehouse and no permission (the battle bag empties).</summary>
@@ -427,7 +432,7 @@ public sealed partial class GuildService
             ToolType = c.Type, BagIndex = c.Index,
             ToolBelongInfo = new GuildWartimeToolBelongInfo
             {
-                RoleGuildId = Holder(g, c.Type, c.Index), RoleUsingToolId = CannonOf(Holder(g, c.Type, c.Index)),
+                RoleGuildId = Holder(g, c.Type, c.Index), RoleUsingToolId = MachineOf(Holder(g, c.Type, c.Index)),
             },
         }));
         foreach (var m in g.Members.Values)
@@ -439,6 +444,6 @@ public sealed partial class GuildService
     {
         if (role == 0 || Online(role) is not { } peer) return;
         await peer.SendGameAsync(ToolPermission,
-            new GuildWartimeToolRolePermissionNtf { ToolType = ToolOf(g, role), RoleUsingToolId = CannonOf(role) });
+            new GuildWartimeToolRolePermissionNtf { ToolType = ToolOf(g, role), RoleUsingToolId = MachineOf(role) });
     }
 }
