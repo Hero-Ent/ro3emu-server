@@ -949,6 +949,7 @@ public sealed partial class DungeonService
                 {
                     if (committed && goods.Count > 0) await _character.ItemsChangedAsync(s, stats: false);
                     await s.SendGameAsync(Result, result);
+                    if (success && LeavesAfterClear(a)) ScheduleLeaveAfterClear(s, a);
                     if (success && a.Plan.Multi != null)
                     {
                         var award = new SyncMultiDungeonAwardNotify
