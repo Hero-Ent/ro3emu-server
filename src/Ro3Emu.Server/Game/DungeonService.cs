@@ -216,7 +216,9 @@ public sealed partial class DungeonService
         return 0;
     }
 
-    public async Task EnterAsync(GameSession s, EnterDungeonReq req)
+    /// <param name="alone">Enter only this role even in a party (a story region stepped into by a member who is not the
+    /// leader, <see cref="EnterFromRegionAsync"/>).</param>
+    public async Task EnterAsync(GameSession s, EnterDungeonReq req, bool alone = false)
     {
         await DeliverPendingAsync(s);
         if (GuildChallengeEnter != null && await GuildChallengeEnter(s, req)) return;
@@ -224,7 +226,7 @@ public sealed partial class DungeonService
         int error = plan == null ? ErrorCodes.DungeonDataMissing : Admission(s, plan, continuation: true);
         if (error == 0 && Preparing(s)) error = ErrorCodes.DungeonPreparing;
         var membership = s.Role != null ? _teams.TeamOf(s.Role.Id) : default;
-        long[] ids = s.Role == null ? [] : plan?.MaxPlayers == 1 ? [s.Role.Id] : _teams.MembersOf(s.Role.Id).ToArray();
+        long[] ids = s.Role == null ? [] : alone || plan?.MaxPlayers == 1 ? [s.Role.Id] : _teams.MembersOf(s.Role.Id).ToArray();
         var online = _sessions.All().Where(p => p.Role != null).ToDictionary(p => p.Role!.Id);
         var members = ids.Where(online.ContainsKey).Select(id => online[id]).ToArray();
         if (error == 0 && ids.Length > 1 && membership.Leader != s.Role!.Id) error = ErrorCodes.NoPermission;
@@ -247,7 +249,7 @@ public sealed partial class DungeonService
             || selected.DungeonId != 0 && selected.DungeonId != s.InstanceId)) error = ErrorCodes.Parameter;
         await s.SendGameAsync(Enter, new EnterDungeonRsp { Result = error });
         if (error != 0) return;
-        if (members.Length == 1) { await BeginAsync(plan!, members, s.Role!.Id, membership.TeamId); return; }
+        if (members.Length == 1) { await BeginAsync(plan!, members, s.Role!.Id, alone ? 0 : membership.TeamId); return; }
         var p = new Preparation { Plan = plan!, Members = members, Leader = s, TeamId = membership.TeamId };
         p.Ready.Add(s); // Initiating the request is the leader's affirmative answer (inferred).
         foreach (var member in members) _pending[member] = p;
@@ -440,6 +442,7 @@ public sealed partial class DungeonService
         }
         if (a.Dracula is { } dracula) snapshot.Vars.Add(dracula.Vars());
         if (FunctionButtons(a) is { } buttons) snapshot.Vars.Add(buttons);
+        if (GuideWays(a) is { } ways) snapshot.Vars.Add(ways);
         if (a.Preparing)
         {
             // (inferred) The preparation phase is the map's initializing state, ending when the boss fight begins.
@@ -949,6 +952,7 @@ public sealed partial class DungeonService
                 {
                     if (committed && goods.Count > 0) await _character.ItemsChangedAsync(s, stats: false);
                     await s.SendGameAsync(Result, result);
+                    if (success) await HideGuideWaysAsync(s, a);
                     if (success && LeavesAfterClear(a)) ScheduleLeaveAfterClear(s, a);
                     if (success && a.Plan.Multi != null)
                     {
