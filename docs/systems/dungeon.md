@@ -135,7 +135,19 @@ Reconstructed story encounters (`ReconstructedDungeons`, switch `Ro3Emu:Reconstr
 - Live check with the real client: Culvert waves 1-3 spawn and render with names and models, the
   tracker follows the Culvert quests with its counter, the story Golden Thief Bug fights back with its borrowed
   attack, the elite Scorpion run ends in DungeonResSuccess, leaving returns to the field. The client shows no result
-  window for these Plane scenes (as with Payon Forest).
+  window for these Plane scenes (as with Payon Forest): 30403 only raises `LC_DunGeon_Base`'s DungeonSettlement event.
+- A solo Plane scene (DungeonConfig `_iPlaneMapID` set, `_iRoleCntLimit` 1) returns the player to the field
+  `DungeonService.PlaneExitSeconds` (5) seconds after a successful clear, through the exit button's own 30402
+  (`LC_DunGeon_Base.CELL_LEAVE_DUNGEON` takes it unasked). **(inferred)**: the original encounter scripts are not in the
+  client; without it a cleared plane left the player in an empty copy of the field (seen on Southern Payon 1021301,
+  whose story continues on the field: 10102110 is delivered to NPC 400037 on map 10213). A failed run stays, so the
+  client's DungeonReset can retry it.
+- Guide arrows: a solo story scene whose scene editor file has guide routes (`m_kGuidePoints`, e.g. the Culvert
+  plane's 19 and 21, the Geffen field plane's 17) sets dungeon var 10021 `PGuideWayList` to their ids in 30401
+  (`LC_DunGeon_VarDefine.lua:736-741`, processed by `LC_SceneCom_GuideGfx`, which draws each route as the guide arrow
+  line), and to an empty list in a 30404 var change after the clear. **(inferred)**: the scripts that set 10021 are
+  not in the client, so all routes show from the start (a scene's routes chain into one path: the Culvert's 19 ends
+  where 21 starts). `DungeonService.GuideWays`, `SceneEditorGuides`.
 - Solo tuning: the story bosses were built for the original's allied NPC
   companions (mostly not reproduced); untuned, a level-matched player died in 3-36 s and needed 3-38 minutes to win.
   `soloTuning` scales each story template's HP and attack (basis points) so a Swordman at the boss level, every stat
@@ -211,11 +223,15 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
   as a tower pet walks) until one does, never farther than `_iChaseDistance` from its point, and with no target it
   walks back to its point (`_iStayInPlace` 1 read as "goes back to its point", not "never moves"). Its casts show like a monster's (31100, 31101), deal the skill's damage through the shared
   formula and settle like a player's hit; a kill it makes counts for the run exactly like a player's (wave and step
-  completion, statistics), credited to the first present participant. A monster it hits answers it with its normal
-  attack once no player holds that monster (a player it already fights comes first; while it answers a companion it
-  does not look for another player until one hits it); at 0 HP the companion dies, its body leaves
+  completion, statistics), credited to the first present, loaded participant who is alive, or the first present, loaded
+  one when none is (so the run still completes). A monster it hits answers it with its normal attack once no player
+  holds that monster. A player comes first: one it already fights, and for an aggressive monster one it sees, as when
+  idle (the player scan keeps running while it answers a companion). A monster that cannot move stops answering a
+  companion out of its reach, so its player scan and return home run as when idle. At 0 HP the companion dies, its body leaves
   after the template's remain time, and it does not come back in that run (`_kRespawnSkill` unused). Players cannot
-  target it and area effects do not hit it (it is no monster), and it never counts in the run's spawned or killed
+  target it and players' area effects do not hit it (it is no monster); a boss special skill's area that hits tower
+  pets hits the companions inside it too, through the same damage path as a monster's swing (at the boss skills'
+  damage percent), and one it takes to 0 HP falls the same way. It never counts in the run's spawned or killed
   monsters. It is separate from the Pet Tower's pets, whose behaviour does not change. In Payon Forest the pair stand
   about 14 m from Eddga's point and reach 3.5-6 m, while Eddga's swing reaches 10 m: they walk up to him wherever the
   player fights him, so the solo tuning counts them as always in reach.

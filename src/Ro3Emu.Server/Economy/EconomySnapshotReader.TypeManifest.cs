@@ -72,7 +72,17 @@ public static partial class EconomySnapshotReader
     // casual_battle_obligation.payout is CasualBattleService.Payout: a frozen match result (rating delta, record,
     // numbers) and the DropPool ids its payment rolls. No goods: they are granted by the role's event/casual-battle
     // receipt that also writes the timed_battle state and marks the row delivered.
-    public const string ExpectedFormatManifestHash = "D5E7E8D429207929DD339BBB976CBDAEA16B4197AD5A969D76BFCE9CD3EC6E54";
+    // Battle Merit: role.territory_wars Glory (TerritoryWarsService.GloryState; past seasons in GlorySeasons) holds a season's earned points, the
+    // reached rank, claimed rank markers and today's counters. No balance and no asset: the points themselves are
+    // currency 15 in the purse, granted by the earner's event/battle-glory receipt with this state; a rank reward is
+    // its event/battle-glory-rank receipt, whose claimed marker is that receipt's once-only source. The territory
+    // WorldState.GlorySettle lists past season epochs whose standings are still to be mailed: keys, no balance; the
+    // season mail's goods are the 1090 letter's attachments, delivered once by its battle-merit-season delivery key.
+    // War warehouse: guild WartimeItems/WartimeStocked (GuildService.Wartime) hold the guild's war machines, which only
+    // leave the warehouse by being built on a war map; WartimeSlots are operator permissions and WartimePrepay the
+    // machines a member reserved for the blueprint they place. No balance and no asset: machines never reach a bag, a
+    // purse or a trade.
+    public const string ExpectedFormatManifestHash = "BA5E8395604B3C714F797006E333C5049C1890E5468ED623A68D953FB65ED5E7";
     public static string FormatManifestHash => State.FormatManifestHash;
 
     private sealed partial class State

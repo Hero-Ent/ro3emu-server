@@ -25,6 +25,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     {
         this._reconstructed = reconstructed;
         _bossOptions = options?.Value.BossSkills ?? new BossSkillOptions();
+        _ro1Aggressive = Ro1Aggressive(options?.Value); // MonsterService.Ro1Aggression
         this._world = world;
         this._worldData = worldData;
         this._data = data;
@@ -41,6 +42,10 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     }
 
     private const long UidBase = 1L << 41;
+    /// <summary>
+    /// (inferred) The only AI whose monsters attack on sight (Familiar, Thief Bug Male, Poison Spore). The client does not
+    /// establish it: AIConfig 20000004 and 20000001 (the passive field monsters) are identical in all their fields.
+    /// </summary>
     private const int AggressiveAi = 20000004;
 
     /// <summary>A walk segment is capped so a monster seen mid-way is re-synchronized soon.</summary>
@@ -50,7 +55,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     private const int ChaseRepathMs = 400;
 
     /// <summary>A chase step shorter than this is not walked.</summary>
-    private const float MinChaseStep = 0.2f;
+    internal const float MinChaseStep = 0.2f;
 
     /// <summary>The chase stops this share of the attack range away from the target.</summary>
     private const float ApproachShare = 0.8f;
@@ -79,13 +84,26 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
 
     public MonsterTemplate? Template(int npcId)
     {
-        if (!_templates.TryGetValue(npcId, out var t)) _templates[npcId] = t = Build(npcId);
+        if (!_templates.TryGetValue(npcId, out var t)) _templates[npcId] = t = Build(npcId, machine: false);
         return t;
     }
 
-    private MonsterTemplate? Build(int npcId)
+    private readonly Dictionary<int, MonsterTemplate?> _machineTemplates = [];
+
+    /// <summary>
+    /// A siege war machine's stats: the cannons and vehicles are NPCConfig _iNPCType 2 rows (sub types 102 and 103), whose
+    /// _iAttributeVariated and _iLevel select an AttriMonsterConfig row as a monster's do (222059: 69 170 HP). The client
+    /// shows its HP bar from properties 101 and 2000 like a monster's.
+    /// </summary>
+    public MonsterTemplate? MachineTemplate(int npcId)
     {
-        if (_data.Row("NPCConfig", npcId) is not { } npc || GameData.Int(npc, "_iNPCType") != 1) return null;
+        if (!_machineTemplates.TryGetValue(npcId, out var t)) _machineTemplates[npcId] = t = Build(npcId, machine: true);
+        return t;
+    }
+
+    private MonsterTemplate? Build(int npcId, bool machine)
+    {
+        if (_data.Row("NPCConfig", npcId) is not { } npc || !machine && GameData.Int(npc, "_iNPCType") != 1) return null;
         int level = (int)GameData.Int(npc, "_iLevel");
         long attrId = GameData.Int(npc, "_iAttribute");
         if (attrId == 0) attrId = GameData.Int(npc, "_iAttributeVariated") * 1000 + level;
@@ -128,7 +146,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
             Hit: attr.ContainsKey(109) ? A(109) : level + 1, Flee: attr.ContainsKey(110) ? A(110) : level, Cri: A(111),
             speed, (int)GameData.Int(npc, "_iElement"), (int)GameData.Int(npc, "_iRace"), (int)GameData.Int(npc, "_iSize"),
             Math.Max(1, (int)GameData.Int(npc, "_iCamp")),
-            Aggressive: ai == AggressiveAi,
+            Aggressive: ai == AggressiveAi || _ro1Aggressive.Contains(npcId), // the RO1 reference (inferred), when switched on
             RoamDistance: speed > 0 ? Cm("_iRoamDis", 0) : 0, RoamTimeMs: aiRow is { } r2 ? (int)Math.Max(2000, GameData.Int(r2, "_iRoamTime")) : 8000,
             ViewRange: Cm("_iViewRange", 5), LeashDistance: aiRow is { } r3 && r3.TryGetProperty("_iUnFightParam", out var uf) && uf.ValueKind == JsonValueKind.Array
                 && uf.GetArrayLength() > 0 && GameData.Number(uf[0]) is { } leash ? (float)leash / 100 : Cm("_iChaseDistance", 18),
@@ -137,6 +155,8 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
             Skills = BossBook(npcId, npc, skill),
             CastSpeed = A(AttributeId.CastSpeed),
             SurroundDistance = SurroundSpacing(_data, ai),
+            BattleCallRange = aiRow is { } call && new Data.Config.AIConfig(call).BattleCallType == 1 ? new Data.Config.AIConfig(call).BattleCallDistance / 100f : 0,
+            AnswersBattleCall = aiRow is { } answer && new Data.Config.AIConfig(answer).BattleCallResponse == 1,
         };
     }
 
@@ -494,13 +514,35 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         await _world.ToUnitViewersAsync(monster, CombatService.AoiAttrChange, SpeedChange(monster, now));
     }
 
-    /// <summary>A player hit it (or came into view of an aggressive one): chase and attack.</summary>
-    public void Engage(MonsterUnit m, GameSession target)
+    /// <summary>A player hit it (or came into view of an aggressive one): chase and attack. A monster that enters the
+    /// fight calls its own into it (<see cref="CallIntoBattle"/>).</summary>
+    public void Engage(MonsterUnit m, GameSession target) => Engage(m, target, called: false);
+
+    private void Engage(MonsterUnit m, GameSession target, bool called)
     {
         if (m.Dead || m.WorldScene != target.WorldScene || TargetVisible?.Invoke(m, target) == false || m.Template.SpeedCm == 0 && m.Template.AttackRange <= 0) return;
-        if (m.Target == null) m.NextSwingMs = NowMs + 300;
+        bool entering = m.Target == null;
+        if (entering) m.NextSwingMs = NowMs + 300;
         SetTarget(m, target);
         m.Returning = false;
+        if (entering && !called && m.Template.BattleCallRange > 0) CallIntoBattle(m, target);
+    }
+
+    /// <summary>
+    /// AIConfig battle call (server-only fields; the client never reads them): a monster whose AI has _iBattleCallType
+    /// 1 calls, as it enters a fight, the monsters within _iBattleCallDistance whose AI has _iBattleCallResponse 1.
+    /// Inferred: those of its camp in its instance, alive and not fighting yet, take on the same player; a called
+    /// monster does not call in turn (one call per fight, not a chain across the map).
+    /// </summary>
+    private void CallIntoBattle(MonsterUnit caller, GameSession target)
+    {
+        int camp = caller.CampOverride ?? caller.Template.Camp;
+        foreach (var unit in _world.Map(caller.WorldScene).Near(caller.X, caller.Z, caller.Template.BattleCallRange).ToArray())
+            if (unit is MonsterUnit ally && !ReferenceEquals(ally, caller) && !ally.Dead && ally.Hp > 0 && ally.Target == null
+                && ally.Template.AnswersBattleCall && ally.InstanceId == caller.InstanceId
+                && (ally.CampOverride ?? ally.Template.Camp) == camp
+                && Distance(ally.X, ally.Z, caller.X, caller.Z) <= caller.Template.BattleCallRange)
+                Engage(ally, target, called: true);
     }
 
     /// <summary>Authoritative target transitions, consumed by hatred/lock notifications and facing effects.</summary>

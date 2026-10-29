@@ -1,6 +1,8 @@
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Options;
 using Romsg;
 using Ro3Emu.Bot;
+using Ro3Emu.Server;
 using Ro3Emu.Server.Data;
 using Ro3Emu.Server.Game;
 using Ro3Emu.Server.Maps;
@@ -126,6 +128,138 @@ public sealed partial class DungeonTests
         Assert.Equal((DungeonRes)1, (await Next(alice, DungeonService.Result, DungeonResNotify.Parser)).Res);
         Assert.DoesNotContain(struck, Session(alice).DungeonAttempt!.Companions);
     }
+
+    [ClientDataFact]
+    public async Task ABossAreaSkillHitsTheCompanionsAndTowerPetsInsideIt()
+    {
+        await using var alice = await InWorld("Alice");
+        var (_, companions) = await EddgaStep(alice);
+        var options = Service<IOptions<ServerOptions>>().Value.BossSkills;
+        options.DamagePercent = 1; // real damage that leaves the companion standing
+        var s = Session(alice);
+        var wule = companions.Single(c => c.NpcId == Wule);
+        // Field Orc Hero's Terrifying Roar 5203001, an 8 m circle around itself, cast 3 m from Wule: its 1 m swing
+        // never reaches him, and it casts nothing of its own (every skill spent).
+        var orc = await SpawnBeside(s, Service<MonsterService>().Template(5020004)! with
+        { AttackRange = 1, SpeedCm = 0, Aggressive = false, RoamDistance = 0 },
+            wule.X + 5, wule.Y, wule.Z);
+        var roar = Assert.Single(orc.Template.Skills!.Skills, k => k.Id == 5203001);
+        Assert.Equal((BossSkillArea.AroundSelf, 8f), (roar.Area, roar.Radius));
+        // A tower pet in the circle too (regression: it is hit as before).
+        var pet = await OnLoopValue(() => TowerPetUnit.Create(Service<GameData>(),
+            new DBPetInfo { Inited = true, ListPet = { [13001] = new PetData { PetId = 13001, Level = 12, Star = 1 } } }, s,
+            Service<World>(), Service<MonsterService>(), Service<CombatService>(), TowerPetUnit.UidBase + (1L << 40), 13001,
+            s.InstanceId, orc.X, orc.Y, orc.Z)!);
+        await OnLoop(() => Service<World>().AddUnitAsync(pet));
+
+        var hit = await RoarAt(alice, orc, roar, wule, pet);
+        long wuleDamage = hit.Dsts.Single(d => d.DstID == wule.Uid).Damage;
+        Assert.True(wuleDamage > 0);
+        var petHit = await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser,
+            h => h.SrcID == orc.Uid && h.SkillId == roar.Id && h.Dsts.Any(d => d.DstID == pet.Uid && d.Damage > 0));
+        Assert.Equal(hit.SessionId, petHit.SessionId); // the same cast hits both
+        Assert.True(await OnLoopValue(() => wule.Hp <= wule.Template.MaxHp - wuleDamage && pet.Hp < pet.MaxHp));
+        Assert.DoesNotContain(alice.Inbox.Snapshot().Where(e => e.IsGame(CombatService.SkillHit)).Select(e => SkillHitInfo.Parser.ParseFrom(e.Body)),
+            h => h.SrcID == orc.Uid && h.Dsts.Any(d => d.DstID == s.Role!.Id)); // Alice, about 20 m away, is outside it
+
+        // A companion the roar takes to 0 HP falls as under a normal attack: dead, shown dead, gone from the step.
+        await OnLoop(() => { wule.Hp = 1; return Task.CompletedTask; });
+        Assert.Contains((await RoarAt(alice, orc, roar, wule)).Dsts, d => d.DstID == wule.Uid && d.IsDead);
+        await Until(() => wule.Dead && !s.DungeonAttempt!.Companions.Contains(wule), "Wule falls");
+        Assert.Contains((wule.NpcId, wule.Point), s.DungeonAttempt!.FallenCompanions);
+    }
+
+    /// <summary>The boss, set 3 m beside the companion (and the pet 3 m beyond it), casts <paramref name="skill"/> as
+    /// MonsterService's scheduler would; its hit on the companion.</summary>
+    private async Task<SkillHitInfo> RoarAt(BotClient bot, MonsterUnit boss, BossSkill skill, CompanionUnit companion,
+        TowerPetUnit? pet = null)
+    {
+        long serial = await OnLoopValue(() =>
+        {
+            var map = Service<World>().Map(boss.WorldScene);
+            (boss.X, boss.Z) = (companion.X + 3, companion.Z);
+            map.Moved(boss);
+            if (pet != null)
+            {
+                (pet.X, pet.Z) = (companion.X + 6, companion.Z);
+                map.Moved(pet);
+            }
+            var rt = boss.BossSkills ??= new BossSkillRuntime(boss.Template.Skills!) { Engaged = true };
+            Array.Fill(rt.ReadyMs, long.MaxValue);
+            boss.NextSpecialMs = long.MaxValue;
+            return ++rt.CastSerial;
+        });
+        await OnLoop(() => Service<MonsterService>().CastBossSkill!(boss, null, null, skill, serial));
+        return await Next(bot, CombatService.SkillHit, SkillHitInfo.Parser,
+            h => h.SrcID == boss.Uid && h.SkillId == skill.Id && h.Dsts.Any(d => d.DstID == companion.Uid));
+    }
+
+    [ClientDataFact]
+    public async Task AnAggressiveMonsterAnsweringACompanionStillPutsAPlayerFirst()
+    {
+        await using var alice = await InWorld("Alice");
+        var (_, companions) = await EddgaStep(alice);
+        var s = Session(alice);
+        var wule = companions.Single(c => c.NpcId == Wule);
+        // An aggressive Eddga beside Wule, with a 6 m view: Alice, at the born point about 20 m away, is out of its sight.
+        var probe = await SpawnBeside(s, Service<MonsterService>().Template(Eddga)! with
+        { Aggressive = true, ViewRange = 6, LeashDistance = 1000, RoamDistance = 0 }, wule.X, wule.Y, wule.Z);
+        await OnLoop(() => { Service<MonsterService>().Engage(probe, wule); return Task.CompletedTask; });
+        await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser,
+            h => h.SrcID == probe.Uid && h.Dsts.Any(d => d.DstID == wule.Uid));
+        Assert.Null(await OnLoopValue(() => probe.Target));
+
+        // Alice steps into its view: she becomes its target ahead of the companion, and its swing turns to her.
+        await OnLoop(() => Service<SceneService>().TeleportInMapAsync(s, new MapPoint(probe.X + 2, probe.Y, probe.Z, 0)));
+        await Until(() => ReferenceEquals(probe.Target, s), "the aggressive monster takes Alice");
+        long me = s.Role!.Id;
+        await Next(alice, CombatService.UseInSkill, UseInSkillInfo.Parser, u => u.SrcID == probe.Uid && u.TargetId == me);
+    }
+
+    [ClientDataFact]
+    public async Task CompanionCreditGoesToALivingParticipantFirst()
+    {
+        await using var alice = await InWorld("Alice");
+        await using var bob = await InWorld("Bob");
+        var (a, b) = (Session(alice), Session(bob));
+        Assert.Same(a, await OnLoopValue(() => DungeonService.CompanionCreditAmong([a, b])));
+        // The first participant is dead: the living one is credited.
+        await OnLoop(() => { a.Dead = true; return Task.CompletedTask; });
+        Assert.Same(b, await OnLoopValue(() => DungeonService.CompanionCreditAmong([a, b])));
+        // None is alive: still the first, so a companion's kill can complete the run.
+        await OnLoop(() => { b.Dead = true; return Task.CompletedTask; });
+        Assert.Same(a, await OnLoopValue(() => DungeonService.CompanionCreditAmong([a, b])));
+        Assert.Null(await OnLoopValue(() => DungeonService.CompanionCreditAmong([])));
+    }
+
+    [ClientDataFact]
+    public async Task AMonsterThatCannotMoveDropsACompanionOutOfItsReach()
+    {
+        await using var alice = await InWorld("Alice");
+        var (_, companions) = await EddgaStep(alice);
+        var s = Session(alice);
+        var wule = companions.Single(c => c.NpcId == Wule);
+        // An Eddga that cannot move, 12 m from Wule, whose 2 m swing cannot reach him.
+        var probe = await SpawnBeside(s, Service<MonsterService>().Template(Eddga)! with
+        { SpeedCm = 0, AttackRange = 2, LeashDistance = 1000, RoamDistance = 0 }, wule.HomeX + 12, wule.Y, wule.HomeZ);
+        // It lost its player (hurt, on its way home, as Disengage leaves it) and Wule's hit draws it.
+        await OnLoop(() =>
+        {
+            probe.Hp = probe.Template.MaxHp / 2;
+            probe.Returning = true;
+            Service<MonsterService>().Engage(probe, wule);
+            return Task.CompletedTask;
+        });
+        // It does not stand answering a companion it cannot reach: its return home completes (HP restored).
+        await Until(() => probe.Hp == probe.Template.MaxHp && !probe.Returning, "the immobile monster finishes its return home");
+        Assert.DoesNotContain(alice.Inbox.Snapshot().Where(e => e.IsGame(CombatService.UseInSkill))
+            .Select(e => UseInSkillInfo.Parser.ParseFrom(e.Body)), u => u.SrcID == probe.Uid);
+    }
+
+    private Task<MonsterUnit> SpawnBeside(GameSession s, MonsterTemplate template, float x, float y, float z) =>
+        Service<GameLoop>().InvokeAsync(async () =>
+            (await Service<MonsterService>().SpawnSingleAsync(s.RuntimeMap, template.NpcId, new MapPoint(x, y, z, 0),
+                customTemplate: template))!);
 
     /// <summary>Payon Forest at its Eddga step: the standoff point reached, Alice back at the born point, Eddga spawned
     /// and engaged, the pair shown.</summary>

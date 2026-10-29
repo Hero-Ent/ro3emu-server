@@ -113,24 +113,27 @@ public sealed partial class CombatService
             if (companion.Dead || companion.Hp <= 0 || companion.Removed || monster.Dead || monster.Hp <= 0
                 || monster.WorldScene != companion.WorldScene
                 || MonsterService.Distance(monster.X, monster.Z, companion.X, companion.Z) > monster.Template.AttackRange + 2f) return;
-            await DamageCompanionAsync(monster, companion, castId);
+            await DamageCompanionAsync(monster, companion, SkillConfig.Get(_data, monster.Template.NormalSkill)?.Row,
+                monster.Template.NormalSkill, castId, DefaultHitEffect);
         });
     }
 
-    /// <summary>A monster's normal attack on a companion: the row's damage against the companion's template, its HP and death.</summary>
-    private async Task DamageCompanionAsync(MonsterUnit monster, CompanionUnit companion, long castId)
+    /// <summary>A monster's hit on a companion (its normal attack, or a boss area skill at the boss skills' damage
+    /// percent): the row's damage against the companion's template, its HP and death.</summary>
+    private async Task DamageCompanionAsync(MonsterUnit monster, CompanionUnit companion, JsonElement? row, int skillId,
+        long castId, int showPoint, int damagePercent = 100)
     {
-        var row = SkillConfig.Get(_data, monster.Template.NormalSkill)?.Row;
         var t = companion.Template;
         var defender = new Fighter(0, 0, 0, 0, t.Level, t.Element) { Def = t.Def, Mdef = t.Mdef, Flee = t.Flee };
         var (damage, result) = row is { } r ? Damage(MonsterFighter(monster), defender, r)
             : (Math.Max(1, monster.Template.Atk), DamageHitResult.Normal);
         damage = MonsterBuffDamage(monster, row, ScaleMonsterDamage(damage, monster.DamageRatio));
+        if (damagePercent != 100) damage = damagePercent <= 0 ? 0 : ScaleMonsterDamage(damage, damagePercent * 100);
         companion.Hp = Math.Max(0, companion.Hp - damage);
         companion.Dead = companion.Hp == 0; // reserved before the awaited broadcasts
         var hit = new SkillHitInfo
         {
-            SrcID = monster.Uid, SkillId = monster.Template.NormalSkill, ShowPoint = DefaultHitEffect, SessionId = castId,
+            SrcID = monster.Uid, SkillId = skillId, ShowPoint = showPoint, SessionId = castId,
             SrcElement = monster.Template.Element,
             Dsts = { new DamageInfo { DstID = companion.Uid, Damage = damage, HitResult = result, DstElement = t.Element,
                 IsDead = companion.Dead } },

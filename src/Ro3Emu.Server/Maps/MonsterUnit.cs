@@ -20,10 +20,15 @@ public sealed record MonsterTemplate(
     /// <summary>AIConfig _iIsSurround 1: metres between the attackers' slots around a player (_iSurroundDistance cm);
     /// 0: a straight approach (MonsterService.Surround).</summary>
     public float SurroundDistance { get; init; }
+    /// <summary>AIConfig _iBattleCallType 1: how far (m) it calls its kind into the fight it enters; 0 calls no one.</summary>
+    public float BattleCallRange { get; init; }
+    /// <summary>AIConfig _iBattleCallResponse 1: it answers such a call.</summary>
+    public bool AnswersBattleCall { get; init; }
 }
 
-/// <summary>A live monster on a map (entityType 1): HP, home point, current walk segment and AI state.</summary>
-public sealed class MonsterUnit : WorldUnit
+/// <summary>A live monster on a map (entityType 1): HP, home point, current walk segment and AI state. The siege war
+/// machines derive from it (TerritoryWarsService.CannonUnit, VehicleUnit): they take damage and die as monsters do.</summary>
+public class MonsterUnit : WorldUnit
 {
     public required MonsterTemplate Template { get; init; }
     /// <summary>Instance-specific final outgoing damage rate; 10000 leaves field and dungeon monsters unchanged.</summary>

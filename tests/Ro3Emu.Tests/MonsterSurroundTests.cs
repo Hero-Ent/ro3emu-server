@@ -161,7 +161,11 @@ public sealed class MonsterSurroundTests
         return Near(m, SlotPoint(p.X, p.Z, SlotOf(m.X - p.X, m.Z - p.Z)));
     }
 
-    private static bool Near(MonsterUnit m, (float X, float Z) at, float within = 0.25f) =>
+    /// <summary>
+    /// Standing at <paramref name="at"/> as the server counts it: a monster that is MinChaseStep or less from its slot
+    /// does not walk again (a swing can stop a walk there), plus a little float slack.
+    /// </summary>
+    private static bool Near(MonsterUnit m, (float X, float Z) at, float within = MonsterService.MinChaseStep + 0.05f) =>
         !m.Moving && Distance(m.X - at.X, m.Z - at.Z) <= within;
 
     private static float Distance(float dx, float dz) => MathF.Sqrt(dx * dx + dz * dz);

@@ -183,6 +183,11 @@ Ro3Emu.Server.Accounts.Persistence.FriendWritePlan/_participants
 Ro3Emu.Server.Accounts.Persistence.FriendWritePlan/_roles
 Ro3Emu.Server.Accounts.Persistence.FriendWritePlan/_time
 Ro3Emu.Server.Accounts.Persistence.FriendWritePlan/_value
+Ro3Emu.Server.Accounts.Persistence.GiftCodeRedeemPlan/<account>P
+Ro3Emu.Server.Accounts.Persistence.GiftCodeRedeemPlan/<code>P
+Ro3Emu.Server.Accounts.Persistence.GiftCodeRedeemPlan/<redeemedUtc>P
+Ro3Emu.Server.Accounts.Persistence.GiftCodeRedeemPlan/<redemptionKey>P
+Ro3Emu.Server.Accounts.Persistence.GiftCodeRedeemPlan/<roleId>P
 Ro3Emu.Server.Accounts.Persistence.GuildCampfireStatePlan/_guild
 Ro3Emu.Server.Accounts.Persistence.GuildCampfireStatePlan/_state
 Ro3Emu.Server.Accounts.Persistence.GuildCaravanRewardPlan/<contribution>P
