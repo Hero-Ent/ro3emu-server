@@ -34,7 +34,7 @@ public static class ClientPatcher
     /// </summary>
     private const string GmtManagerType = "GMT.GMTManager";
 
-    internal static readonly string[] PatchedFiles = ["Happyengine.Network.dll", "Assembly-CSharp.dll", "Phonest.Common.dll", "Happyengine.Base.Runtime.dll", "Unity.TextMeshPro.dll", "HUD.dll", "HappyEngine.Resource.dll", "UnityEngine.UI.dll"];
+    internal static readonly string[] PatchedFiles = ["Happyengine.Network.dll", "Assembly-CSharp.dll", "Phonest.Common.dll", "Happyengine.Base.Runtime.dll", "Unity.TextMeshPro.dll", "HUD.dll", "HappyEngine.Resource.dll", "UnityEngine.UI.dll", "UnityEngine.CoreModule.dll"];
 
     /// <summary>--verbose: GS_Debug.ShowLog always true, so the Lua debug logs (Lua_Debug reads it) reach Player.log.</summary>
     public static bool VerboseLogs { get; set; }
@@ -74,11 +74,13 @@ public static class ClientPatcher
     /// <summary>An empty type every DLL the patcher writes carries, so its output is recognisable without the record.</summary>
     internal const string MarkerNamespace = "Ro3Emu", MarkerType = "PatchedByRo3Emu";
 
-    public static void Patch(string clientDir, string serverBaseUrl, string publicKeyPem, string? hooksDll = null, string? locDll = null)
+    /// <param name="purchaseUrl">Where the client's purchase links go (<see cref="OpenUrlPatch"/>); null: they open nothing.</param>
+    public static void Patch(string clientDir, string serverBaseUrl, string publicKeyPem, string? hooksDll = null, string? locDll = null, string? purchaseUrl = null)
     {
         var managed = ManagedDir(clientDir);
         string pem = publicKeyPem.Replace("\r\n", "\n").Trim();
         if (!pem.StartsWith(PemMarker, StringComparison.Ordinal)) throw new ArgumentException("the key file is not a PKCS#1 'RSA PUBLIC KEY' PEM");
+        if (purchaseUrl != null && !OpenUrlPatch.IsPurchaseUrl(purchaseUrl)) throw new ArgumentException($"the purchase address '{purchaseUrl}' is not an http or https address");
 
         var rules = Rules(serverBaseUrl, pem);
         hooksDll ??= DefaultHooksDll();
@@ -87,24 +89,16 @@ public static class ClientPatcher
         if (!File.Exists(locDll)) throw new FileNotFoundException("build src/Ro3Emu.Loc first", locDll);
         File.Copy(hooksDll, Path.Combine(managed, HooksFile), overwrite: true);
         Console.WriteLine($"installed {HooksFile}");
+        if (purchaseUrl != null)
+        {
+            OpenUrlPatch.SetPurchaseUrl(Path.Combine(managed, HooksFile), purchaseUrl);
+            Console.WriteLine($"purchase links go to {purchaseUrl}");
+        }
         File.Copy(locDll, Path.Combine(managed, LocFile), overwrite: true);
         Console.WriteLine($"installed {LocFile}");
 
         ReplaceManaged(clientDir, (file, source, destination) =>
-        {
-            Func<ModuleDefinition, string>? extra = file switch
-            {
-                "Assembly-CSharp.dll" => m => RedirectChat(m, hooksDll) + "; " + VoiceStubPatch.Patch(m, hooksDll) + "; " + VoiceEnablePatch.Patch(m)
-                    + "; " + TextSink.PatchLanguageGet(m, locDll),
-                "Happyengine.Base.Runtime.dll" when VerboseLogs => ForceShowLog,
-                "Unity.TextMeshPro.dll" => m => TextSink.PatchTmp(m, locDll, hooksDll),
-                "HUD.dll" => m => TextSink.PatchHud(m, locDll),
-                "HappyEngine.Resource.dll" => m => TextSink.PatchLauncher(m, locDll),
-                "UnityEngine.UI.dll" => m => ImageSwapPatch.Patch(m, hooksDll),
-                _ => null,
-            };
-            RewriteStrings(clientDir, file, source, destination, rules, extra);
-        });
+            RewriteStrings(clientDir, file, source, destination, rules, Extra(file, hooksDll, locDll)));
 
         var missing = rules.Where(r => r.Hits == 0).Select(r => r.Description).ToList();
         if (missing.Count > 0) throw new InvalidOperationException($"literal not found: {string.Join(" | ", missing)} "
@@ -112,6 +106,23 @@ public static class ClientPatcher
         Console.WriteLine($"client hosts replaced: {string.Join(", ", rules.SelectMany(r => r.Hosts).Distinct())}");
         Console.WriteLine($"client now talks to {serverBaseUrl}; do not run RO3Launcher.exe on this copy (its repair restores the originals)");
     }
+
+    /// <summary>
+    /// The edits a patched DLL gets beyond the literal rewrites. UnityEngine.CoreModule always gets the purchase link
+    /// redirect: with no purchase address the publisher's store links open nothing (issue #147).
+    /// </summary>
+    internal static Func<ModuleDefinition, string>? Extra(string file, string hooksDll, string locDll) => file switch
+    {
+        "Assembly-CSharp.dll" => m => RedirectChat(m, hooksDll) + "; " + VoiceStubPatch.Patch(m, hooksDll) + "; " + VoiceEnablePatch.Patch(m)
+            + "; " + TextSink.PatchLanguageGet(m, locDll),
+        "Happyengine.Base.Runtime.dll" when VerboseLogs => ForceShowLog,
+        "Unity.TextMeshPro.dll" => m => TextSink.PatchTmp(m, locDll, hooksDll),
+        "HUD.dll" => m => TextSink.PatchHud(m, locDll),
+        "HappyEngine.Resource.dll" => m => TextSink.PatchLauncher(m, locDll),
+        "UnityEngine.UI.dll" => m => ImageSwapPatch.Patch(m, hooksDll),
+        "UnityEngine.CoreModule.dll" => m => OpenUrlPatch.Patch(m, hooksDll),
+        _ => null,
+    };
 
     /// <summary>
     /// Brings every patched DLL from its pristine backup to its new Managed copy without ever losing an original:
@@ -326,6 +337,12 @@ public static class ClientPatcher
                 catch (InvalidOperationException e) { problems.Add(e.Message); }
             }
             if (file == "Unity.TextMeshPro.dll" && assembly.MainModule.GetType("TMPro.TMP_Text") == null) problems.Add("TMPro.TMP_Text not found");
+            if (file == "UnityEngine.CoreModule.dll")
+            {
+                // In memory only: does the purchase link redirect (and its call into the hooks DLL) fit this build.
+                try { OpenUrlPatch.Patch(assembly.MainModule, File.Exists(hooksDll) ? hooksDll : null); }
+                catch (InvalidOperationException e) { problems.Add(e.Message); }
+            }
         }
         problems.AddRange(rules.Where(r => r.Hits == 0).Select(r => "literal not found: " + r.Description));
 
