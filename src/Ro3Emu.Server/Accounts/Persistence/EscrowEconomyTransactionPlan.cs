@@ -461,9 +461,9 @@ internal sealed class EscrowEconomyReceiptResolveReadPlan(EscrowEconomyIntent in
         byte[] payload = intent.Payload;
         if (row.GetString(1) != intent.ActorAccount || row.GetInt64(2) != intent.ActorRoleId ||
             row.GetString(3) != intent.CommandKind || row.GetString(4) != intent.Hash ||
-            row.GetString(5) != intent.Hash || !((byte[])row.GetValue(6)).AsSpan().SequenceEqual(payload) ||
+            row.GetString(5) != intent.Hash || !ReceiptBlobs.SamePayload((byte[])row.GetValue(6), payload) ||
             row.GetString(7) != intent.SourceKey ||
-            !((byte[])row.GetValue(8)).AsSpan().SequenceEqual((byte[])row.GetValue(9)))
+            !ReceiptBlobs.SameOutcome((byte[])row.GetValue(8), (byte[])row.GetValue(6), (byte[])row.GetValue(9)))
             throw new EconomyOperationConflictException("E03 operation ID belongs to another intent.");
         string realm = row.GetString(0);
         var result = EscrowEconomyReceiptCodec.Decode((byte[])row.GetValue(9));

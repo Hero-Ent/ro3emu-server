@@ -104,6 +104,9 @@ public sealed class ServerOptions
     /// <summary>Database copies in DataDir/backups (DatabaseBackup).</summary>
     public BackupOptions Backup { get; set; } = new();
 
+    /// <summary>How long economic receipts keep their payload and outcome bytes (ReceiptRetention).</summary>
+    public ReceiptRetentionOptions ReceiptRetention { get; set; } = new();
+
     /// <summary>
     /// Credential checks (SDK login, character deletion) one remote address may make per minute; past it the server
     /// answers 429 without hashing. Each check costs a 100 000-round PBKDF2 hash, and logins register accounts.
@@ -241,6 +244,24 @@ public sealed class BossSkillOptions
 
     /// <summary>Life of a summoned minion without a self-destruct born buff.</summary>
     public int SummonLifeMs { get; set; } = 30000;
+}
+
+/// <summary>
+/// Compaction of old economic receipts (Accounts/ReceiptRetention.cs, docs/guide/hosting.md). Every row, hash, child
+/// receipt, revision, ledger leg and source claim stays; only the payload and outcome bytes of receipts older than
+/// <see cref="Days"/> are dropped.
+/// </summary>
+public sealed class ReceiptRetentionOptions
+{
+    /// <summary>Age in days after which a receipt is compacted; 0 keeps every receipt whole. A compacted receipt still
+    /// replays (by its intent hash), so the window only bounds how far back the offline audit re-checks intents.</summary>
+    public int Days { get; set; } = 2;
+
+    /// <summary>Receipts compacted per writer transaction.</summary>
+    public int BatchSize { get; set; } = 500;
+
+    /// <summary>Minutes between compaction runs (the first runs a few minutes after startup).</summary>
+    public int IntervalMinutes { get; set; } = 60;
 }
 
 /// <summary>In-game bug reports: the menu's Feedback button and "/bug" in chat (FeedbackService).</summary>

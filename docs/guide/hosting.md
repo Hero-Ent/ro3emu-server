@@ -27,6 +27,11 @@ Open TCP `5380`, `20000` and `33100`, and the voice port if you turn voice on wi
   newest two are gzip-compressed (`.db.gz`, about a quarter of the size); `Ro3Emu.Server --restore-backup` takes either
   kind. `Ro3Emu__Backup__Keep`, `Ro3Emu__Backup__IntervalHours` and `Ro3Emu__Backup__Uncompressed` (or `Backup` under
   `Ro3Emu` in `appsettings.json`) change the three numbers; `Uncompressed` equal to `Keep` compresses nothing.
+- **Database size:** every reward, purchase and activity writes a receipt so a lost or repeated request is never paid
+  twice. Receipts older than 2 days are trimmed to their hashes every hour, in small batches
+  (`Ro3Emu__ReceiptRetention__Days`, `__BatchSize`, `__IntervalMinutes`; `Days` 0 keeps them whole). The space freed
+  is reused, so the file stops growing; to shrink it on disk, stop the server and run `VACUUM` on `data/ro3emu.db`
+  once (`sqlite3 data/ro3emu.db "VACUUM"`).
 - **One session per account:** a second login takes over from the first. The client runs one instance per PC;
   `Ro3Emu.BotCli` can stand in for extra players when you test alone.
 
