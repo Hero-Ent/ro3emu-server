@@ -374,7 +374,7 @@ public sealed class CasualBattleService : IGameTicker
         return notify;
     }
 
-    private Task BroadcastCampAsync(Match match, int camp, uint id, IMessage msg) =>
+    private static Task BroadcastCampAsync(Match match, int camp, uint id, IMessage msg) =>
         RoleFanout.EachAsync(match.Players.Values.Where(p => p.Camp == camp && !p.Left && match.Loaded.Contains(p.Session))
             .Select(p => p.Session), s => s.SendGameAsync(id, msg));
 
@@ -504,7 +504,8 @@ public sealed class CasualBattleService : IGameTicker
             match = m; camp = match.Players[s].Camp;
             var squad = TeamRoster(match, camp).Squads.Values.FirstOrDefault(sq => sq.Members.ContainsKey(s.Role.Id));
             if (squad == null || s.Role.Id != squad.SquadLeaderGuid) code = ErrorCodes.NoPermission;
-            else if (req.FlagInfo.Type == DungeonTeamFlagType.Player && !squad.Members.ContainsKey(req.FlagInfo.TargetGuid))
+            else if (req.FlagInfo is null
+                || req.FlagInfo.Type == DungeonTeamFlagType.Player && !squad.Members.ContainsKey(req.FlagInfo.TargetGuid))
                 code = ErrorCodes.Parameter;
             else
             {
