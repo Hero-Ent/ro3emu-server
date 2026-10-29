@@ -75,7 +75,9 @@ public static partial class EconomySnapshotReader
     // Battle Merit: role.territory_wars Glory (TerritoryWarsService.GloryState; past seasons in GlorySeasons) holds a season's earned points, the
     // reached rank, claimed rank markers and today's counters. No balance and no asset: the points themselves are
     // currency 15 in the purse, granted by the earner's event/battle-glory receipt with this state; a rank reward is
-    // its event/battle-glory-rank receipt, whose claimed marker is that receipt's once-only source.
+    // its event/battle-glory-rank receipt, whose claimed marker is that receipt's once-only source. The territory
+    // WorldState.GlorySettle lists past season epochs whose standings are still to be mailed: keys, no balance; the
+    // season mail's goods are the 1090 letter's attachments, delivered once by its battle-merit-season delivery key.
     // War warehouse: guild WartimeItems/WartimeStocked (GuildService.Wartime) hold the guild's war machines, which only
     // leave the warehouse by being built on a war map; WartimeSlots are operator permissions and WartimePrepay the
     // machines a member reserved for the blueprint they place. No balance and no asset: machines never reach a bag, a

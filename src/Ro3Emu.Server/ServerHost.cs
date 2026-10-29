@@ -365,6 +365,8 @@ public static class ServerHost
         escort.OwnerOf = territory.OwnerOf;
         escort.GuildPoint = territory.GuildPoint;
         territory.GuildEscortScore = (guild, round) => escort.GetGuildEscortScore(guild, round);
+        var ranks = app.Services.GetRequiredService<RankService>();
+        territory.GloryBoardRank = role => ranks.RankOfAsync(RankService.BattleGlory, role);
         app.Services.GetRequiredService<GuildService>().ItemDataOf = escort.GuildItems;
         var territoryCombat = app.Services.GetRequiredService<CombatService>();
         var league = app.Services.GetRequiredService<GuildLeagueService>(); // 30410-30412 hooks, battlefield scene/combat hooks
@@ -384,6 +386,7 @@ public static class ServerHost
         app.Services.GetRequiredService<GuildChallengeService>().Participated.Add(questTasks.OnGveJoined); // 103014
         league.MatchCommitted.Add(questTasks.OnGuildLeagueMatch); // 106603, 106019
         territory.SiegeSettled.Add(questTasks.OnSiegeSettled); // 106611, 106605, 106606
+        questTasks.BattleMeritPoints = territory.GloryPoints; // 106610
         territory.SiegeSettled.Add((role, _, _) => questTasks.OnGuildEventJoined(role, TaskService.GuildEvent.RoyalCity)); // 106010
         territory.BattleSettled.Add(questTasks.OnTerritoryBattleSettled); // 106010 Stronghold / Regional Capital War
         escort.CartStarted.Add(s => questTasks.OnGuildEventJoined(s, TaskService.GuildEvent.Escort)); // 106010 Escort

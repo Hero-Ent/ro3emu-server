@@ -92,8 +92,14 @@ Loading into the battle sends the side's commander marks, the party's own marks,
 | Power | kills and assists times `BattleGloryPowerDif` of the victim's power minus the earner's (the row with the largest threshold reached) |
 | Daily cap | `BattleGloryDailyLimit` 1,000,000 per game day (05:00) |
 | Rank | the sum of the `_iGloryCondition` of the ranks below: 1000 for rank 2 up to 36000 for rank 9; it never drops |
+| Leaderboard | 2102 (`enum_LeaderBoardType.BattleGlory`): this season's earned points, ties by role id; up to 3000 rows |
+| Champion (rank 10) | 5001 `isSpecialRank`: rank 9 reached and a place within the champion row's `_iRankCondition` (10) on board 2102 |
+| Season end | MailConfig 1090 with the place as `${1}` and the `SiegeSettlementHonorAward` row whose `_kRank` holds it (places 1-50), once per role and season |
+| Quests | target 106610 "Reach N Battle Merit" (TaskConfig 120001-120005, Realm Campaign 107): this season's earned points |
 
-**Inferred:** all the point rules (the client only displays results); an assist is a hit on the victim in the last 10 s; a death pays rather than costs (the record source enum names Kill, Assist and Death as ways points came); the state is the role's territory `RoleState.Glory`, per season. Not done: rank 10 (`_iRankCondition` 10, the top 10 of leaderboard 2102, which this client ships no LeaderBoardsConfig row for), the season-end SiegeSettlementHonorAward mail 1090, and the "Reach N Battle Merit" quests (target 106610).
+Evidence for the rest: `LC_DAL_BattleGlory._updateRealLevel` shows `Lua_CFG_BattleGloryDan.GetFinallyLevelId` (the row with an `_iRankCondition`) while `isSpecialRank` is set, `curRankId` staying the points rank. `UI_Sys_TerritoryWars_BattleFeatsSettlementPanelModel` asks board 2102 for the player's own place (`GetMyRankByBoardId`), and its panel shows the `SiegeSettlementHonorAward` award list for that place (`GetConfigIdByRank`, `GetAwardListById`) with the 1090 texts. Board 2102 has no LeaderBoardsConfig row, so `RankService` gives it the other role boards' 3000 rows.
+
+**Inferred:** all the point rules (the client only displays results); an assist is a hit on the victim in the last 10 s; a death pays rather than costs (the record source enum names Kill, Assist and Death as ways points came); the state is the role's territory `RoleState.Glory`, per season. The board's tie-break and size; the champion also needing rank 9; mailing the standings when the Territory War season rolls over (`WorldState.GlorySettle` keeps the seasons still to pay, retried by the reconciliation); a target 106610 reading earned points rather than the spendable currency 15.
 
 ## War warehouse and machine permissions
 
