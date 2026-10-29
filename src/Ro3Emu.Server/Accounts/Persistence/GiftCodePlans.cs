@@ -57,11 +57,10 @@ public sealed record GiftCodeState(string Code, string Items, long MaxUses, long
         : null;
 
     /// <summary>
-    /// The delivery key of this account's next use, which is also its redemption_key: giftcode:&lt;code length&gt;:&lt;code&gt;:&lt;account&gt; (the length keeps a ':' in a code or an account name from making two keys equal)
-    /// for the first use, with :&lt;n&gt; appended from the second (codes allowing several uses per account).
+    /// The delivery key of this account's next use, which is also its redemption_key: giftcode:&lt;code length&gt;:&lt;code&gt;:&lt;use number&gt;:&lt;account&gt;. The code is
+    /// length-delimited and the account comes last, so a ':' in a code or an account name cannot make two keys equal.
     /// </summary>
-    public string NextKey(string account) => AccountUses == 0
-        ? $"giftcode:{Code.Length}:{Code}:{account}" : $"giftcode:{Code.Length}:{Code}:{account}:{AccountUses + 1}";
+    public string NextKey(string account) => $"giftcode:{Code.Length}:{Code}:{AccountUses + 1}:{account}";
 
     internal static GiftCodeState? Read(SqliteConnection db, SqliteTransaction? tx, string code, string account)
     {

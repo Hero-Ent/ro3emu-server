@@ -75,7 +75,7 @@ public sealed class GiftCodeTests(GiftCodeTests.HostFixture fixture) : IClassFix
 
     /// <summary>The redemption and mail delivery key of an account's use of a code.</summary>
     private static string Key(string code, string account, int use = 1) =>
-        $"giftcode:{code.Length}:{code}:{account}" + (use > 1 ? $":{use}" : "");
+        $"giftcode:{code.Length}:{code}:{use}:{account}";
 
     private static long Redemptions(SyntheticHost host, string code) =>
         Scalar(host, "SELECT COUNT(*) FROM gift_code_redemption WHERE code=$c", ("$c", code));
@@ -365,6 +365,10 @@ public sealed class GiftCodeTests(GiftCodeTests.HostFixture fixture) : IClassFix
         var withColon = new GiftCodeState("a:b", "[]", 0, 1, null, null, false, 0, 0);
         var plain = new GiftCodeState("a", "[]", 0, 1, null, null, false, 0, 0);
         Assert.NotEqual(withColon.NextKey("c"), plain.NextKey("b:c"));
+        // An account named "x:2" on its first use and account "x" on its second use (verifier recheck).
+        var firstUse = new GiftCodeState("K", "[]", 0, 2, null, null, false, 0, 0);
+        var secondUse = firstUse with { AccountUses = 1 };
+        Assert.NotEqual(firstUse.NextKey("x:2"), secondUse.NextKey("x"));
     }
 
     // Verifier A1: requests with someone else's account_id and a wrong token do not spend that account's budget.

@@ -86,7 +86,7 @@ was used, but must never write it.
 
 | column | meaning |
 |---|---|
-| `redemption_key` | primary key: `giftcode:<length of code>:<code>:<account>` for an account's first use, then `…:<n>`; also the mail's delivery key (the length keeps a `:` in a code or an account name from making two keys equal) |
+| `redemption_key` | primary key: `giftcode:<length of code>:<code>:<use number>:<account>` (use number 1, 2, … per account); also the mail's delivery key. The code is length-delimited and the account comes last, so a `:` in a code or an account name cannot make two keys equal |
 | `code` | the code as stored in `gift_code` |
 | `account` | the account name |
 | `role_id` | the role that received the mail |
