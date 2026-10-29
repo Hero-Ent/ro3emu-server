@@ -12,7 +12,7 @@ namespace Ro3Emu.Server.Game;
 /// job rank, the normal attack and the skill bar), learning (31151) and the bar (31153). Skill ids are group ids
 /// (SkillConfig._iSkillID) here; casts use the row id of a level (group*100 + level, see RealId).
 /// </summary>
-public sealed class SkillService
+public sealed partial class SkillService
 {
     public const uint SkillDataSync = 5025;
     public const uint PlanUpdate = 31151;
