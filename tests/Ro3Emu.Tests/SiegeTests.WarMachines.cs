@@ -134,4 +134,76 @@ public sealed partial class SiegeTests
         Assert.NotEqual((long)cannon.Uuid, (await Next(attack, GuildService.ToolPermission, GuildWartimeToolRolePermissionNtf.Parser,
             n => n.RoleUsingToolId != 0 && n.RoleUsingToolId != (long)cannon.Uuid)).RoleUsingToolId);
     }
+
+    private static async Task<int> Interact(BotClient bot, ulong npc, int interaction)
+    {
+        await bot.SendGameAsync(SceneService.NpcInteraction, new NpcInteractionReq { NpcUid = (long)npc, InteractionId = interaction });
+        return (await Next(bot, SceneService.NpcInteraction, NpcInteractionRsp.Parser)).Result;
+    }
+
+    private static async Task<int> Button(BotClient bot, long button, CannonUseSkill? use = null)
+    {
+        var req = new UseInteractActionReq { ButtonId = button };
+        if (use != null) req.CannonUseSkill = use;
+        await bot.SendGameAsync(WorldInteractionService.Action, req);
+        return (await Next(bot, WorldInteractionService.Action, UseInteractActionRes.Parser)).Result;
+    }
+
+    /// <summary>One bullet almost straight up: it comes down about 6 m in front of the cannon after some 5 s.</summary>
+    private static CannonUseSkill Shot(int skill) => new()
+    {
+        UseSkillParam = new CastSkillReq { SkillId = skill },
+        BulletExtraParam = { new BulletExtraParam { Gravity = 1500, Speed = 4000, FaceVector3D = new Vec3 { Y = 1, Z = 0.02f } } },
+    };
+
+    [ClientDataFact]
+    public async Task ItsBuilderMansTheCannonFiresABulletThatHitsTheEnemyWhereItLandsAndGetsOff()
+    {
+        var (attack, defense, _) = await SiegeWithFirearm("C");
+        await using var _ = attack;
+        await using var __ = defense;
+        await Enter(attack, 1); await Enter(defense, 2);
+        var me = Session(attack);
+        long builder = me.Role!.Id;
+        var at = me.Position.Clone();
+        Assert.Equal(0, (await Prepay(attack, 1006001)).Result);
+        Assert.Equal(0, (await Build(attack, at.X, at.Y, at.Z)).Result);
+        var cannon = (await Next(attack, GameAoiSink.SyncAoiView, AoIViewChangeData.Parser,
+            v => v.Bases.Any(b => b.EntityTemplateID == 4900013))).Bases.Single(b => b.EntityTemplateID == 4900013);
+        Assert.Contains(cannon.CustomDatas, d => d.Id == 4900014 && d.CustomParam.LongParam == 12);
+        await Next(attack, WorldInteractionService.Change, InteractChangeNtf.Parser,
+            n => n.Uid == builder && n.DataInfo.EType == InteractInfo.Types.EState.Idle);
+
+        // Only its builder, of its camp, mans it (interaction 4900005, CheckBuilder + CheckCamp).
+        var pos = cannon.MovementInfo.Pos;
+        await OnLoop(() => Service<SceneService>().TeleportInMapAsync(Session(defense), new MapPoint(pos.X, pos.Y, pos.Z + 1, 0)));
+        Assert.Equal(ErrorCodes.NpcParameter, await Interact(defense, cannon.Uuid, 4900005));
+        Assert.Equal(0, await Interact(attack, cannon.Uuid, 4900005));
+        var on = await Next(attack, WorldInteractionService.Change, InteractChangeNtf.Parser,
+            n => n.Uid == builder && n.DataInfo.EType == InteractInfo.Types.EState.Gvgcannon);
+        Assert.Equal(((long)cannon.Uuid, 4900010L), (on.DataInfo.EnterCannonInfo.CannonUId, on.DataInfo.EnterCannonInfo.GvgCannonConfigId));
+
+        // The enemy stands where the shot comes down; one volley costs one of the 12 bullets and starts the cooldown.
+        await OnLoop(() => Service<SceneService>().TeleportInMapAsync(Session(defense), new MapPoint(pos.X, pos.Y, pos.Z + 6.3f, 0)));
+        long? before = Session(defense).CurrentHp;
+        Assert.Equal(0, await Button(attack, 2, Shot(4900701)));
+        await Next(attack, WorldCoreService.CustomChange, CustomDataChange.Parser,
+            c => c.EntityId == (long)cannon.Uuid && c.CustomDatas.Any(d => d.Id == 4900014 && d.CustomParam.LongParam == 11));
+        var bullet = (await Next(attack, GameAoiSink.SyncAoiView, AoIViewChangeData.Parser,
+            v => v.Bases.Any(b => b.EntityTemplateID == 4900101))).Bases.Single(b => b.EntityTemplateID == 4900101);
+        Assert.Equal((10, MovementType.MoveTypeMove), (bullet.EntityType, bullet.MovementInfo.MoveType));
+        Assert.InRange(bullet.MovementInfo.MoveDuration, 4500, 6500);
+        Assert.Equal(-15, bullet.MovementInfo.MovementMove.AccVelocity.Y, 3);
+        Assert.Equal(ErrorCodes.SkillCooldown, await Button(attack, 2, Shot(4900701)));
+        await Next(attack, GameAoiSink.SyncAoiView, AoIViewChangeData.Parser, v => v.LeaveAoi.Contains(bullet.Uuid));
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (Session(defense).CurrentHp == before && DateTime.UtcNow < deadline) await Task.Delay(50);
+        Assert.NotEqual(before, Session(defense).CurrentHp);
+
+        // The quit button (GameplayStatusButtonConfig 3, action 5004 QuitStatus) gets off.
+        Assert.Equal(0, await Button(attack, 3));
+        await Next(attack, WorldInteractionService.Change, InteractChangeNtf.Parser,
+            n => n.Uid == builder && n.DataInfo.EType == InteractInfo.Types.EState.Idle);
+        Assert.Equal(0, await Interact(attack, cannon.Uuid, 4900005)); // free again for its builder
+    }
 }

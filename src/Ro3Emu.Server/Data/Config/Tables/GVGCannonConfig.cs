@@ -12,4 +12,11 @@ public readonly partial record struct GVGCannonConfig(JsonElement Row)
     [ConfigField("_iBuildRadius")] public partial long BuildRadius { get; }
     [ConfigField("_iExclusiveRadius")] public partial long ExclusiveRadius { get; }
     [ConfigField("_iBuildTime")] public partial long BuildTime { get; }
+    [ConfigField("_iSkillID")] public partial long SkillId { get; }
+    [ConfigField("_iBulletNumLimit")] public partial long BulletNumLimit { get; }
+    [ConfigField("_iSingleShotNum")] public partial long SingleShotNum { get; }
+    [ConfigField("_iReloadTime")] public partial long ReloadTime { get; }
+    [ConfigField("_iExitInteractID")] public partial long ExitInteractId { get; }
+    [ConfigField("_kButtonActionIDs")] public partial long[] ButtonActionIds { get; }
+    [ConfigField("_kFireOffset")] public partial long[] FireOffset { get; }
 }

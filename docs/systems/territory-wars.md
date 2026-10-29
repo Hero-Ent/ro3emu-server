@@ -162,7 +162,46 @@ or inside another cannon's `_iExclusiveRadius` (both circles, as the client's `C
 - A builder who dies or leaves the siege before the build time ends gets no cannon; the machine goes back to the
   warehouse.
 - `roleUsingToolId` is not saved: cannons only stand during their siege.
-- Operating (32700 on the cannon, firing) and vehicles come next; until then a cannon only stands.
+- The cannon's own HP is not simulated: players and monsters cannot destroy it yet.
+
+### Firing the cannons (32700, 32703, 32705)
+
+Code: `TerritoryWarsService.CannonFire.cs`, `TerritoryWarsService.CannonShots.cs`.
+
+- **Getting on.** The builder uses the cannon's interaction (NPCConfig `_iInteractID` 4900005). NPCInteractConfig
+  `_iStatusID` 2 is GameplayStatusConfig type 2 (GVGCannon). Its NPC condition 4900001 is checked on the server:
+  `CheckBuilder` 2201, `CheckCamp` 2200, and not already in a gameplay status (12001 inverted). The player must be within
+  NPCConfig `_iInteractDistance`, and a cannon has one operator. The answer is 32702 `InteractChangeNtf` GVGCannon with
+  `enterCannonInfo` {cannon uid, GVGCannonConfig id}. `LC_GamePlayStatusMgr.OperateCannon` then calls
+  `LC_GVGFireCannon.StartFire`, which enters the camera `_iChange3CConfigID` on the client.
+- **Bullets.** The cannon carries custom data 4900014 `GVGCannonBulletRestNum`, the fire button's cost (SkillConfig
+  `_kCost` [6, 4900014, 1]). It starts at `_iBulletNumLimit`, each volley costs one, and 31018 sends the new count.
+- **Firing.** The fire button (GameplayStatusButtonConfig `_iButtonFuncType` 2, its `_iSkill` the cannon's
+  `_iSkillID`) sends 32703 with `cannonUseSkill`: the skill and one `bulletExtraParam` per bullet of the volley, at most
+  `_iSingleShotNum`. Each param holds gravity in cm/s^2 (`LC_GVGFireCannon` multiplies `_fGravity` by 100), speed in cm/s
+  and the aim direction.
+- **The bullet.** Each bullet is a unit of SkillConfig `_kLogicData[2]`, an NPCConfig `_iNPCType` 10 row (4900101 and
+  others). Its entity carries a `MoveTypeMove` with `startVelocity` and `accVelocity` (0, -g, 0).
+  `LC_Movement_MoveSyncMove` draws that as pos + v t + a t^2 / 2. The shooter gets custom data 4900006
+  `CameraFollowBullet_ListLong` with the first bullet's uid, which `LC_GVGFireCannon.HandleBulletFollowData` follows.
+- **Cooldown.** 32705 `NpcSkillsCdNotify` gives the cannon skill's cooldown on the cannon NPC.
+- **Getting off.** The quit button (ActionConfig 5004 QuitStatus) or the exit interaction `_iExitInteractID` (4900002,
+  ActionConfig 6 LeaveFiredCannon) sends the player back to Idle. Death, leaving the scene and the cannon's removal do
+  the same, with `Interrupt`.
+- **Refusals.** 806 for a wrong interaction, button, skill or volley size, or another player on the cannon. 804 when too
+  far, 801 for a cannon of another room. 3012 during the cooldown and 3013 without bullets.
+
+**Inferred:**
+- Where a bullet lands: the server integrates the flight against the nav mesh (else the cannon's height) and starts it
+  at `_kFireOffset` (side, up, forward along the aim). It gives up after 12 s.
+- The explosion: GVG_S0_CannonFire is a server script. The cannon skill hits through the ordinary extra-cast paths, on
+  the monsters and the hostile players of the siege room within `_kLogicData[4]` cm of the landing point.
+- The cooldown after a volley is the longer of SkillConfig `_iCD` and `_iReloadTime`.
+- The camera follow values: a distance of 1000 cm, no screen offset.
+- An empty cannon stays standing.
+- PublicParamConfig `ArtilleryAttackCityGateReduceDamage` and `OutCannonHpPercent` are server parameters the client
+  never reads. There are no city gates and no cannon HP yet, so neither is applied.
+- Vehicles (32281, VehicleConfig) come next.
 
 ## Descriptor and runtime evidence boundaries
 

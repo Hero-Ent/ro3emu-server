@@ -191,6 +191,7 @@ public sealed partial class TerritoryWarsService : IGameTicker
         scene.Leaving.Add(LeavingAsync);
         scene.Leaving.Add(SiegeLeavingAsync);
         scene.Leaving.Add(GloryLeavingAsync);
+        scene.Leaving.Add(CannonLeavingAsync);
         combat.Killed.Add(KilledAsync);
         combat.Killed.Add(SiegeKilledAsync);
         combat.Killed.Add(WorldKilledAsync);
@@ -198,6 +199,7 @@ public sealed partial class TerritoryWarsService : IGameTicker
         // DiedAsync publishes the battle's own countdown for a recorded participant.
         combat.ReviveInfoOwners.Add(s => s.TerritoryBattle is { } battle && s.Role is { } role && battle.State.Players.ContainsKey(role.Id));
         combat.PlayerDied.Add(WorldDiedAsync);
+        combat.PlayerDied.Add(CannonDiedAsync);
         combat.EventDamageRecorded.Add(DamageRecordedAsync);
         combat.EventDamageRecorded.Add(SiegeDamageRecordedAsync);
         combat.PlayerHostile = Hostile;
