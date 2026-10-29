@@ -1,16 +1,16 @@
 {
   "channel": "android-live",
-  "version": "1.1.2-android3",
-  "manifest": "manifests/1.1.2-android3.json.zst",
-  "manifestSha256": "2c59a3cf5ecfaccd726b1d44c771e8433ce1964fbebaccb0209af1aa1011dc30",
-  "published": "2026-10-27T05:29:54.8337913+00:00",
+  "version": "1.1.3-android1",
+  "manifest": "manifests/1.1.3-android1.json.zst",
+  "manifestSha256": "ff395a0215a657dc13757ab4b9f1688f10b331bb8886006424b8b7fa9478f704",
+  "published": "2026-10-29T02:28:07.9613484+00:00",
   "apk": {
-    "version": "1.0.4",
+    "version": "1.0.5",
     "minVersion": "1.0.4",
-    "url": "apk/1.0.4/HeroSaga.apk",
-    "sha256": "c1f986e08e1ad076a3a8826178fed9194d6251b5c39c2ea8254f840dc8a20aeb",
-    "size": 72362554,
-    "pcVersion": "1.1.2"
+    "url": "apk/1.0.5/HeroSaga.apk",
+    "sha256": "6047dc664583700e8a253e1587d6816c162493a5b2c801335cfcfad75debee81",
+    "size": 71202206,
+    "pcVersion": "1.1.3"
   },
-  "signature": "a2RX\u002BDdxQ0c3HcOUrTrrNOOOKIXcPK0V\u002B4xSfcggFHUiV0o4wbRLRixIGDGTfsUaPGKL/qeIrzE6CvuTB3aJDgEpkyi6t/ZfmFWHu68VlbXXS62z8eFJg64AHdPt0OBijdGvHfQbXf8R6Zhb5VYGvQQttQE9wf2i9kR\u002BGqur5uaXI4YEnuBbX06CKzylJ48Pb0x3ZD\u002BwaBPyGuB38OqhbnO88sVTEZcjcP98UGfRMQLFlaySEjl3RClx0F1cPGiZH4JjkY82YH2dJKGS/dLmJ7iI1PRAPPwvYZ6QRZzus\u002BcF86BZ2QJStLqq4tVV5cmdzb/t3cHnR9z1uCgTSNrZzNdiy52o4j8EzkMATaVS4nVO1XSj\u002BKjyYoOzAwIDuRNwO/wfrN2Lc59nVlWTqequL1vBAzXUZBO5kZbIU5GNKfZuME3qzxqwpF6vJAOTvYbacvw1YxBd0HX0X3cUQPUF50\u002BlKM3M3Unu88mlceiK3vQRYS542r7k9lzuGREpIgIu"
+  "signature": "CcSyWNSJ63UYwpgXmwReU9E\u002Bmxutjehjk9hcjlhIvVXUQOdn3fKcKHXFPfTMs/Ejt8940aYep1gXxTfPXXGzUaf6pSWnH5gegAHUxsxTH\u002BspyMCcOopazQyb3kV6\u002B8aQQiWJKStk/aXjoxUE1xg\u002BPdhV9ebPCphuzysQ/jtprLoGmBaAp7ee0NEsOUaVuPf0N4hiRdH6Jh24NLKXjzSp\u002Bz/mXQFF0n\u002B4s3NneHcF4LH\u002Bdm72mFdOWMy1SANCHUNwdWg1ErTJqP2pIyvQ0Oz8kjrEOsQWWp\u002BFn5A0Kp2S1ij8pkI9OcGw7b3ZbGw5WiT55Uk8Sgtv4K8z1ncYNVEVpvtX2ShOe3gxKPETi1rRzCTZ/RK8Tv\u002BzKJVRxXk7wT73AgVAffHwBM4X3jPUiafNFRKx8lkO3A0MOwOhcYIQcSPX0ubiwiPA5n6SlfgnVo/3oREvA3Mftgo34UZHu1Rs/zAD\u002BgEOI79KfEoBtakGxS7inAyFegZF4Olywqx48rPp"
 }
