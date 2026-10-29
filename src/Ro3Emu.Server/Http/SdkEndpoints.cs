@@ -41,7 +41,8 @@ public static class SdkEndpoints
             }
             var (result, account) = await accounts.SignInAsync(identity, credential);
             log.LogInformation("SDK login {Identity}: {Result}", account, result);
-            if (result == AccountStore.LoginResult.BadPassword)
+            // A banned account answers like a wrong password (inferred: the client has no ban code we know).
+            if (result is AccountStore.LoginResult.BadPassword or AccountStore.LoginResult.Banned)
             {
                 return Results.Json(new { code = 401 });
             }
