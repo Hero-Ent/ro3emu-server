@@ -23,7 +23,10 @@ Open TCP `5380`, `20000` and `33100`, and the voice port if you turn voice on wi
   `"Ro1AggressiveMonsters": false` under `Ro3Emu` in `appsettings.json`) to turn it off. The field monsters whose Ragnarok Online 1
   counterpart is aggressive then attack players they see, like the few that already do. This follows RO1
   (rAthena's monster database), not the original RO3 server.
-- **Backups:** the database is backed up to `data/backups/` at start and every 6 hours (newest 20 kept).
+- **Backups:** the database is backed up to `data/backups/` at start and every 6 hours (newest 20 kept). All but the
+  newest two are gzip-compressed (`.db.gz`, about a quarter of the size); `Ro3Emu.Server --restore-backup` takes either
+  kind. `Ro3Emu__Backup__Keep`, `Ro3Emu__Backup__IntervalHours` and `Ro3Emu__Backup__Uncompressed` (or `Backup` under
+  `Ro3Emu` in `appsettings.json`) change the three numbers; `Uncompressed` equal to `Keep` compresses nothing.
 - **One session per account:** a second login takes over from the first. The client runs one instance per PC;
   `Ro3Emu.BotCli` can stand in for extra players when you test alone.
 
