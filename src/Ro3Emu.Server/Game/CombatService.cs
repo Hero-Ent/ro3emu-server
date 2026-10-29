@@ -323,13 +323,24 @@ public sealed partial class CombatService : IGameTicker
         _log.LogDebug("{Name} locks {Target}", s.Role?.Name, req.EnemyId);
     }
 
-    /// <summary>The template's damage EffectData (hit fx + flinch): the first with m_kDamage in [show*100, show*100+99].</summary>
+    /// <summary>
+    /// The template's hit EffectData (hit fx, flinch, hit sound) for SkillHitInfo.showPoint: the first in
+    /// [show*100, show*100+99] whose m_kDamage has m_kActionDamge, else the first with any m_kDamage.
+    /// LC_DamageHelper.CalcDamageHitPoint reads only m_kActionDamge from the show point, so a bullet entry there (Fire
+    /// Bolt 1200411, Lightning Bolt 1200503, Double Strafe 1300304) showed no hit; the bullet goes in 31120 instead
+    /// (<see cref="BulletEffect"/>).
+    /// </summary>
     private int HitEffect(long scriptShow)
     {
         var effects = _data.SkillTemplateTable("Lua_Config_EffectData");
+        int first = 0;
         for (long id = scriptShow * 100; id < scriptShow * 100 + 100; id++)
-            if (effects.TryGetValue(id.ToString(), out var e) && e.TryGetProperty("m_kDamage", out _)) return (int)id;
-        return 1000002;
+        {
+            if (!effects.TryGetValue(id.ToString(), out var e) || !e.TryGetProperty("m_kDamage", out var damage)) continue;
+            if (damage.ValueKind == JsonValueKind.Object && damage.TryGetProperty("m_kActionDamge", out _)) return (int)id;
+            if (first == 0) first = (int)id;
+        }
+        return first != 0 ? first : 1000002;
     }
 
     /// <summary>
