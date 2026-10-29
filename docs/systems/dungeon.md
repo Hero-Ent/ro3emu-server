@@ -245,6 +245,12 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
   actors the server shows (client NPCConfig ids at scene-editor points, entity type 1 or 2 from `_iNPCType`, with the
   buffs that open their interactions), an optional story, the client events that complete it and an optional teleport
   after it. The engine is generic (`DungeonService.Scripted`): nothing knows a scene, task or NPC id.
+  A step may also have a ride (`after.ride`, a `m_kGuidePoints` route): when a player completes it by using an actor,
+  that actor walks the route at its own `UnitConfig._fSpeed` (the Deniro: 5.25 m/s) and the participants are moved
+  with it in 100 ms forced-position steps, then the teleport and the next step follow (`DungeonService.Ride.cs`).
+  **(inferred)**: the client has no ride rule (the route and the scene's camera animation are data with no trigger, and
+  the original's server script is not shipped), so the speed, the step size and the missing mount are guesses and the
+  camera animation (`mianstorybingyicamera`) is not played.
 - Client events: 32700 on a scene actor (its own UID namespace) with one of the actor's `_iInteractID`, also counted as
   the dungeon message of that interaction's server-hosted action 210 `SendDungeonMessage` (the client never runs it);
   a walk into a server region (regionType 2; no client consumer registers them, so the client never reports them;
@@ -263,7 +269,7 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
   route of the message that completed it does not reserve the settlement's role locks. Scene actors are room props
   (`InstanceService.AddPropAsync`), removed at settlement and before the room's final cleanup.
 - Guessed (see each scene's "guessed" list): the corridor region that ends 1000201's first stage, Bobo's place there,
-  the jump and the ride as teleports, no exploding ant eggs, no seamless 1000201 to 1000301 transfer, which bell hides
+  the jump as a teleport, the ride to the depths as a walk of guide route 36 (see below), no exploding ant eggs, no seamless 1000201 to 1000301 transfer, which bell hides
   Katie (from both stories), a wrong guess changing nothing, the instrument retrieved within 4 m of mark point 37.
 - `DungeonTests.Scripted` resolves each scene against the client data, plays each one through its client events (wrong
   and premature events included) to a clear, and checks that the story step is delivered and the next one offered.

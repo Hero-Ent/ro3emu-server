@@ -342,6 +342,7 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
                     || CompanionUnit.Build(data, monsters, c.NpcId) == null)) return [];
             if (step.Story != 0 && data.Row("PlotInterpretation", step.Story) == null) return [];
             if (step.TeleportAfter != 0 && !map.Points.ContainsKey(step.TeleportAfter)) return [];
+            if (step.RideAfter != 0 && !map.GuidePaths.ContainsKey(step.RideAfter)) return [];
             foreach (var t in step.Complete.Concat(step.Ignore))
             {
                 bool known = t.Kind switch
@@ -474,6 +475,10 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
 
     /// <summary>The guide routes (m_kGuidePoints) of the scene's scene editor file.</summary>
     public IReadOnlyList<long> GuideRoutes(long scene) => worldData.Map(scene)?.GuideRoutes ?? [];
+
+    /// <summary>The points of a guide route of the scene (m_kGuidePoints), or null when it has none.</summary>
+    public IReadOnlyList<(float X, float Y, float Z)>? GuidePath(long scene, long route) =>
+        worldData.Map(scene)?.GuidePaths.TryGetValue(route, out var path) == true ? path : null;
 
     /// <summary>A scene-editor region (m_kRegins) of the scene's map.</summary>
     public MapRegion? SceneRegion(long scene, long region) =>

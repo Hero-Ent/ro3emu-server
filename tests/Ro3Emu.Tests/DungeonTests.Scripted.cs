@@ -170,10 +170,13 @@ public sealed partial class DungeonTests
         Assert.DoesNotContain(Service<World>().AllUnits(), u => u.InstanceId == instance);
     }
 
+    private static readonly int[] RideWaypoints = [0, 4, 8, 13];
+
     [ClientDataFact]
     public async Task TheDeniroSceneOpensOneInteractionPerStepUntilTheRideToTheDepths()
     {
         const long scene = 1000301;
+        Service<IOptions<ServerOptions>>().Value.ScriptedScenePacePercent = 10; // the ride lasts about 28 s at full pace
         await using var alice = await InWorld("Alice");
         await Gm(alice, "!quest accept 10104300"); // Explore the Ant Queen's Nest: [101018, 1000301, 1]
         Assert.Equal(0, await Enter(alice, new EnterDungeonReq { SceneEntry = scene }));
@@ -226,6 +229,19 @@ public sealed partial class DungeonTests
             && APIErrorMsg.Parser.ParseFrom(e.Body).OriginMsgId == WorldCoreService.TeleportObject);
         var result = await Next(alice, DungeonService.Result, DungeonResNotify.Parser);
         Assert.Equal((DungeonRes)1, result.Res);
+        // The ride (inferred): the player was moved from the start of guide 36 to its end in forced positions.
+        var route = Service<WorldData>().Map(scene)!.GuidePaths[36];
+        var moves = alice.Inbox.Snapshot().Where(e => e.IsGame(GameAoiSink.MovementChange))
+            .Select(e => MovementChangeNtf.Parser.ParseFrom(e.Body)).Where(m => m.Uid == Session(alice).Role!.Id && m.MovementInfo?.Pos != null)
+            .Select(m => m.MovementInfo.Pos).ToList();
+        int Reached(int waypoint) => moves.FindIndex(m => MonsterService.Distance(m.X, m.Z, route[waypoint].X, route[waypoint].Z) < 1.5f);
+        int[] passed = [.. RideWaypoints.Select(Reached)];
+        Assert.All(passed, i => Assert.True(i >= 0, "a waypoint was never reached"));
+        Assert.Equal(passed.Order(), passed); // in route order
+        // ... and the Deniro walked it too, ending where the route ends.
+        Assert.Contains(alice.Inbox.Snapshot().Where(e => e.IsGame(GameAoiSink.MovementChange))
+            .Select(e => MovementChangeNtf.Parser.ParseFrom(e.Body)).Where(m => m.Uid == deniro.Uid && m.MovementInfo?.Pos != null)
+            .Select(m => m.MovementInfo.Pos), m => MonsterService.Distance(m.X, m.Z, route[^1].X, route[^1].Z) < 1.5f);
         var end = Service<WorldData>().Map(scene)!.Points[31]; // the ride ends in the end region
         Assert.True(MonsterService.Distance(Session(alice).Position.X, Session(alice).Position.Z, end.X, end.Z) < 1);
         await StoryMovesOn(alice, 10104300, 10104310);
