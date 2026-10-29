@@ -247,6 +247,12 @@ public sealed class FeedbackOptions
 
     /// <summary>Minimum seconds between two reports of one account.</summary>
     public int CooldownSeconds { get; set; } = 5;
+
+    /// <summary>
+    /// A Discord channel webhook (https://discord.com/api/webhooks/...): each stored report is also posted there. Unset
+    /// keeps reports in the file only. The URL lets anyone post to that channel, so keep it out of committed config.
+    /// </summary>
+    public string? DiscordWebhookUrl { get; set; }
 }
 
 /// <summary>
