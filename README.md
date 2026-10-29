@@ -79,6 +79,11 @@ RO3Emu is built in the open. Thank you to everyone who sends fixes and reports b
 - **Found a bug?** [Open an issue](https://github.com/aethai/ro3emu-server/issues/new/choose), or use the Feedback button in the game menu on a hosted server.
 - **Want to help?** Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [developer guide](docs/development.md).
 
+**Community projects** (maintained outside this repository, by their authors):
+
+- [ro3-cpanel](https://github.com/soyerno/ro3-cpanel): a web control panel for server operators (accounts, characters, economy log, GM tools).
+- [ro3-emu-launcher](https://github.com/soyerno/ro3-emu-launcher): a desktop launcher with auto-patching, separate from `src/Ro3Emu.Launcher`.
+
 <details>
 <summary><b>For developers</b></summary>
 
