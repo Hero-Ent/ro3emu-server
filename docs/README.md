@@ -16,6 +16,7 @@
 - [Tests](guide/testing.md): content tests on your exported data, rule tests on the invented fixture that CI runs
 - [Config tables](guide/config-tables.md): the typed views of the client's tables and the startup check of the export
 - [Security model](systems/security.md): what the server exposes, what it trusts, and how to report a vulnerability
+- [Account bans](systems/account-bans.md): the `account_ban` table the admin panel writes and where the server checks it
 
 ## Systems: how each part is implemented
 

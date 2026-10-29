@@ -150,7 +150,8 @@ public sealed partial class AccountStore : IDisposable
         catch { db.Dispose(); throw; }
     }
 
-    public enum LoginResult { Ok, Registered, BadPassword }
+    /// <summary>Banned: the credential matched (or registered the name) but the account has an active ban.</summary>
+    public enum LoginResult { Ok, Registered, BadPassword, Banned }
 
     private bool OnLoop => _loop?.IsOnLoop == true || _metrics != null && ReferenceEquals(ServerMetrics.LoopOwner, _metrics);
     private DbWriter Writer { get { lock (_runtimeGate) { ObjectDisposedException.ThrowIf(_disposed, this); return _writer.Value; } } }
@@ -478,11 +479,12 @@ public sealed partial class AccountStore : IDisposable
     }
     public async Task<bool> VerifyAsync(string name, string password) => await VerifiedAccountAsync(name, password).ConfigureAwait(false) != null;
 
-    /// <summary>The account's stored name when the password matches, else null.</summary>
+    /// <summary>The account's stored name when the password matches and the account is not banned, else null.</summary>
     public async Task<string?> VerifiedAccountAsync(string name, string password)
     {
         var credentials = await ReadAsync<AccountCredentials?>(new AccountCredentialsRead(name)).ConfigureAwait(false);
-        return credentials != null && await MatchesAsync(password, credentials).ConfigureAwait(false) ? credentials.Name : null;
+        return credentials != null && await MatchesAsync(password, credentials).ConfigureAwait(false)
+            ? await UnlessBannedAsync(credentials.Name, "password").ConfigureAwait(false) : null;
     }
 
     public LoginResult Login(string name, string password)
@@ -495,9 +497,19 @@ public sealed partial class AccountStore : IDisposable
 
     /// <summary>
     /// Login or first-time registration. <see cref="SignIn.Account"/> is the account's stored name, which can differ
-    /// from <paramref name="name"/> in letter case; tokens and sessions must carry it, never the typed spelling.
+    /// from <paramref name="name"/> in letter case; tokens and sessions must carry it, never the typed spelling. The ban
+    /// is checked only once the password matched (or the name was registered), so a wrong password answers the same
+    /// whether or not the account is banned.
     /// </summary>
     public async Task<SignIn> SignInAsync(string name, string password)
+    {
+        var signIn = await CheckOrRegisterAsync(name, password).ConfigureAwait(false);
+        if (signIn.Result == LoginResult.BadPassword) return signIn;
+        return await UnlessBannedAsync(signIn.Account, "sign-in").ConfigureAwait(false) == null
+            ? signIn with { Result = LoginResult.Banned } : signIn;
+    }
+
+    private async Task<SignIn> CheckOrRegisterAsync(string name, string password)
     {
         var existing = await ReadAsync<AccountCredentials?>(new AccountCredentialsRead(name)).ConfigureAwait(false);
         if (existing != null) return await Check(existing).ConfigureAwait(false);
@@ -549,10 +561,14 @@ public sealed partial class AccountStore : IDisposable
         return WriteAsync<string>(new AccountTokenPlan(kind, account, token, now, now + 86400));
     }
 
+    /// <summary>The token's account, or null when the token is unknown or expired or the account is banned.</summary>
     private string? ResolveToken(string kind, string? token)
-        => string.IsNullOrEmpty(token) ? null : ReadSync<string?>(new AccountTokenRead(kind, token, DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
-    private Task<string?> ResolveTokenAsync(string kind, string? token)
-        => string.IsNullOrEmpty(token) ? Task.FromResult<string?>(null) : ReadAsync<string?>(new AccountTokenRead(kind, token, DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
+        => string.IsNullOrEmpty(token) ? null
+            : UnlessBanned(ReadSync<string?>(new AccountTokenRead(kind, token, DateTimeOffset.UtcNow.ToUnixTimeSeconds())), kind + " token");
+    private async Task<string?> ResolveTokenAsync(string kind, string? token)
+        => string.IsNullOrEmpty(token) ? null
+            : await UnlessBannedAsync(await ReadAsync<string?>(new AccountTokenRead(kind, token, DateTimeOffset.UtcNow.ToUnixTimeSeconds()))
+                .ConfigureAwait(false), kind + " token").ConfigureAwait(false);
 
     public void Dispose()
     {
