@@ -208,7 +208,7 @@ public sealed partial class TaskService
         [TEquipment, _, _, var n] => n,
         [TCraft, _, _, var n, _] => n,
         [TSubmit, _, var n, _] => n,
-        _ => -1,
+        _ => EventTargetRequired(t), // TaskService.EventTargets.cs
     };
 
     private bool Supported(long[] t)
@@ -342,7 +342,7 @@ public sealed partial class TaskService
             TEchoLevelSum => EmblemService.Worn(s).Sum(i => i.Attrs?.GetValueOrDefault(1001) ?? 0),
             TLiveness => _character.CountOf(s, 5),
             TBattleMerit => BattleMeritPoints?.Invoke(s) ?? -1,
-            _ => -1,
+            _ => EventTargetValue(s, t), // TaskService.EventTargets.cs
         };
     }
 
