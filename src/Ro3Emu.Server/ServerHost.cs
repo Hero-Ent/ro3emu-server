@@ -173,6 +173,8 @@ public static class ServerHost
         // The voice relay PoC only opens a second listener when a port is configured for it.
         if (options.Voice.Port > 0) builder.Services.AddHostedService<Voice.VoiceGateServer>();
         builder.Services.AddHostedService<DatabaseBackup>();
+        builder.Services.AddSingleton<ReceiptRetention>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<ReceiptRetention>());
         builder.Services.AddSingleton<Game.Persistence.PositionPersistence>();
         builder.Services.AddSingleton<Game.Persistence.SettingsPersistence>();
         builder.Services.AddSingleton<RoleSystems>();
