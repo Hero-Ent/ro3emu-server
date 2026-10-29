@@ -101,6 +101,9 @@ public sealed class ServerOptions
     /// <summary>In-game bug reports (FeedbackService, docs/guide/feedback.md).</summary>
     public FeedbackOptions Feedback { get; set; } = new();
 
+    /// <summary>Database copies in DataDir/backups (DatabaseBackup).</summary>
+    public BackupOptions Backup { get; set; } = new();
+
     /// <summary>
     /// Credential checks (SDK login, character deletion) one remote address may make per minute; past it the server
     /// answers 429 without hashing. Each check costs a 100 000-round PBKDF2 hash, and logins register accounts.
@@ -261,6 +264,24 @@ public sealed class FeedbackOptions
     /// keeps reports in the file only. The URL lets anyone post to that channel, so keep it out of committed config.
     /// </summary>
     public string? DiscordWebhookUrl { get; set; }
+}
+
+/// <summary>
+/// Database copies (DatabaseBackup): one at start and one every <see cref="IntervalHours"/>. The receipt tables make the
+/// database grow with play, and every copy is a whole database, so all but the newest <see cref="Uncompressed"/> are
+/// gzip-compressed (about a quarter of the size).
+/// </summary>
+public sealed class BackupOptions
+{
+    /// <summary>Copies kept, compressed or not; older ones are deleted.</summary>
+    public int Keep { get; set; } = 20;
+
+    /// <summary>Hours between two copies.</summary>
+    public double IntervalHours { get; set; } = 6;
+
+    /// <summary>Newest copies left as plain .db files, ready to restore or open; at least 1. Set it to
+    /// <see cref="Keep"/> to compress nothing.</summary>
+    public int Uncompressed { get; set; } = 2;
 }
 
 /// <summary>
