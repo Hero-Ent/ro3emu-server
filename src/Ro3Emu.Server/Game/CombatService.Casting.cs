@@ -292,10 +292,15 @@ public sealed partial class CombatService
             return ErrorCodes.SkillDistance;
         float height = GameData.Int(row, "_iHeightRange") / 100f;
         if (height > 0 && MathF.Abs(origin.Y - targetPosition.Y) > height) return ErrorCodes.SkillHeight;
-        if (GameData.Int(row, "_iPassBlock") == 2 && _worldData.Map(s.SceneEntry)?.Nav is { } nav
-            && !nav.CanWalk(origin.X, origin.Y, origin.Z, targetPosition.X, targetPosition.Z)
-            && (release != 1 || monster == null
-                || BlockedMonsterEndpointAllowed?.Invoke(s, monster, origin, targetPosition) != true))
+        // The client's skill ray (RoSpace -> SceneSpaceDynamic.CheckInDirectPassFromTo with _iPassBlock as pass level) is
+        // stopped only by an active air wall whose gridLevel exceeds that level: static cells never stop it, because
+        // RoSpace builds the scene space without grid levels (RoSpace.LoadSpace -> SceneSpaceStatic.AddHeight, so
+        // SceneSpaceStatic.IsBlocked compares level 0). Air walls are switched on by dungeon variable 133 CAirWallList,
+        // which this server sets nowhere, so on an open map a tree or a wall corner between caster and target refuses
+        // nothing (auto-combat kept re-casting at a target the client saw as free). A siege keeps its (inferred) walls
+        // through SkillLineBlocked.
+        if (new SkillConfig(row).PassBlock == 2
+            && SkillLineBlocked?.Invoke(s, release == 1 ? monster : null, origin, targetPosition) == true)
             return ErrorCodes.SkillBlocked;
         return 0;
     }
