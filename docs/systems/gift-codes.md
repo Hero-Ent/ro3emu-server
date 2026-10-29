@@ -24,8 +24,10 @@ them, and sends the items to the player's mailbox once.
 
 `POST /gift-card/use/v2` on the HTTP port.
 
-- It is public and rate limited: `Ro3Emu:GiftCodeAttemptsPerMinute` attempts per remote address and per account
-  (default 10). Loopback is exempt unless `LoginLimitIncludesLoopback` is set.
+- It is public and rate limited: `Ro3Emu:GiftCodeAttemptsPerMinute` attempts per remote address (default 10), and the
+  same number of authenticated attempts per account. A request whose token does not match its `account_id` only spends
+  the address budget, so nobody can use up another account's attempts. Loopback is exempt from the address budget unless
+  `LoginLimitIncludesLoopback` is set.
 - The body may be at most 8 KB.
 - Every answer is HTTP 200 with the JSON above. The client treats any other response as a network error.
 
@@ -33,7 +35,7 @@ A request is accepted only when all of these hold:
 
 1. `account_token` resolves to a live engine sign of the account named by `account_id`.
 2. `role_id` is a role of that account that has not been deleted.
-3. The code exists, is enabled and is within its dates.
+3. The code exists, its number columns hold numbers, it is enabled and it is within its dates.
 4. The code is not used up, overall or for this account.
 5. Every item entry exists in `ItemConfig`.
 
@@ -84,7 +86,7 @@ was used, but must never write it.
 
 | column | meaning |
 |---|---|
-| `redemption_key` | primary key: `giftcode:<code>:<account>` for an account's first use, then `…:<n>`; also the mail's delivery key |
+| `redemption_key` | primary key: `giftcode:<length of code>:<code>:<account>` for an account's first use, then `…:<n>`; also the mail's delivery key (the length keeps a `:` in a code or an account name from making two keys equal) |
 | `code` | the code as stored in `gift_code` |
 | `account` | the account name |
 | `role_id` | the role that received the mail |
@@ -99,6 +101,8 @@ The client does not establish any of these:
 - the refusal codes 1961-1972, all the messages, and the mail's title and body;
 - the trimmed, case-insensitive match, and the 64-character limit;
 - the start and expiry boundaries (start inclusive, expiry exclusive);
-- answering a repeated request for a use already granted with 1969 instead of 1959;
+- answering a repeated request for a use already granted with 1969 instead of 1959 (two identical requests that
+  arrive at the same moment may both answer 1959; the items are still granted once);
+- refusing a code (1970) whose number columns hold something other than a number, instead of reading it as 0;
 - not checking `game_code` and the `GameCode` header, and accepting a body without a JSON content type;
 - the rate limit and the body size limit.

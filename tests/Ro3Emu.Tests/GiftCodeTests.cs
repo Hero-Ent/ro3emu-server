@@ -4,7 +4,10 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Options;
+using Ro3Emu.Server;
 using Ro3Emu.Server.Accounts;
+using Ro3Emu.Server.Accounts.Persistence;
 using Ro3Emu.Server.Game;
 using Ro3Emu.Server.Http;
 
@@ -70,6 +73,10 @@ public sealed class GiftCodeTests(GiftCodeTests.HostFixture fixture) : IClassFix
         return Convert.ToInt64(cmd.ExecuteScalar(), CultureInfo.InvariantCulture);
     }
 
+    /// <summary>The redemption and mail delivery key of an account's use of a code.</summary>
+    private static string Key(string code, string account, int use = 1) =>
+        $"giftcode:{code.Length}:{code}:{account}" + (use > 1 ? $":{use}" : "");
+
     private static long Redemptions(SyntheticHost host, string code) =>
         Scalar(host, "SELECT COUNT(*) FROM gift_code_redemption WHERE code=$c", ("$c", code));
 
@@ -113,7 +120,7 @@ public sealed class GiftCodeTests(GiftCodeTests.HostFixture fixture) : IClassFix
         Assert.Equal(HttpStatusCode.OK, status);
         Assert.Equal(ErrorCodes.GiftCardUseSuccess, result);
         Assert.False(string.IsNullOrWhiteSpace(message));
-        var letter = Assert.Single(Letters(player.Role, $"giftcode:{code}:{player.Account}"));
+        var letter = Assert.Single(Letters(player.Role, Key(code, player.Account)));
         Assert.Equal([new MailService.Attachment(Potion, 3), new MailService.Attachment(Herb, 1)], letter.Attachments);
         Assert.Equal(1, Redemptions(_host, code));
         Assert.Equal(player.Role, Scalar(_host, "SELECT role_id FROM gift_code_redemption WHERE code=$c", ("$c", code)));
@@ -129,7 +136,7 @@ public sealed class GiftCodeTests(GiftCodeTests.HostFixture fixture) : IClassFix
         Assert.Equal(ErrorCodes.GiftCardUseSuccess, (await RedeemAsync(player, code)).Code);
         Assert.Equal(ErrorCodes.GiftCardAlreadyRedeemed, (await RedeemAsync(player, code)).Code);
 
-        Assert.Single(Letters(player.Role, $"giftcode:{code}:{player.Account}"));
+        Assert.Single(Letters(player.Role, Key(code, player.Account)));
         Assert.Equal(1, Redemptions(_host, code));
     }
 
@@ -148,9 +155,9 @@ public sealed class GiftCodeTests(GiftCodeTests.HostFixture fixture) : IClassFix
         Assert.Equal(ErrorCodes.GiftCardUseSuccess, (await RedeemAsync(player, once)).Code);
         Assert.Equal(ErrorCodes.GiftCardAlreadyRedeemed, (await RedeemAsync(alt, once)).Code);
 
-        Assert.Single(Letters(player.Role, $"giftcode:{twice}:{player.Account}"));
-        Assert.Single(Letters(alt.Role, $"giftcode:{twice}:{player.Account}:2"));
-        Assert.Empty(Letters(alt.Role, $"giftcode:{once}:{player.Account}"));
+        Assert.Single(Letters(player.Role, Key(twice, player.Account)));
+        Assert.Single(Letters(alt.Role, Key(twice, player.Account, 2)));
+        Assert.Empty(Letters(alt.Role, Key(once, player.Account)));
         Assert.Equal(2, Redemptions(_host, twice));
         Assert.Equal(1, Redemptions(_host, once));
     }
@@ -166,7 +173,7 @@ public sealed class GiftCodeTests(GiftCodeTests.HostFixture fixture) : IClassFix
         var late = await PlayerAsync(_host);
         Assert.Equal(ErrorCodes.GiftCardExhausted, (await RedeemAsync(late, code)).Code);
 
-        Assert.Empty(Letters(late.Role, $"giftcode:{code}:{late.Account}"));
+        Assert.Empty(Letters(late.Role, Key(code, late.Account)));
         Assert.Equal(2, Redemptions(_host, code));
     }
 
@@ -179,7 +186,7 @@ public sealed class GiftCodeTests(GiftCodeTests.HostFixture fixture) : IClassFix
 
         Assert.Equal(ErrorCodes.GiftCardUseSuccess, (await RedeemAsync(player, "  " + code.ToLowerInvariant() + " ")).Code);
 
-        Assert.Single(Letters(player.Role, $"giftcode:{code}:{player.Account}"));
+        Assert.Single(Letters(player.Role, Key(code, player.Account)));
     }
 
     [Fact]
@@ -309,5 +316,70 @@ public sealed class GiftCodeTests(GiftCodeTests.HostFixture fixture) : IClassFix
         Assert.True(limiter.TryAcquire(IPAddress.Loopback, "acct"));
         Assert.False(limiter.TryAcquire(IPAddress.Loopback, "acct"));
         Assert.True(limiter.TryAcquire(IPAddress.Loopback, "another"));
+    }
+
+    // Verifier B1: a panel-written entry or count that is not a JSON number is refused as JSON, not an HTTP 500.
+    [Theory]
+    [InlineData("[[\"1000000\",1]]")]
+    [InlineData("[[1000000,\"1\"]]")]
+    [InlineData("[[null,1]]")]
+    [InlineData("[[true,1]]")]
+    [InlineData("[[{},1]]")]
+    [InlineData("[[[],1]]")]
+    public async Task ItemsThatAreNotNumbersAreRefusedAsJson(string items)
+    {
+        string code = Unique("NN");
+        Panel(_host, code, items);
+        var player = await PlayerAsync(_host);
+
+        var (status, result, _) = await RedeemAsync(player, code);
+
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal(ErrorCodes.GiftCardInvalidItems, result);
+        Assert.Equal(0, Redemptions(_host, code));
+    }
+
+    // Verifier A6: a panel number column holding text closes the code instead of opening it.
+    [Theory]
+    [InlineData("max_uses", "'abc'")]
+    [InlineData("per_account", "'x'")]
+    [InlineData("starts_utc", "'tomorrow'")]
+    [InlineData("expires_utc", "'never'")]
+    public async Task APanelNumberThatIsTextClosesTheCode(string column, string value)
+    {
+        string code = Unique("TX");
+        Panel(_host, code, $"[[{Potion},1]]");
+        Scalar(_host, $"UPDATE gift_code SET {column}={value} WHERE code=$c; SELECT changes()", ("$c", code));
+        var player = await PlayerAsync(_host);
+
+        var (_, result, _) = await RedeemAsync(player, code);
+
+        Assert.Equal(ErrorCodes.GiftCardInvalidItems, result);
+        Assert.Equal(0, Redemptions(_host, code));
+    }
+
+    // Verifier A4: names with ':' cannot make two different (code, account) pairs share a redemption key.
+    [Fact]
+    public void RedemptionKeysOfDifferentCodesAndAccountsNeverCollide()
+    {
+        var withColon = new GiftCodeState("a:b", "[]", 0, 1, null, null, false, 0, 0);
+        var plain = new GiftCodeState("a", "[]", 0, 1, null, null, false, 0, 0);
+        Assert.NotEqual(withColon.NextKey("c"), plain.NextKey("b:c"));
+    }
+
+    // Verifier A1: requests with someone else's account_id and a wrong token do not spend that account's budget.
+    [Fact]
+    public async Task BadTokensDoNotSpendTheNamedAccountsBudget()
+    {
+        string code = Unique("BG");
+        Panel(_host, code, $"[[{Potion},1]]");
+        var victim = await PlayerAsync(_host);
+        var attacker = victim with { Token = "not-a-sign" };
+        int budget = _host.Service<IOptions<ServerOptions>>().Value.GiftCodeAttemptsPerMinute;
+
+        for (int i = 0; i <= budget; i++)
+            Assert.Equal(ErrorCodes.GiftCardBadCredentials, (await RedeemAsync(attacker, code)).Code);
+
+        Assert.Equal(ErrorCodes.GiftCardUseSuccess, (await RedeemAsync(victim, code)).Code);
     }
 }

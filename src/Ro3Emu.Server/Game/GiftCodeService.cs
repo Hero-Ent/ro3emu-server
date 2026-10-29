@@ -4,6 +4,7 @@ using Ro3Emu.Server.Accounts;
 using Ro3Emu.Server.Accounts.Persistence;
 using Ro3Emu.Server.Data;
 using Ro3Emu.Server.Data.Config;
+using Ro3Emu.Server.Http;
 
 namespace Ro3Emu.Server.Game;
 
@@ -22,6 +23,7 @@ public readonly record struct GiftCodeAnswer(int Code, string Message);
 /// offline role or a full bag and a replay never grants twice. Every rule past the credentials is (inferred).
 /// </summary>
 public sealed partial class GiftCodeService(AccountStore accounts, RoleStore roles, MailService mail, GameData data,
+    GiftCodeLimiter limiter,
     TimeProvider clock, ILogger<GiftCodeService> log)
 {
     /// <summary>(inferred) The longest code text, as gift_code's CHECK allows; longer input is an unknown code.</summary>
@@ -31,10 +33,27 @@ public sealed partial class GiftCodeService(AccountStore accounts, RoleStore rol
     public const string MailTitle = "Gift code reward";
     public static string MailBody(string code) => $"Here are the rewards of gift code {code}.";
 
+    /// <summary>
+    /// One redemption request. Any unexpected failure still answers JSON (1972): the client treats every other response
+    /// as a network error.
+    /// </summary>
     public async Task<GiftCodeAnswer> RedeemAsync(GiftCodeRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        try { return await RedeemCoreAsync(request); }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            LogRequestFailed(log, e, request.Code ?? "");
+            return Answer(ErrorCodes.GiftCardFailed);
+        }
+    }
+
+    private async Task<GiftCodeAnswer> RedeemCoreAsync(GiftCodeRequest request)
+    {
         if (await AccountAsync(request) is not { } account) return Answer(ErrorCodes.GiftCardBadCredentials);
+        // (inferred) The account budget counts only authenticated attempts, so a wrong token naming someone else's
+        // account cannot use up that account's attempts; unauthenticated guessing is bounded by the address budget.
+        if (!limiter.TryAcquire(null, account)) return Answer(ErrorCodes.GiftCardRateLimited);
         if (await RoleAsync(request.RoleId, account) is not { } role) return Answer(ErrorCodes.GiftCardRoleNotOwned);
         string code = request.Code?.Trim() ?? "";
         if (code.Length is 0 or > MaxCodeLength) return Answer(ErrorCodes.GiftCardUnknown);
@@ -78,6 +97,7 @@ public sealed partial class GiftCodeService(AccountStore accounts, RoleStore rol
             foreach (var pair in json.RootElement.EnumerateArray())
             {
                 if (pair.ValueKind != JsonValueKind.Array || pair.GetArrayLength() != 2
+                    || pair[0].ValueKind != JsonValueKind.Number || pair[1].ValueKind != JsonValueKind.Number
                     || !pair[0].TryGetInt32(out int entry) || !pair[1].TryGetInt32(out int count)
                     || count <= 0 || ItemConfig.Get(data, entry) == null)
                     return null;
@@ -147,4 +167,7 @@ public sealed partial class GiftCodeService(AccountStore accounts, RoleStore rol
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Gift code {Code} redeemed by {Account} for role {Role} ({Key})")]
     private static partial void LogRedeemed(ILogger logger, string code, string account, long role, string key);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Gift code request for {Code} failed")]
+    private static partial void LogRequestFailed(ILogger logger, Exception exception, string code);
 }

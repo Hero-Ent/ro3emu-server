@@ -40,15 +40,16 @@ internal sealed class GiftCodeSchemaPlan : DbPlan
 
 /// <summary>A gift_code row as stored, with the uses counted from gift_code_redemption.</summary>
 public sealed record GiftCodeState(string Code, string Items, long MaxUses, long PerAccount, long? StartsUtc,
-    long? ExpiresUtc, bool Disabled, long TotalUses, long AccountUses)
+    long? ExpiresUtc, bool Disabled, long TotalUses, long AccountUses, bool Malformed = false)
 {
     /// <summary>
     /// The first rule the code breaks for one more use by this account at <paramref name="now"/> (unix seconds), or
-    /// null. Order: disabled, not started, expired, total uses, uses of this account. (inferred) starts_utc is the
+    /// null. Order: a number column holding something else (malformed, refused rather than read as 0), disabled, not started, expired, total uses, uses of this account. (inferred) starts_utc is the
     /// first second a code works, expires_utc the first second it no longer does; max_uses 0 means unlimited.
     /// </summary>
     public int? Refusal(long now) =>
-        Disabled ? ErrorCodes.GiftCardDisabled
+        Malformed ? ErrorCodes.GiftCardInvalidItems
+        : Disabled ? ErrorCodes.GiftCardDisabled
         : StartsUtc is { } starts && now < starts ? ErrorCodes.GiftCardNotStarted
         : ExpiresUtc is { } expires && now >= expires ? ErrorCodes.GiftCardExpired
         : MaxUses > 0 && TotalUses >= MaxUses ? ErrorCodes.GiftCardExhausted
@@ -56,11 +57,11 @@ public sealed record GiftCodeState(string Code, string Items, long MaxUses, long
         : null;
 
     /// <summary>
-    /// The delivery key of this account's next use, which is also its redemption_key: giftcode:&lt;code&gt;:&lt;account&gt;
+    /// The delivery key of this account's next use, which is also its redemption_key: giftcode:&lt;code length&gt;:&lt;code&gt;:&lt;account&gt; (the length keeps a ':' in a code or an account name from making two keys equal)
     /// for the first use, with :&lt;n&gt; appended from the second (codes allowing several uses per account).
     /// </summary>
     public string NextKey(string account) => AccountUses == 0
-        ? $"giftcode:{Code}:{account}" : $"giftcode:{Code}:{account}:{AccountUses + 1}";
+        ? $"giftcode:{Code.Length}:{Code}:{account}" : $"giftcode:{Code.Length}:{Code}:{account}:{AccountUses + 1}";
 
     internal static GiftCodeState? Read(SqliteConnection db, SqliteTransaction? tx, string code, string account)
     {
@@ -69,7 +70,9 @@ public sealed record GiftCodeState(string Code, string Items, long MaxUses, long
         cmd.CommandText = """
             SELECT g.code, g.items, g.max_uses, g.per_account, g.starts_utc, g.expires_utc, g.disabled,
                 (SELECT COUNT(*) FROM gift_code_redemption r WHERE r.code = g.code),
-                (SELECT COUNT(*) FROM gift_code_redemption r WHERE r.code = g.code AND r.account = $account)
+                (SELECT COUNT(*) FROM gift_code_redemption r WHERE r.code = g.code AND r.account = $account),
+                typeof(g.max_uses) || typeof(g.per_account) || typeof(g.disabled) = 'integerintegerinteger'
+                    AND typeof(g.starts_utc) IN ('integer','null') AND typeof(g.expires_utc) IN ('integer','null')
             FROM gift_code g WHERE g.code = $code
             """;
         cmd.Parameters.AddWithValue("$code", code);
@@ -78,7 +81,7 @@ public sealed record GiftCodeState(string Code, string Items, long MaxUses, long
         if (!reader.Read()) return null;
         return new(reader.GetString(0), reader.IsDBNull(1) ? "" : reader.GetString(1), reader.GetInt64(2),
             reader.GetInt64(3), reader.IsDBNull(4) ? null : reader.GetInt64(4), reader.IsDBNull(5) ? null : reader.GetInt64(5),
-            reader.GetInt64(6) != 0, reader.GetInt64(7), reader.GetInt64(8));
+            reader.GetInt64(6) != 0, reader.GetInt64(7), reader.GetInt64(8), Malformed: reader.GetInt64(9) == 0);
     }
 }
 
