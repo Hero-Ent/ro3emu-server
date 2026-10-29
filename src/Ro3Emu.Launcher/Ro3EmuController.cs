@@ -23,7 +23,7 @@ public sealed class Ro3EmuController : ILauncherController, IUiSink
     readonly Action<object> _post;
     readonly Func<string, string?> _pickFolder;
     readonly Action<bool> _gameRunningChanged;
-    readonly UserSettings _user = UserSettings.Load();
+    readonly UserSettings _user = UserSettings.ForApp();
     readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(20) };
     readonly HttpClient _ping = new() { Timeout = TimeSpan.FromSeconds(3) };
     readonly GitHubReleases _github;
