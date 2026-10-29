@@ -208,7 +208,7 @@ public sealed partial class TaskService
         [TEquipment, _, _, var n] => n,
         [TCraft, _, _, var n, _] => n,
         [TSubmit, _, var n, _] => n,
-        _ => -1,
+        _ => MiscRequired(t), // TaskService.MiscTargets.cs
     };
 
     private bool Supported(long[] t)
@@ -245,7 +245,7 @@ public sealed partial class TaskService
             TLeagueJoin => t[1] is >= 0 and <= 3,
             TLeagueScore => t[1] is >= 0 and <= 2 && t[2] >= 0,
             TSiegeScore => t[1] >= 0,
-            _ => true, // Only the explicit formatter cases above can reach here.
+            _ => MiscSupported(t), // Only the explicit formatter cases above can reach here.
         };
     }
 
@@ -342,7 +342,7 @@ public sealed partial class TaskService
             TEchoLevelSum => EmblemService.Worn(s).Sum(i => i.Attrs?.GetValueOrDefault(1001) ?? 0),
             TLiveness => _character.CountOf(s, 5),
             TBattleMerit => BattleMeritPoints?.Invoke(s) ?? -1,
-            _ => -1,
+            _ => MiscPassive(s, t),
         };
     }
 
