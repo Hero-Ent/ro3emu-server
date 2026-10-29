@@ -14,7 +14,7 @@ public sealed class LauncherConfig
     [JsonPropertyName("serverName")] public string ServerName { get; set; } = "RO3Emu";
     /// <summary>
     /// The hero picture: a file beside the exe, or a URL relative to the repository (an absolute URL works too).
-    /// Null = &lt;repository&gt;/hero.jpg when it exists, else the built-in parchment map with <see cref="ServerName"/>.
+    /// Null = &lt;repository&gt;/hero.jpg when it exists, else the page's built-in sky.
     /// </summary>
     [JsonPropertyName("hero")] public string? Hero { get; set; }
     /// <summary>The title bar's links (Website, Discord, Wiki…); none by default.</summary>
@@ -42,7 +42,7 @@ public sealed class LauncherLink
 {
     [JsonPropertyName("label")] public string Label { get; set; } = "";
     [JsonPropertyName("url")] public string Url { get; set; } = "";
-    /// <summary>Optional: globe, chat, book, trophy, flag or link; otherwise the page picks one from the label.</summary>
+    /// <summary>Optional: globe, chat, book, trophy, flag, code or link; otherwise the page picks one from the label.</summary>
     [JsonPropertyName("icon")] public string? Icon { get; set; }
 }
 

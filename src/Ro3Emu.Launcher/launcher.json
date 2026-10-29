@@ -8,5 +8,5 @@
   // The name on the title bar, the built-in hero, the tray and the shortcuts.
   "serverName": "RO3Emu"
   // Optional: "hero" (an image beside the exe or a URL relative to the repository; default <repository>/hero.jpg,
-  // else the built-in parchment map) and "links" ([ { "label": "Discord", "url": "https://…" } ]). docs/guide/launcher.md
+  // else the built-in sky) and "links" ([ { "label": "Discord", "url": "https://…" } ]). docs/guide/launcher.md
 }

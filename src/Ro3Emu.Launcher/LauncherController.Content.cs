@@ -42,7 +42,10 @@ public sealed partial class LauncherController
         }
     }
 
-    /// <summary>news.json in the repository root: { "items": [ { tag, color, date, title, text, url } ] }, newest first.</summary>
+    /// <summary>
+    /// news.json in the repository root: { "items": [ { tag, color, date, title, text, url } ] }, newest first. Without
+    /// it the page shows the server's name and status only.
+    /// </summary>
     async Task LoadNewsAsync()
     {
         try
@@ -50,7 +53,7 @@ public sealed partial class LauncherController
             byte[]? bytes = await _repo.TryGetBytesAsync("news.json", _life.Token);
             if (bytes is null) return;
             using var json = JsonDocument.Parse(bytes);
-            if (json.RootElement.TryGetProperty("items", out var items))
+            if (json.RootElement.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
                 _post(new { type = "news", items = items.Clone() });
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException or PatcherException) { }
