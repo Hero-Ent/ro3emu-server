@@ -22,11 +22,14 @@ namespace Ro3Android
         }
 
         /// <summary>level0: an EventSystem for the launcher's buttons and a GameObject carrying Ro3Startup, which loads
-        /// the launcher prefab from the VFS.</summary>
+        /// the launcher prefab from the VFS. The input module is the Input System's: only it raises
+        /// BaseInputModule.OnPointerProgress, the event UIDragButton.CheckPress starts a drag from (the skill bar's
+        /// "drag skills to the slots"); StandaloneInputModule never raises it, so no drag began.</summary>
         private static void StartGame()
         {
             var eventSystem = Type.GetType("UnityEngine.EventSystems.EventSystem, UnityEngine.UI");
-            var inputModule = Type.GetType("UnityEngine.EventSystems.StandaloneInputModule, UnityEngine.UI");
+            var inputModule = Type.GetType("UnityEngine.InputSystem.UI.InputSystemUIInputModule, Unity.InputSystem")
+                ?? Type.GetType("UnityEngine.EventSystems.StandaloneInputModule, UnityEngine.UI");
             if (eventSystem != null && UnityEngine.Object.FindObjectOfType(eventSystem) == null)
             {
                 var es = new GameObject("EventSystem");

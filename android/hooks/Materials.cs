@@ -4,8 +4,8 @@ using UnityEngine;
 namespace Ro3Android.Hooks
 {
     /// <summary>
-    /// new Material(shader) for the scenery code (android\tools\AndroidPatch.cs redirects HappyEngine.CustomScene's calls
-    /// here). It builds its materials from the PC shaders and then sets their textures; on a shader with no programs for
+    /// new Material(shader) for the game's code (android\tools\AndroidPatch.cs redirects every game assembly's calls
+    /// here). The scenery builds its materials from the PC shaders and then sets their textures; on a shader with no programs for
     /// this GPU those SetTexture calls are lost, so the port's stand-in has to be in place before them. Remap is set by
     /// the shell (Ro3Android.ShaderFixer), which knows the stand-ins.
     /// </summary>
@@ -33,11 +33,7 @@ namespace Ro3Android.Hooks
                 if (asset is Material material) { Fix(material); return; }
                 if (!(asset is GameObject prefab)) return;
                 Clicks.EnableDeadClickTargets(prefab);
-                foreach (var renderer in prefab.GetComponentsInChildren<Renderer>(true))
-                    foreach (var m in renderer.sharedMaterials) Fix(m);
-                if (Graphic == null || GraphicMaterial == null) return;
-                foreach (var graphic in prefab.GetComponentsInChildren(Graphic, true))
-                    Fix(GraphicMaterial.GetValue(graphic) as Material);
+                FixObject(prefab);
             }
             catch (Exception e)
             {
@@ -45,9 +41,41 @@ namespace Ro3Android.Hooks
             }
         }
 
+        /// <summary>
+        /// What Object.Instantiate returned in the game's code (android\tools\AndroidPatch.cs adds the call after each
+        /// one). Every effect reaches the screen through it, whatever loaded its prefab: the UI effects (level up, the
+        /// city name, the skill bar) come by paths that skip DoLoadCompleted, and only the once-a-second scan fixed
+        /// their materials, after their first frames were drawn magenta.
+        /// </summary>
+        public static void FixInstance(object instance)
+        {
+            if (Fix == null) return;
+            try
+            {
+                if (instance is Material material) Fix(material);
+                else if (instance is GameObject go) FixObject(go);
+                else if (instance is Component component && component != null) FixObject(component.gameObject);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Ro3Android] material fix on instantiate failed: {e.Message}");
+            }
+        }
+
+        private static void FixObject(GameObject root)
+        {
+            if (root == null) return;
+            foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
+                foreach (var m in renderer.sharedMaterials) Fix(m);
+            if (Graphic == null || GraphicMaterial == null) return;
+            foreach (var graphic in root.GetComponentsInChildren(Graphic, true))
+                Fix(GraphicMaterial.GetValue(graphic) as Material);
+        }
+
         public static Material Create(Shader shader)
         {
             var replacement = Remap?.Invoke(shader);
+            if (replacement != null) Report(shader);
             return new Material(replacement != null ? replacement : shader);
         }
 
@@ -56,8 +84,21 @@ namespace Ro3Android.Hooks
         {
             var copy = new Material(source);
             var replacement = Remap?.Invoke(copy.shader);
-            if (replacement != null) copy.shader = replacement;
+            if (replacement != null)
+            {
+                Report(copy.shader);
+                copy.shader = replacement;
+            }
             return copy;
+        }
+
+        private static readonly System.Collections.Generic.HashSet<string> Reported = new System.Collections.Generic.HashSet<string>();
+
+        // Which shaders the game's code builds materials from at run time: each one is a material the scan may never see.
+        private static void Report(Shader shader)
+        {
+            var name = shader ? shader.name : "null";
+            if (Reported.Add(name)) Debug.Log($"[Ro3Android] new Material with shader {name}: replaced");
         }
     }
 }

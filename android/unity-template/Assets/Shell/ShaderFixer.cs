@@ -19,6 +19,9 @@ namespace Ro3Android
         private readonly HashSet<string> _pcOnly = new HashSet<string>();
         private readonly HashSet<string> _reported = new HashSet<string>();
         private readonly HashSet<string> _errorMaterials = new HashSet<string>();
+        private readonly HashSet<string> _lateReported = new HashSet<string>();
+        private readonly Dictionary<int, Shader> _fine = new Dictionary<int, Shader>();
+        private int _scans;
         private Shader _fallback, _fallback3D, _invisible;
 
         /// <summary>The game's shader of each material this fixer swapped (by instance id), for UiDump's diagnostics.</summary>
@@ -115,9 +118,10 @@ namespace Ro3Android
             if (Time.realtimeSinceStartup < _next) return;
             _next = Time.realtimeSinceStartup + 1f;
             DisablePostProcessing();
+            _scans++;
             var watch = System.Diagnostics.Stopwatch.StartNew();
             var materials = Resources.FindObjectsOfTypeAll<Material>();
-            foreach (var material in materials) Fix(material);
+            foreach (var material in materials) Fix(material, late: true);
             if (watch.ElapsedMilliseconds > 10)
             {
                 Debug.Log($"[Ro3Android] shader scan {watch.ElapsedMilliseconds} ms over {materials.Length} materials");
@@ -126,17 +130,27 @@ namespace Ro3Android
 
         // Gives one material a shader this GPU runs. Called by the once-a-second scan (scene objects, anything missed) and,
         // through Ro3Android.Hooks.Materials.Fix, as soon as the game's resource loader hands out a material or a prefab:
-        // before its first frame, which an unsupported shader would draw magenta.
-        private void Fix(Material material)
+        // before its first frame, which an unsupported shader would draw magenta. late: found by the scan, so it may
+        // have been on screen with the game's shader for up to a second (an effect's first frames drawn magenta).
+        private void Fix(Material material) => Fix(material, late: false);
+
+        private void Fix(Material material, bool late)
         {
             if (material == null) return;
             var shader = material.shader;
             if (shader == null || shader == _fallback || shader == _fallback3D || shader == _invisible) return;
+            // Every Instantiate passes its copy's materials here: one already found fine is not looked at again (the
+            // scan still checks them all, in case the game swapped a shader since).
+            int id = material.GetInstanceID();
+            if (!late && _fine.TryGetValue(id, out var fineShader) && fineShader == shader) return;
             var name = shader.name;
             bool own = _ours.TryGetValue(name, out var replacement)
                 || (name.StartsWith("Soft Mask/") && _ours.TryGetValue(name.Substring("Soft Mask/".Length), out replacement));
-            if (own && shader == replacement) return;
-            if (!own && shader.isSupported && !_pcOnly.Contains(name) && name != "Hidden/InternalErrorShader") return;
+            if ((own && shader == replacement) || (!own && shader.isSupported && !_pcOnly.Contains(name) && name != "Hidden/InternalErrorShader"))
+            {
+                _fine[id] = shader;
+                return;
+            }
             // Blits and post effects draw a full-screen triangle with no vertex attributes: the fallback (position,
             // UV, colour) makes an invalid pipeline there, which crashes the Vulkan driver. Those stay as they are.
             bool fallbackOk = !own && !IsFullScreen(name);
@@ -154,6 +168,10 @@ namespace Ro3Android
             // Which assets lost their shader (drawn magenta, then as a plain quad): the next port to make.
             if (name == "Hidden/InternalErrorShader" && _errorMaterials.Add(material.GetInstanceID().ToString()) && _errorMaterials.Count <= 20)
                 Debug.Log($"[Ro3Android] error-shader material '{material.name}' tex={(material.mainTexture ? material.mainTexture.name : "none")} queue={material.renderQueue}");
+            // What escaped the loader hooks: each line names a material the player may have seen magenta. The first scan
+            // covers what loaded before the hooks were set, so it is left out.
+            if (late && _scans > 1 && _lateReported.Add(material.name + "|" + name))
+                Debug.Log($"[Ro3Android] late shader fix: material '{material.name}' shader {name} tex={(material.mainTexture ? material.mainTexture.name : "none")} -> {(own ? "port build" : fallbackOk ? kind + " stand-in" : "left unsupported")}");
             if (_reported.Add(name)) Debug.Log($"[Ro3Android] shader {name} -> {(own ? "port build" : fallbackOk ? kind.ToString() + " stand-in" : "left unsupported (full-screen)")}");
         }
     }

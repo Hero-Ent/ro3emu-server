@@ -4,6 +4,8 @@
 //   - Shader.Find -> Ro3Android.Hooks.Shaders (a placeholder instead of null for shaders not ported yet)
 //   - AssetBundle.LoadFromFile[Async] -> Ro3Android.Hooks.Bundles (retargets the PC bundles, loose or inside RO3V packs,
 //     to Android while loading)
+//   - Object.Instantiate -> its result also goes to Ro3Android.Hooks.Materials.FixInstance (shaders fixed before the
+//     copy's first frame: the UI effects drew magenta until the once-a-second scan)
 //   - unreachable instructions -> nop: Mono's JIT never looks at them, IL2CPP converts them and fails on IL the
 //     client's reconstruction left behind (a `ret` with an empty stack after a `br`, VersionNoticeUtil.GetResAsync)
 //   - HybridCLR.RuntimeApi's internal calls -> return LoadImageErrorCode.OK: they live in HybridCLR's own libil2cpp,
@@ -16,6 +18,7 @@
 // Usage: dotnet run AndroidPatch.cs -- <Managed dir> <Ro3Android.Hooks.dll>
 using Mono.Cecil;
 using Mono.Cecil.Cil;
+using Mono.Cecil.Rocks;
 using System.Text.RegularExpressions;
 
 var managed = args[0];
@@ -38,6 +41,7 @@ var materialCopy = hooks.MainModule.GetType("Ro3Android.Hooks.Materials").Method
 var unityPc = hooks.MainModule.GetType("Ro3Android.Hooks.Platform").Methods.Single(m => m.Name == "UnityPc");
 var luaLog = hooks.MainModule.GetType("Ro3Android.Hooks.Platform").Methods.Single(m => m.Name == "LuaLog");
 var fixLoaded = hooks.MainModule.GetType("Ro3Android.Hooks.Materials").Methods.Single(m => m.Name == "FixLoaded");
+var fixInstance = hooks.MainModule.GetType("Ro3Android.Hooks.Materials").Methods.Single(m => m.Name == "FixInstance");
 var luaOverride = hooks.MainModule.GetType("Ro3Android.Hooks.Lua").Methods.Single(m => m.Name == "OverridePath");
 var luaOverrideBytes = hooks.MainModule.GetType("Ro3Android.Hooks.Lua").Methods.Single(m => m.Name == "OverrideBytes");
 
@@ -51,7 +55,7 @@ foreach (var file in Directory.GetFiles(managed, "*.dll").OrderBy(f => f))
     if (skip.IsMatch(name)) continue;
     using var asm = AssemblyDefinition.ReadAssembly(new MemoryStream(File.ReadAllBytes(file)), new ReaderParameters { AssemblyResolver = resolver });
     MethodReference? target = null;
-    int redirected = 0, dead = 0, stubbed = 0, inits = 0, bundleLoads = 0, windowsCalls = 0, shaderFinds = 0, platformChecks = 0, materials = 0, luaOverrides = 0;
+    int redirected = 0, dead = 0, stubbed = 0, inits = 0, bundleLoads = 0, windowsCalls = 0, shaderFinds = 0, platformChecks = 0, materials = 0, luaOverrides = 0, instances = 0;
     foreach (var type in asm.MainModule.GetTypes())
         foreach (var method in type.Methods)
         {
@@ -155,17 +159,18 @@ foreach (var file in Directory.GetFiles(managed, "*.dll").OrderBy(f => f))
             }
             // The scenery builds its materials from PC shaders and sets their textures right after, which a shader
             // without programs for this GPU drops: new Material(Shader) -> Hooks.Materials.Create (stand-in first).
-            if (type.Namespace.StartsWith("HappyEngine.CustomScene"))
-                foreach (var inst in method.Body.Instructions)
-                    if (inst.OpCode == OpCodes.Newobj && inst.Operand is MethodReference ctor && ctor.DeclaringType.FullName == "UnityEngine.Material"
-                        && ctor.Parameters.Count == 1)
-                    {
-                        var from = ctor.Parameters[0].ParameterType.FullName;
-                        if (from != "UnityEngine.Shader" && from != "UnityEngine.Material") continue;
-                        inst.OpCode = OpCodes.Call;
-                        inst.Operand = asm.MainModule.ImportReference(from == "UnityEngine.Shader" ? materialCreate : materialCopy);
-                        materials++;
-                    }
+            // The UI builds them too (masks, blend modes, UI Extensions effects), some for a moment only: gone before the
+            // once-a-second scan, those were only ever drawn magenta. Every game assembly, then.
+            foreach (var inst in method.Body.Instructions)
+                if (inst.OpCode == OpCodes.Newobj && inst.Operand is MethodReference ctor && ctor.DeclaringType.FullName == "UnityEngine.Material"
+                    && ctor.Parameters.Count == 1)
+                {
+                    var from = ctor.Parameters[0].ParameterType.FullName;
+                    if (from != "UnityEngine.Shader" && from != "UnityEngine.Material") continue;
+                    inst.OpCode = OpCodes.Call;
+                    inst.Operand = asm.MainModule.ImportReference(from == "UnityEngine.Shader" ? materialCreate : materialCopy);
+                    materials++;
+                }
             foreach (var inst in method.Body.Instructions)
             {
                 if (inst.OpCode != OpCodes.Call || inst.Operand is not MethodReference mr) continue;
@@ -186,18 +191,50 @@ foreach (var file in Directory.GetFiles(managed, "*.dll").OrderBy(f => f))
                     bundleLoads++;
                 }
             }
+            // Every effect reaches the screen through Object.Instantiate, whatever loaded its prefab (the UI effects skip
+            // DoLoadCompleted, and only the once-a-second scan fixed them, after their first frames were drawn magenta):
+            //   Instantiate(...); -> Instantiate(...) dup [box T] call Hooks.Materials.FixInstance
+            instances += FixAfterInstantiate(method, fixInstance);
             dead += NopUnreachable(method.Body);
         }
-    if (redirected + dead + stubbed + inits + bundleLoads + windowsCalls + shaderFinds + platformChecks + materials == 0) continue;
+    if (redirected + dead + stubbed + inits + bundleLoads + windowsCalls + shaderFinds + platformChecks + materials + instances == 0) continue;
     var output = new MemoryStream();
     asm.Write(output);
     rewritten.Add((file, output.ToArray()));
-    Console.WriteLine($"{name}: streamingAssetsPath x{redirected}, unreachable instructions x{dead}, HybridCLR stubs x{stubbed}, initializers off x{inits}, bundle loads x{bundleLoads}, absent-native P/Invokes stubbed x{windowsCalls}, Shader.Find x{shaderFinds}, PC platform x{platformChecks}, scenery materials x{materials}, Lua overrides x{luaOverrides}");
+    Console.WriteLine($"{name}: streamingAssetsPath x{redirected}, unreachable instructions x{dead}, HybridCLR stubs x{stubbed}, initializers off x{inits}, bundle loads x{bundleLoads}, absent-native P/Invokes stubbed x{windowsCalls}, Shader.Find x{shaderFinds}, PC platform x{platformChecks}, new Material x{materials}, Lua overrides x{luaOverrides}, Instantiate x{instances}");
 }
 resolver.Dispose();
 foreach (var (file, bytes) in rewritten) File.WriteAllBytes(file, bytes);
 File.Copy(hooksPath, Path.Combine(managed, Path.GetFileName(hooksPath)), overwrite: true);
 Console.WriteLine($"android patch: {rewritten.Count} assemblies rewritten");
+
+// After each call to UnityEngine.Object.Instantiate, passes a copy of the result to fix (object -> void): dup, a box when
+// the result is the caller's own generic parameter, call. Stack-neutral, inserted after the call. The inserted bytes can
+// push a short branch (br.s, +-127 bytes) out of range, which Cecil writes as a wrong offset (IL2CPP's control-flow graph
+// then failed on the method): every branch is made long first and shortened again where it fits.
+static int FixAfterInstantiate(MethodDefinition method, MethodDefinition fixDefinition)
+{
+    if (!method.HasBody) return 0;
+    var calls = method.Body.Instructions.Where(i => (i.OpCode == OpCodes.Call || i.OpCode == OpCodes.Callvirt)
+        && i.Operand is MethodReference r && r.DeclaringType.FullName == "UnityEngine.Object" && r.Name == "Instantiate").ToList();
+    if (calls.Count == 0) return 0;
+    var fix = method.Module.ImportReference(fixDefinition);
+    method.Body.SimplifyMacros();
+    var il = method.Body.GetILProcessor();
+    foreach (var call in calls)
+    {
+        var callee = (MethodReference)call.Operand;
+        var returns = callee.ReturnType;
+        // Instantiate<T> declares !!0; the call site's argument is the type on the stack.
+        if (returns is GenericParameter p && p.Type == GenericParameterType.Method && callee is GenericInstanceMethod gim)
+            returns = gim.GenericArguments[p.Position];
+        il.InsertAfter(call, il.Create(OpCodes.Call, fix));
+        if (returns.IsGenericParameter) il.InsertAfter(call, il.Create(OpCodes.Box, returns));
+        il.InsertAfter(call, il.Create(OpCodes.Dup));
+    }
+    method.Body.OptimizeMacros();
+    return calls.Count;
+}
 
 // Replaces every instruction no path from the entry point or an exception handler reaches with a nop. Instructions are
 // kept (only their opcode changes), so branch targets and handler boundaries stay valid.
