@@ -176,6 +176,13 @@ public sealed class GameSession(PhonestChannel channel, TrafficLog traffic)
     /// <summary>GM override added to the speed attribute (113), not saved (!speed).</summary>
     public long SpeedBonus { get; set; }
 
+    /// <summary>GM panel combat switches (GmNoCD, GmDamageFix, GmUnlimit), not saved; combat reads the field per cast or hit.</summary>
+    public GmCombatSwitches GmCombat { get; set; }
+    /// <summary>GM panel attribute changes (GmSetEntityAttr / GmChangeEntityAttr) as raw contributions, not saved.</summary>
+    internal Dictionary<int, double>? GmAttributes { get; set; }
+    /// <summary>The skill a GM panel cast (GmCastSkill / GmTargetCastSkill) may use unlearned, only while it is admitted.</summary>
+    internal int GmCastSkill { get; set; }
+
     /// <summary>Between sending 70010 and the client's 30005: walks still refer to the old map and are dropped.</summary>
     public bool SceneLoading { get; set; }
 
