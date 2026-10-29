@@ -97,7 +97,7 @@ Loading into the battle sends the side's commander marks, the party's own marks,
 
 ## War warehouse and machine permissions
 
-`GuildService.Wartime`, the guild's `guildWartimeInfo` (DBGuildData field 36). Only the warehouse view and the Tactics panel; building, firing and vehicles come later.
+`GuildService.Wartime`, the guild's `guildWartimeInfo` (DBGuildData field 36): the warehouse view, the Tactics panel and reserving a machine; building, firing and vehicles come later.
 
 | Message | Use |
 |---|---|
@@ -116,6 +116,27 @@ Editing needs GuildPermissionConfig 13 War Machine Management (`ErrorCodes.Guild
 - A member holds at most one slot. The client only offers members without a slot; anything else is 82.
 - Slots are guild-wide: the siege `dungeonId` in 32282 is not used.
 - `roleUsingToolId` (the machine a member is in, which makes the client ask before revoking) stays 0 until machines can be built.
+
+### Reserving a machine (32270, 32272)
+
+Clicking a cannon in the siege battle bag (`LC_WartimeItemHelper.TryBuildCannon`) sends 32270 with that item. On
+success one machine leaves the warehouse and is held for the member (`prepayInfo`, `GuildStore.State.WartimePrepay`);
+the answer's `prepayItem` starts the blueprint (`ReceiveWartimeStoreItemPrepay` -> `DoPrepayAction` ->
+`LC_GVGBuildCannon.StartBuild` with the item's GVGCannonConfig row), and every online member gets the new 32273. A
+refusal shows its code instead (`LC_AssetManager` calls the DAL's `DecodeError` for a nonzero `result`). Esc on the
+blueprint sends 32272 (`LC_WartimeItemHelper.CancelPrepay`) and the machine goes back. Leaving or being kicked from the
+guild gives a held machine back too.
+
+Refusals: outside a guild 6001, not loaded into a running siege the member fights 28, an item that is not a cannon of
+GVGCannonConfig (`_iItemID`) 82, no Firearm permission 466, none left 535 "Not enough guild supplies".
+
+**Inferred:**
+- Reserving needs the Firearm permission: the battle bag only lists the member's own machine type (32285).
+- One machine per member: a second reservation gives the first one back.
+- The first reservation turns the initial list into the guild's own stock.
+- Cancelling with nothing held answers 0: the client sends it unconditionally and has no handler for the answer.
+- A machine held when the blueprint closes on death or a scene change (the client exits without 32272) stays held
+  until the member reserves again, cancels or builds.
 
 ## Descriptor and runtime evidence boundaries
 

@@ -290,6 +290,14 @@ public sealed class SocialMessages(ChatService chat, TeamService teams, EmblemSe
         {
             await guilds.ToolExchangeAsync(session, GuildWartimeToolExchangeOperReq.Parser.ParseFrom(body.Span));
         });
+        routes.Map(GuildService.Prepay, "guilds", async (session, msgId, body) =>
+        {
+            await guilds.PrepayAsync(session, GuildWartimeStorePrepayReq.Parser.ParseFrom(body.Span));
+        });
+        routes.Map(GuildService.CancelPrepay, "guilds", async (session, msgId, body) =>
+        {
+            await guilds.CancelPrepayAsync(session);
+        });
         routes.Map(GuildService.MergePull, "guilds", async (session, msgId, body) =>
         {
             await guilds.MergePullAsync(session);
