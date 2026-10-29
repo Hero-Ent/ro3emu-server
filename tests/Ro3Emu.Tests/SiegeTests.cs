@@ -142,8 +142,8 @@ public sealed partial class SiegeTests : IAsyncLifetime
         Assert.Equal(_nextSiege.Start, closed.SiegeBaseInfo.BattleInfos[1001].StartTime);
         await bot.SendGameAsync(TerritoryWarsService.SiegeHistoryQuery, new SiegeCityHistoryInfoReq { CityIds = { 1001 } });
         Assert.Equal(ErrorCodes.DataNotFound, (await Next(bot, TerritoryWarsService.SiegeHistoryQuery, SiegeCityHistoryInfoResp.Parser)).Result);
-        await bot.SendGameAsync(TerritoryWarsService.SiegeToolList, new GetGuildWartimeToolBelongListReq());
-        Assert.Equal(ErrorCodes.TerritoryGuild, (await Next(bot, TerritoryWarsService.SiegeToolList, GetGuildWartimeToolBelongListRsp.Parser)).Result);
+        await bot.SendGameAsync(GuildService.ToolList, new GetGuildWartimeToolBelongListReq());
+        Assert.Equal(ErrorCodes.TerritoryGuild, (await Next(bot, GuildService.ToolList, GetGuildWartimeToolBelongListRsp.Parser)).Result);
         await bot.SendGameAsync(TerritoryWarsService.SiegeToolBuild, new GuildAttackCityBuildReq());
         Assert.Equal(ErrorCodes.FeatureUnavailable, (await Next(bot, TerritoryWarsService.SiegeToolBuild, GuildAttackCityBuildResp.Parser)).Result);
         await bot.SendGameAsync(TerritoryWarsService.SiegeBaseQuery, new GetSiegeBaseInfoReq { PlayerId = Session(bot).Role!.Id + 1 });
