@@ -22,7 +22,7 @@ public sealed partial class PanelSite
     private const int MaxBody = 16 * 1024;
     /// <summary>The site's own pages: the first path segment of every route app.js draws.</summary>
     private static readonly HashSet<string> Pages = new(StringComparer.Ordinal)
-    { "", "online", "rankings", "news", "login", "register", "account", "admin", "items", "monsters", "maps" };
+    { "", "online", "rankings", "news", "login", "register", "account", "admin", "items", "monsters", "maps", "characters" };
 
     /// <summary>
     /// No inline script or style anywhere, so the policy allows only the site's own files. frame-ancestors and the
@@ -52,7 +52,7 @@ public sealed partial class PanelSite
         _log = log;
         _sessions = new PanelSessions(clock, TimeSpan.FromHours(Math.Max(1, options.SessionHours)));
         _proxies = [.. options.TrustedProxies.Select(IPAddress.Parse).Select(Normalize)];
-        _routes = [.. PublicRoutes(), .. PlayerRoutes(), .. AdminRoutes(), .. ToolRoutes(), .. DatabaseRoutes()];
+        _routes = [.. PublicRoutes(), .. PlayerRoutes(), .. AdminRoutes(), .. ToolRoutes(), .. DatabaseRoutes(), .. CharacterRoutes()];
     }
 
     /// <summary>
@@ -80,6 +80,11 @@ public sealed partial class PanelSite
         if (path.StartsWith(ImagePrefix, StringComparison.Ordinal))
         {
             await SendImageAsync(context, path);
+            return;
+        }
+        if (path == LogoPath)
+        {
+            await SendLogoAsync(context, _backend.BrandLogoFile);
             return;
         }
         var asset = path == "/index.html" ? null : _assets.Find(path);
@@ -126,7 +131,7 @@ public sealed partial class PanelSite
     private const string ImagePrefix = "/img/";
 
     /// <summary>The picture folders the data export writes (DataExport IconExport) and the names it gives the files.</summary>
-    [GeneratedRegex(@"^/img/(items|monsters|classes|maps)/[A-Za-z0-9_\-]+\.png$")]
+    [GeneratedRegex(@"^/img/(items|monsters|classes|maps|skills)/[A-Za-z0-9_\-]+\.png$")]
     private static partial Regex ImagePath();
 
     /// <summary>

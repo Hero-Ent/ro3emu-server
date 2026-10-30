@@ -210,11 +210,23 @@ function authControls(menu) {
     s?.registration ? link('/register', { class: 'btn accent sm' }, 'Sign up') : null];
 }
 
-function drawChrome() {
-  const s = state.session;
-  const name = s?.server?.name || 'RO3Emu';
+/** The server's branding (Ro3Emu:Panel:Branding): name, logo, footer and accent colour, each only when set. */
+function drawBrand(server) {
+  const name = server?.name || 'RO3Emu';
   document.getElementById('brand-name').textContent = name;
   document.getElementById('foot-name').textContent = name;
+  const logo = document.getElementById('brand-logo');
+  if (server?.logo && logo.getAttribute('src') !== server.logo) logo.src = server.logo;
+  logo.hidden = !server?.logo;
+  document.getElementById('brand-star').style.display = server?.logo ? 'none' : '';
+  if (server?.footer) document.getElementById('foot-text').textContent = server.footer;
+  // CSSOM, not a style attribute: the page's policy allows no inline style.
+  if (server?.accent) for (const token of ['--blue', '--blue-ink']) document.documentElement.style.setProperty(token, server.accent);
+}
+
+function drawChrome() {
+  const s = state.session;
+  drawBrand(s?.server);
   document.getElementById('nav-admin').hidden = !s?.admin;
   document.getElementById('auth').replaceChildren(...authControls(false).filter(Boolean));
   document.getElementById('menu-auth').replaceChildren(...authControls(true).filter(Boolean));
@@ -340,7 +352,7 @@ async function homePage() {
   const s = state.session;
   const mine = s?.account ? await api('GET', '/api/account').catch(() => null) : null;
   const head = pageHead({
-    title: status.name, big: true, after: chip('online', 'Online'),
+    title: status.name, big: true, after: chip('online', 'Online'), subtitle: status.tagline,
     meta: [['Area', status.area], ['Version', mono(status.version || '-')], ['Started', stamp(status.startedUtc)]],
   });
   const kpis = h('section', { class: 'kpis', 'aria-label': 'Server figures' },
@@ -479,14 +491,14 @@ async function registerPage() {
 function characterTable(characters, withId) {
   return table([
     withId && { label: 'ID', opt: true, value: c => mono(String(c.id)) },
-    { label: 'Name', grow: true, value: c => h('span', { class: 'strong' }, c.name) },
+    { label: 'Name', grow: true, value: c => link('/characters/' + c.id, { class: 'row-link' }, c.name) },
     classCol, levelCol,
     { label: 'Job', num: true, opt: true, value: c => num(c.jobLevel) },
     { label: 'Map', opt: true, value: c => c.map },
     { label: 'Guild', opt: true, value: c => c.guild || h('span', { class: 'muted' }, '-') },
     { label: 'Status', value: c => c.online ? chip('online', 'Online') : chip('', 'Offline') },
     { label: 'Last played', opt: true, value: c => stamp(c.lastLogin) },
-  ].filter(Boolean), characters);
+  ].filter(Boolean), characters, { onrow: c => navigate('/characters/' + c.id) });
 }
 
 async function accountPage() {

@@ -7,8 +7,8 @@ the player at once, and the panel never writes the database behind the server's 
 | Who | Pages |
 |---|---|
 | everyone | Home (status, version, players online, uptime, accounts and characters; latest news, who's online, top 5 by level) · Who's online · Rankings · News · Items · Monsters · Maps |
-| a player, logged in with the game account | My account (created, last played, characters with class, level, map and guild) · password change |
-| an admin | Dashboard (the server's own metrics) · Accounts (search, detail, ban and unban) · Audit log · Mail & rewards · Gift codes · GM console · News editor · Broadcasts · Economy log |
+| a player, logged in with the game account | My account (created, last played, characters with class, level, map and guild) · the sheet of each own character · password change |
+| an admin | Dashboard (the server's own metrics) · Accounts (search, detail, ban and unban) · every character's sheet and mailbox · Audit log · Mail & rewards · Gift codes · GM console · News editor · Broadcasts · Economy log |
 
 Players log in with the same account name and password as in the game. An account the game created logs in here,
 and an account made on the panel's sign-up page logs in to the game: both paths write the same record
@@ -27,6 +27,7 @@ It is on by default, on port **5381**, next to the server's HTTP port 5380:
 | `Ro3Emu:Panel:SessionHours` | `12` | hours a login stays valid without use |
 | `Ro3Emu:Panel:Registration` | `true` | `false` hides the sign-up page; accounts are then created only by a first login in the game |
 | `Ro3Emu:Panel:ImageDir` | `icons/` of the game data | the pictures the pages show (see [Pictures](#pictures)) |
+| `Ro3Emu:Panel:Branding:*` | RO3Emu's | your server's name, tagline, logo, footer and colour (see [Branding](#branding)) |
 
 Set them in `appsettings.json` under `Ro3Emu`, as environment variables (`Ro3Emu__Panel__Port=8081`) or as
 arguments (`--Ro3Emu:Panel:Port=8081`). The startup log says `Web panel on http://...`.
@@ -85,6 +86,41 @@ Each tool is a page of the admin area's sidebar; each change is written to the a
   the message GM replies use). It can repeat every few minutes, up to 100 more times; repeats are kept in the
   server's memory (a restart ends them) and can be cancelled.
 
+## Branding
+
+The panel can carry your server's name and look instead of RO3Emu's. Every field is optional:
+
+| Option | What |
+|---|---|
+| `Ro3Emu:Panel:Branding:ServerName` | the name in the header, the browser's title and the home page (at most 64 characters); empty: `Ro3Emu:ClusterName` |
+| `Ro3Emu:Panel:Branding:Tagline` | a line under the name on the home page |
+| `Ro3Emu:Panel:Branding:LogoPath` | a PNG, JPG or WebP file in the data folder, as a path relative to it (`brand/logo.png`); shown instead of the star, about 28 pixels high |
+| `Ro3Emu:Panel:Branding:FooterText` | the footer's text |
+| `Ro3Emu:Panel:Branding:AccentColor` | the colour of links, focus rings and highlights, as `#rrggbb` |
+
+```json
+{ "Ro3Emu": { "Panel": { "Branding": {
+  "ServerName": "Midgard Classic", "Tagline": "A friendly realm, rates 5x",
+  "LogoPath": "brand/logo.png", "FooterText": "Midgard Classic, a fan server.", "AccentColor": "#c2410c" } } } }
+```
+
+The values reach the pages as text. A colour that is not `#rrggbb` is ignored, and so is a logo path that leaves the
+data folder. The logo is served at `/brand/logo` and cached by the browser until the file changes.
+
+## Characters and mailboxes
+
+A character's **sheet** shows what the server keeps for it, read only: class, base, job and Astral level with the
+EXP into the level, sex, map and position, created and last login, the six base stats and the points left to spend,
+every currency, the equipment by slot with the slot's strengthen and refine levels and the item's enchantments, the
+bags tab by tab (the cart included), and the learned skills. A character in the game is read from its session on
+the game loop, so the sheet shows what the player has now; any other from the database. A player opens the sheets of
+the characters of their own account from *My account*; an admin opens every sheet from an account's page (the
+characters link to it). Another account's character is "not found" to a player.
+
+An admin also sees a character's **mailbox** (`/characters/<id>/mail`), read only and newest first, 10 letters a page:
+title and text (a template letter's from MailConfig), sender, sent and expiry times, read and claimed, and the
+attachments with their icons. It is the role's mailbox as `MailService` stores it.
+
 ## Items, monsters, maps and the economy log
 
 **Items**, **Monsters** and **Maps** are public databases built from the server's own game data and English texts the
@@ -115,11 +151,12 @@ decodes them from the client's Unity bundles into `icons/` of the data folder:
 | `icons/monsters/` | NPCConfig `_kHeadIcon` of the monster rows | portraits (128 px) |
 | `icons/classes/` | JobConfig `_kIcon`, `_kBigIcon` | class emblems |
 | `icons/maps/` | MapConfig `_kBgImage[0]` | the map window's outline (halved to 512 px) |
+| `icons/skills/` | SkillConfig `_kIcon` | skill icons for the character sheet |
 
-About 1 800 PNG files, 110 MB, in about 20 seconds; a later export decodes only what a client update changed
+About 2 500 PNG files, 120 MB, in about 20 seconds; a later export decodes only what a client update changed
 (`icons/index.json` records the client file each picture came from) and removes what the client dropped.
 `--no-icons` skips them. A server host that downloads only what it needs (`RO3Emu.exe update --server-files`) also
-gets the bundles the pictures come from, about 540 MB.
+gets the bundles the pictures come from, about 550 MB.
 
 The panel serves them under `/img/<folder>/<file>`, only the export's own folders and file names. The pages ask for
 `/img/...?v=<hash of the client file>`, so a picture can be cached for a year and a client update still shows the

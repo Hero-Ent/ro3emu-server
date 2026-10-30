@@ -32,8 +32,8 @@ internal static class Program
         options:
           --client <folder>  the game folder (the one with ro3.exe); remembered for next time
           --reexport         export the game data again
-          --no-icons         no pictures for the web panel (item, monster, class and map images decoded from
-                             the game; about 20 seconds and 110 MB): the panel shows letters instead
+          --no-icons         no pictures for the web panel (item, monster, class, map and skill images from
+                             the game; about 20 seconds and 120 MB): the panel shows letters instead
           --no-launch        do not start the game (server only)
           --yes              no questions: take the defaults
           --http-port <n> --micro-port <n> --game-port <n>   server ports (default 5380, 20000, 33100)

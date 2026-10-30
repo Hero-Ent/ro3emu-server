@@ -11,7 +11,8 @@ namespace Ro3Emu.DataExport;
 ///   is the client's blank one);
 /// - monsters/: NPCConfig _kHeadIcon of the monster rows (_iNPCType 1);
 /// - classes/: JobConfig _kIcon and _kBigIcon;
-/// - maps/: MapConfig _kBgImage[0], the map picture of the client's map window, halved to at most 512 pixels.
+/// - maps/: MapConfig _kBgImage[0], the map picture of the client's map window, halved to at most 512 pixels;
+/// - skills/: SkillConfig _kIcon, for the character sheet.
 /// Each file is named as the client names the sprite. index.json records the VFS file hash every PNG came from (and its
 /// sprite atlas's), so a later export decodes only what a client update changed and removes what it dropped.
 /// </summary>
@@ -20,7 +21,7 @@ public static partial class IconExport
     public const string Folder = "icons";
 
     /// <summary>The DataConfig tables <see cref="Requests"/> reads.</summary>
-    public static readonly string[] Tables = ["ItemConfig", "NPCConfig", "JobConfig", "MapConfig"];
+    public static readonly string[] Tables = ["ItemConfig", "NPCConfig", "JobConfig", "MapConfig", "SkillConfig"];
     private const string IndexFile = "index.json";
 
     /// <summary>One picture to export: the kind folder, the client's sprite file name, the largest side kept.</summary>
@@ -65,6 +66,8 @@ public static partial class IconExport
         foreach (var row in Rows(configDir, "MapConfig"))
             if (row.TryGetProperty("_kBgImage", out var images) && images.ValueKind == JsonValueKind.Array && images.GetArrayLength() > 0)
                 Add("maps", images[0].ValueKind == JsonValueKind.String ? images[0].GetString() : null, 512);
+        foreach (var row in Rows(configDir, "SkillConfig"))
+            Add("skills", Text(row, "_kIcon"));
         return [.. requests.DistinctBy(r => r.Path, StringComparer.OrdinalIgnoreCase)];
     }
 

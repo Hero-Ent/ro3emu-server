@@ -24,6 +24,7 @@
 <script src="/pages/items.js" defer></script>
 <script src="/pages/monsters.js" defer></script>
 <script src="/pages/maps.js" defer></script>
+<script src="/pages/characters.js" defer></script>
 <script src="/pages/economy.js" defer></script>
 </head>
 <body>
@@ -73,7 +74,7 @@
 
 <header class="top" id="top">
   <div class="wrap">
-    <a class="brand" href="/" data-link><svg class="i"><use href="#i-star"/></svg><span id="brand-name">RO3Emu</span></a>
+    <a class="brand" href="/" data-link><svg class="i" id="brand-star"><use href="#i-star"/></svg><img class="brand-logo" id="brand-logo" alt="" hidden><span id="brand-name">RO3Emu</span></a>
     <nav class="nav" id="nav" aria-label="Main">
       <div class="nav-links">
         <a class="link" href="/" data-link data-nav="home"><svg class="i"><use href="#i-home"/></svg>Home</a>
@@ -99,7 +100,7 @@
 <footer class="foot">
   <div class="wrap">
     <span class="brand"><svg class="i"><use href="#i-star"/></svg><span id="foot-name">RO3Emu</span></span>
-    <span>A server for the Ragnarok 3 PC client. Not affiliated with the game's publishers.</span>
+    <span id="foot-text">A server for the Ragnarok 3 PC client. Not affiliated with the game's publishers.</span>
   </div>
 </footer>
 

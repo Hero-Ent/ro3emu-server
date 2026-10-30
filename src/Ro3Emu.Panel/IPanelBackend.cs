@@ -18,6 +18,10 @@ public partial interface IPanelBackend
     /// <summary>The folder the /img/ pictures are served from (PanelOptions.ImageDir), or null when there is none.</summary>
     string? ImageDir { get; }
 
+    /// <summary>The branding's logo (PanelBranding.LogoPath) as a full path inside the data folder, or null when none is
+    /// configured or the path leaves the data folder.</summary>
+    string? BrandLogoFile { get; }
+
     /// <summary>The server's credential budget per address (the SDK login's): false = answer 429 without hashing.</summary>
     bool TryAcquireCredentialCheck(IPAddress? remote);
 

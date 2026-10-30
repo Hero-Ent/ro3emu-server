@@ -20,6 +20,16 @@ public sealed partial class PanelBackend
 
     public string? ImageDir => Directory.Exists(ImageFolder) ? ImageFolder : null;
 
+    public string? BrandLogoFile
+    {
+        get
+        {
+            if (options.Value.Panel.Branding.LogoPath is not { Length: > 0 } logo) return null;
+            string root = Path.GetFullPath(options.Value.DataDir), file = Path.GetFullPath(Path.Combine(root, logo));
+            return file.StartsWith(Path.TrimEndingDirectorySeparator(root) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ? file : null;
+        }
+    }
+
     private string ImageFolder => options.Value.Panel.ImageDir is { Length: > 0 } dir ? dir
         : Path.Combine(options.Value.GameDataDir ?? options.Value.DataDir, "icons");
 

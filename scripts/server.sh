@@ -10,7 +10,7 @@
 #   --gm ACCOUNT    an account that gets GM commands in game (repeatable)
 #   --voice-port PORT  turn on party voice chat on this TCP port, for example 33101 (off by default)
 #   --panel-port PORT  the web panel for players and admins on this TCP port (default 5381); --no-panel: none
-#   --no-icons      no item, monster, class and map pictures for the web panel (decoded from the client; 110 MB)
+#   --no-icons      no pictures for the web panel (decoded from the client; 120 MB)
 #   --service       install and start a systemd service (needs sudo) instead of running in this terminal
 #   --reexport      export the game data again (after a client update)
 set -euo pipefail

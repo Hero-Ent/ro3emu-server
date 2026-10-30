@@ -78,6 +78,6 @@ titles.items = 'Items';
 
 // The items and monsters are public pages now: the admin sidebar's placeholder for them goes.
 {
-  const later = laterSections.findIndex(([label]) => label === 'Items & monsters');
+  const later = laterSections.findIndex(([, label]) => label === 'Items & monsters');
   if (later >= 0) laterSections.splice(later, 1);
 }
