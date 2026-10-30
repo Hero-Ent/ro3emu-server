@@ -558,10 +558,8 @@ Code: `TerritoryWarsService.SiegeVehicles.cs`.
 **Inferred:** a destroyed one stays destroyed for the siege (no refresh duration names their points) and a damaged one
 keeps its HP; they leave at the settlement with the other machines.
 
-**Not built:** the territory battle 3030101's vehicles 4900402 at its SummonPlatform points 49/57/83 (below,
-"Stronghold gameplay points"). They are camp 4: the seat's `CheckCamp` (2200, the same EntityCamp) fails for every
-territory player (camp 1) in the client as on the server, so the platform must give them a side first, and ChatConfig
-4111013-4111020 ("vehicle point ready", "activated") say it is activated, by a rule the data does not hold.
+The territory battle 3030101's vehicles 4900402 at its SummonPlatform points 49/57/83 are raised by activating the
+platform: "Summon platforms" (below, under "Stronghold gameplay points").
 
 ### Test aids (not original)
 
@@ -620,18 +618,85 @@ Implemented (`TerritoryWarsService.ScenePoints.cs`):
 - Proven: revival points are neither monster spawn points nor air walls of the client scene, so the big map takes their position and Self/Enemy/Neutral owner only from the 30115 `GlobalObjectData` whose `dungeonPointId` is the point (`UI_Sys_TerritoryWarsDungeon_MapContainerWidgetCtrl.lua:440-520`, `GetRevivalPointData`). An entry with `hp <= 0` is dropped (`LC_SceneCom_GlobalObjMgr.lua:82-88`).
 - Inferred: one 4905010 marker per point at the scene-editor point (`m_kAllPoints` of `sc_gvg_lingtuzhan_001_1_dg01`). Evidence: the npc column of `UIModule_NpcData`, UnitConfig 4905010 "据点战-交互点" (stronghold battle interaction point), NPCConfig subtype 250 MutiInteractMainNpc with `_iNeedNotifyGlobalData 1`. Markers are non-combat room props; their 30115 entry carries the point's owner as `belongGuild`.
 - Inferred: every point starts `ready`, `readyTime 0`, owner 0. The client shows `ready` and an `unReady` point without `readyTime` alike. Point state is persisted in the battle record.
-- Test aid, not original: `!twpoint <point> unready|ready|complete [readySeconds] [owner|self]` changes a point of the caller's battle so the client display can be checked. No original rule that changes a point is known, so nothing else calls it.
+- Test aid, not original: `!twpoint <point> unready|ready|complete [readySeconds] [owner|self]` changes a point of the caller's battle so the client display can be checked. The SummonPlatforms change their own points ("Summon platforms"); no rule is known for the others.
 
 What the client and config show about each object, and what is unknown (a decision or a capture is needed for each):
 
 | Type | Evidence | Unknown |
 |---|---|---|
-| SteleBarrier 34/59/74 | NpcLevelPointRespawnConfig 4905003-4905005 place 4905012 "Barrier Stele" (destructible: HP bar, `_kAttriScale` 101 x1.7) at these points. Scene groups 38/39/40 "结界-交互组" hold the point plus three sub points (35-37, 60-62, 75-77). Sub NPCs 4905011/4905014 (MutiInteractSubNpc, NPCInteractConfig 4905011/4905012, conditions 7000031/7000032, NPC conditions 490021/490022 on condition var 9012) exist without a placement row. ChatConfig 4111007 "Stronghold barrier activated. The stronghold will be locked in 5 minutes", 4111008 barrier destroyed, 4111025 stone monument activated, 4111026 defensive stone monument destroyed. The map hides the icon until the point is owned and shows `Preparing` neutral (`MapWidgetCtrl:150-230`). | Who may activate it and how (where sub NPCs stand, what var 9012 is), the 5-minute lock's effect on the flag, stele HP regeneration/respawn, the 30129 state after destruction. |
+| SteleBarrier 34/59/74 | NpcLevelPointRespawnConfig 4905003-4905005 place 4905012 "Barrier Stele" (destructible: HP bar, `_kAttriScale` 101 x1.7) at these points. Scene groups 38/39/40 "结界-交互组" hold the point plus three sub points (35-37, 60-62, 75-77). Sub NPCs 4905011/4905014 (MutiInteractSubNpc, NPCInteractConfig 4905011/4905012, conditions 7000031/7000032, NPC conditions 490021/490022 on `CheckSameAtkGuild` 9012, the rings of "Summon platforms") exist without a placement row. ChatConfig 4111007 "Stronghold barrier activated. The stronghold will be locked in 5 minutes", 4111008 barrier destroyed, 4111025 stone monument activated, 4111026 defensive stone monument destroyed. The map hides the icon until the point is owned and shows `Preparing` neutral (`MapWidgetCtrl:150-230`). | Who may activate it (the platforms' ring rules are inferred; the stele has three ring points), the 5-minute lock's effect on the flag, stele HP regeneration/respawn, the 30129 state after destruction. |
 | DivinityStatue 41 | Groups 45 "神像-攻击-交互组1" (points 41-44) and 47 "神像-防御-交互组1" (78-80, not in UIModule_NpcData). ChatConfig 4111012 "Statue Ready!", 4111017 statue activated. No NPC or spawn row. | Its effect, cooldown (`readyTime`), who may use it. |
-| SummonPlatform 49/57/83 | NpcLevelPointRespawnConfig 4905008-4905010 place vehicle 4900402 (subtype 103, NPCType 2, interact 4900022/4900025). Groups 48/53 "载具-交互组", 82 "载具-防守方" (defenders). ChatConfig 4111013-4111015 southern/eastern/base vehicle point ready, 4111018-4111020 activated. | These fixed vehicles are not spawned (the warehouse vehicles of 32281 are, "War machines in territory battles"): camp 4, nobody passes their seat's `CheckCamp` until an activation gives them a side; ready timers and sides. |
+| SummonPlatform 49/57/83 | Built: "Summon platforms" below (rings 4905011/4905014, status 22, vehicle 4900402, ChatConfig 4111013-4111020). | The recharge time, the progress numbers and who may use the defenders' platform are inferred there. |
 | BossPlatform 51 | NpcLevelPointRespawnConfig 4905011 places 4905053 "Vanguard" (Pioneer subtype 213, AI 20000011, skills 4905002-4905004). Group 54 "先锋-交互组1". ChatConfig 4111016 altar ready, 4111021 "a Behemoth is advancing toward the stronghold", 4111027 behemoth fallen. | Activation condition, route, timer. |
 | AirWallGate 63/66 | Client air walls 63/66 in groups 65/68 "门-1/门-2" with spawn points 64/67, where NpcLevelPointRespawnConfig 4905001/4905002 place Knight Guardian 4905051 (camp 2). ChatConfig 4111022/4111023 east/west gate breached. | Whether the guardian's death opens the gate; the server loads no air walls (`m_kAirWalls`) at all. |
 | RevivalPoint 55/56/81/85/86 | `m_kResurrectionPointList`; NpcLevelPointRespawnConfig 4905006/4905007 place Bow Guardian 4905052 at 55/56. ChatConfig 4111024 "A Revive Point has changed hands!". The generic per-player revive list is CustomData 11 `Dungeon_Player_RevivePoint_ListLong` (`LC_CustomDataHandler_Revive.lua`, `LC_DunGeon_Helper.SetRevivePointList`). | The capture rule and initial owners. Today every territory participant revives at `MapWorld.Revive`, the first resurrection point (55), regardless of owner; restricting revival to owned points (and the default point otherwise) needs that rule. |
 
-The guardians, stele, vehicles and vanguard of NpcLevelPointRespawnConfig are not spawned: their placement is configured, but when they appear and what their deaths change is not, and spawning hostile camp-2 guardians without those rules would add fights with no consequence. The command skills of `DungeonLua_3030101` `CommandModule` and its two-stage `DungeonStageModule` (45 min / battle) are outside this change.
+The guardians, stele and vanguard of NpcLevelPointRespawnConfig are not spawned (the vehicles are, by their platforms): their placement is configured, but when they appear and what their deaths change is not, and spawning hostile camp-2 guardians without those rules would add fights with no consequence. The command skills of `DungeonLua_3030101` `CommandModule` and its two-stage `DungeonStageModule` (45 min / battle) are outside this change.
 
+### Summon platforms
+
+Code: `TerritoryWarsService.SummonPlatforms.cs`.
+
+Evidence:
+
+- The three SummonPlatform points (49 south, 57 east, 83 base) each have a scene group of two points at one position:
+  48 [49, 50] and 53 [57, 58] "载具-交互组" (vehicle interaction group), 82 [83, 84] "载具-防守方" (vehicle, defending
+  side). The stele's groups hold the point and three ring points (35-37) the same way.
+- The MutiInteractSubNpc rows 4905011 and 4905014 (`_iNPCSubType` 251, UnitConfig 35004 "跳舞位置圈", a ring to stand in,
+  `_iInteractDistance` 3) carry NPCInteractConfig 4905011 / 4905012: button 13060000006 "Activate", `_iStatusID` 22.
+  GameplayStatusConfig 22 is "领土战-多人交互-仅单阵营可交互" (territory war multi-person interaction, one side only),
+  `_iStatusType` 18 = enum_InteractState TerritoryWarsInteract = `InteractInfo.EState` MultiPersonProgress
+  (`LC_GamePlayStatusMgr.TerritoryWarsInteract`, `LC_State_Unit_Interact._startTerritoryWarsInteract`: the player is
+  linked to `activeObjId`). Row 23 is the same for all sides.
+- Conditions: the interaction's 7000031 / 7000032 are "in no gameplay status" (`CheckInteractState` 12001 with 0,
+  inverted). The ring's 490021 is `CheckSameAtkGuild` 9012 with 0 OR its inverse (always true: any guild may start);
+  490022 is 9012 with 1: the ring's custom data 104 BelongGuild must be the player's guild, else UIWords 61612 "Another
+  faction is currently using this." (`LC_InteractCondition.CheckSameAtkGuild`). `m_eType` 1/2/3 are AND/OR/DATA
+  (`LC_ConditionDefine.enum_NodeType`).
+- Custom data 10000 InteractionProgress ("the multi-person interaction's total progress"), 10001
+  InteractionCurrentProgress ("current progress") and 10002 InteractionRate ("one interactor's speed, points per
+  second"; DirtyDataConfig comments) give the unit `LC_PerformGfx_StrongholdProgress`, which opens
+  `UI_Sys_TerritoryWars_NewProgressWidget` over it while 10001 is above 0, coloured by the unit's guild.
+- NpcLevelPointRespawnConfig 4905008-4905010 put the Mithril Madogear 4900402 at 49, 57 and 83: the warehouse Madogear
+  (VehicleConfig 2, seat 4900022 with condition 4900005 = not seated + the Vehicle permission, NPC condition 7100011 =
+  a free seat on a vehicle that is not an enemy + `CheckCamp`; exit 4900025). Its NPCConfig camp 4 is the warehouse
+  Madogears' too (4900401-4900403): the server gives a vehicle its side.
+- ChatConfig 4111013/4111014/4111015 "Southern / Eastern / Base vehicle point ready!" and 4111018/4111019/4111020 "The
+  southern / eastern / Base vehicle has been activated!!!". The map shows a point `ready` as Available, `unReady` with
+  `readyTime` as Preparing with a countdown and `complete` as Unavailable, in its owner's colour (`LC_DAL_TerritoryWars`
+  3225-3260, `UI_Sys_TerritoryWars_MapWidgetCtrl`).
+
+Implemented:
+
+- A ready platform has its ring at the group's other point (50, 58, 84): 4905011 on 49 and 57, 4905014 on 83.
+- "Activate" (32700) by a battle member within 3 m (+1), on a ready platform, in no other state (riding, a cannon, a
+  ring), under both conditions, answers 0 and puts the player into MultiPersonProgress (32702: status 22, the
+  interaction, the ring as `activeObjId`; also shown to new viewers). The ring then carries the guild in 104 and its
+  entity `guildId`; another guild is refused (806) while it does. A walk that moves the player, death, leaving the
+  scene or the battle, or standing more than 4 m from the ring ends it (Idle, `interrupt`).
+- Each second of the battle clock the ring fills by min(activators x `GVGFieldOccupySpeed` 1, `GVGFieldOccupyMaxSpeed`
+  3) up to `GVGFieldOccupyAmount` 30 (31018 with 104 and 10000-10002). Full: the activators go Idle, the ring leaves,
+  4900402 stands at the platform point for the guild (camp 1, owner 0, `guildId` and 104 BelongGuild: a war vehicle as
+  in "War machines in territory battles"), 30129 shows the point `complete` with the guild as owner and the battle gets
+  4111018-4111020.
+- The guild's members with the Vehicle permission board it (the seat's conditions; the client's `CheckCamp` compares
+  EntityCamp 1 = 1, its free-seat check the guild); other guilds cannot, and damage and destroy it.
+- Once the vehicle is gone (destroyed, or its room gone) the point is `unReady` with `readyTime` now + 120 s, owner 0;
+  at `readyTime` it is `ready` again, 4111013-4111015 go out and a new ring stands.
+- The settlement takes the rings and their activators away; the vehicles leave with the other machines.
+
+**Inferred:**
+
+- The rings' placement (no row places 4905011/4905014) and which ring stands where: the open one on the two attack
+  platforms, the guild one on the defenders' platform 83, whose BelongGuild is the guild holding the stronghold's flag
+  (the battle's point 0), so only that guild may activate it (nobody while no one holds it); a change of holder ends
+  that ring's activation.
+- One guild at a time on an open ring, refused with 806 (status 22's name; its condition 490021 lets anyone start).
+- The numbers: the GVG field occupation's amount 30, speed 1 per activator and cap 3 (the territory flag fields use
+  them already); a ring nobody stands in starts over; the 120 s recharge after the vehicle is gone; the vehicle stands
+  at the platform point, not the ring point (both are one position).
+- South / east / base: 49 lies south (z 227), 57 east (x 726), 83 is the defenders' group by the stronghold.
+- Walking ends an activation as it ends a gathering: status 22's exit events (2008, 2009, 2026, 2028) are server
+  events the client does not name.
+- The vehicle's 30115 entry (NPCConfig `_iNeedNotifyGlobalData` 1) is not sent: the territory map reads the platforms
+  from 30129.

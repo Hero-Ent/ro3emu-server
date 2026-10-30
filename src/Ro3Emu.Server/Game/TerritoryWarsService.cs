@@ -205,6 +205,9 @@ public sealed partial class TerritoryWarsService : IGameTicker
         combat.PlayerDied.Add(WorldDiedAsync);
         combat.PlayerDied.Add(CannonDiedAsync);
         combat.PlayerDied.Add(VehicleDiedAsync);
+        combat.PlayerDied.Add(PlatformLeavingAsync);
+        scene.Leaving.Add(PlatformLeavingAsync);
+        world.PlayerEntered.Add(PlatformActivatorSeenAsync);
         combat.GrantedSkill.Add(SeatSkill);
         combat.AfterLethalPublication.Add(MachineDestroyedAsync);
         combat.Killed.Add(MachineKilledAsync);
