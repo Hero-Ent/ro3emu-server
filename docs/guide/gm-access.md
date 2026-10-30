@@ -19,6 +19,9 @@ At startup the server logs who has GM. With an empty list it warns loudly in bot
 - Production and nobody has GM: `!!! Production: Ro3Emu:GmAccounts is empty, so NO account has GM commands in game.`
 - GM open to everyone on a public address (`PublicHost` not loopback): `!!! Ro3Emu:GmAccounts is empty and GM is open: EVERY account can use GM commands in game ...`
 
+The [web panel](panel.md)'s admin area uses the same list, with one difference: an empty list means nobody is an
+admin there, whatever `GmOpenWhenEmpty` says.
+
 ## Configuration
 
 Like every `Ro3Emu:` option, the list can be set in `appsettings.json`:
