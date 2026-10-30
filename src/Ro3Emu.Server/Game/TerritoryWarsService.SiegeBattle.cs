@@ -245,15 +245,16 @@ public sealed partial class TerritoryWarsService
             : SiegeObjectPoint(battle, m) is null || SiegeObjectHittable(s, battle, m);
 
     /// <summary>
-    /// CombatService.SkillLineBlocked: (inferred) inside a siege room the castle stops skills along the navigation grid,
-    /// standing in for the siege's air walls (sc_gvg_gongchengzhan_001 m_kAirWalls, gridLevel 1-5), which the original
-    /// switches on through dungeon variable 133 CAirWallList from scripts the client does not have. Elsewhere nothing
-    /// stops a skill, as in the client.
+    /// CombatService.SkillLineBlocked: inside a siege room a skill does not pass a standing air wall (var 133,
+    /// TerritoryWarsService.SiegeWalls.cs), and (inferred) the castle's solid parts stop it along the navigation grid.
+    /// Elsewhere nothing stops a skill, as in the client.
     /// </summary>
     private bool SiegeSkillLineBlocked(GameSession s, MonsterUnit? m, Vec3 origin, Vec3 target)
     {
-        if (s.SiegeBattle is null || s.SceneEntry != SiegeScene || _maps.Map(SiegeScene)?.Nav is not { } nav
-            || nav.CanWalk(origin.X, origin.Y, origin.Z, target.X, target.Z)) return false;
+        if (s.SiegeBattle is not { } battle || battle.Room.Closed || s.SceneEntry != SiegeScene
+            || _maps.Map(SiegeScene) is not { } map) return false;
+        if (SiegeWallCrossed(battle.State, map, origin, target, skill: true)) return true;
+        if (map.Nav is not { } nav || nav.CanWalk(origin.X, origin.Y, origin.Z, target.X, target.Z)) return false;
         return m == null || !SiegeCrystalBlockedEndpointAllowed(s, m, origin, target);
     }
 

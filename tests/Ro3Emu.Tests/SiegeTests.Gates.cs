@@ -13,6 +13,8 @@ public sealed partial class SiegeTests
     private static readonly int[] OuterTowers = [38, 39, 40], InnerTowers = [41, 42, 43],
         Barricades = [321, 80, 81, 83, 90, 93, 97, 101, 103, 107], BuildingMarkers = [254, 255, 256, 273, 274, 308, 299],
         SeenOnLoad = [GatePoint, 41, 42, 43, 44, 254];
+    private static readonly long[] PrepareWalls = [71, 264, 265, 72, 74, 65, 19, 322, 117, 231, 232, 233, 234, 235, 243, 245, 247,
+        221, 240, 241, 224, 238, 239, 225, 236, 237];
 
     /// <summary>A seeded siege of 1001 with both sides loaded in: the attackers' bot is the fixture's GM account.</summary>
     private async Task<(BotClient Attack, BotClient Defense)> SeededSiege(string tag, long at = 25)
@@ -199,5 +201,57 @@ public sealed partial class SiegeTests
         await attack.SendGameAsync(30117, new GetDungeonStatisticsInDungeonReq());
         var stats = (await Next(attack, 30117, GetDungeonStatisticsInDungeonResp.Parser)).DungeonStatistics;
         Assert.True(stats.SceneStatistics.Values.Single().RoleStatistics[Session(attack).Role!.Id].ExtraData[1021001].LongValue > 0);
+    }
+
+    private static long[] Walls(DungeonBaseInfoNotify info)
+    {
+        var walls = Assert.Single(info.Vars, v => v.VarId == 133);
+        Assert.Equal((0, 0L), (walls.GroupType, walls.GroupId)); // for everyone
+        return [.. walls.Vi64];
+    }
+
+    [ClientDataFact]
+    public async Task AirWallsHoldTheCampTheGateAndTheBarricadesUntilTheyFall()
+    {
+        var (attack, defense) = await SeededSiege("E");
+        await using var _ = attack;
+        await using var __ = defense;
+        var run = Run(attack);
+        var wars = Service<TerritoryWarsService>();
+        var a = Session(attack);
+        float y = run.Objects[GatePoint].Y;
+        Vec3 At(float x, float z) => new() { X = x, Y = y, Z = z };
+        bool SkillBlocked(Vec3 from, Vec3 to) => Service<CombatService>().SkillLineBlocked!(a, null, from, to);
+        bool WalkBlocked(Vec3 from, Vec3 to) => Service<SceneService>().WalkBlocked!(a, from, to);
+
+        // Prepare: the attackers' camp, the gateway's two gate walls, the ladder ends, barricades and fortresses.
+        var prepare = Walls(LastBaseInfo(attack));
+        Assert.Equal([.. PrepareWalls.Order()], prepare);
+        Assert.DoesNotContain(29L, prepare); // the city wall's face and the ladder lanes stay off
+        Assert.DoesNotContain(32L, prepare);
+        Assert.True(WalkBlocked(At(720, 150), At(705, 150)) && SkillBlocked(At(720, 150), At(705, 150)));
+        Assert.True(WalkBlocked(At(605, 150), At(590, 150)) && SkillBlocked(At(605, 150), At(590, 150)));
+        Assert.False(SkillBlocked(At(605, 150), At(599.5f, 150))); // the gate stands inside its own wall
+
+        // The Gate stage opens the camp.
+        _clock.Set(_siege.Start + 300);
+        await OnLoop(wars.ReconcileAsync);
+        var gateStage = Walls(await Next(attack, 30401, DungeonBaseInfoNotify.Parser, i => i.StageModuleData.Stage == 1));
+        Assert.DoesNotContain(71L, gateStage);
+        Assert.False(WalkBlocked(At(720, 150), At(705, 150)));
+
+        // A barricade's fall drops its wall; the gate's drops 72 and 74.
+        var barricade = run.Objects[321];
+        await OnLoop(() => { barricade.Hp = 0; barricade.Dead = true; return Task.CompletedTask; });
+        await OnLoop(wars.ReconcileAsync);
+        Assert.DoesNotContain(322L, Walls(await Next(attack, 30401, DungeonBaseInfoNotify.Parser,
+            i => !Walls(i).Contains(322))));
+        var gate = run.Objects[GatePoint];
+        await OnLoop(() => { gate.Hp = 0; gate.Dead = true; return Task.CompletedTask; });
+        await OnLoop(wars.ReconcileAsync);
+        var inner = Walls(await Next(defense, 30401, DungeonBaseInfoNotify.Parser, i => i.StageModuleData.Stage == 2));
+        Assert.DoesNotContain(72L, inner);
+        Assert.DoesNotContain(74L, inner);
+        Assert.False(WalkBlocked(At(605, 150), At(590, 150)) || SkillBlocked(At(605, 150), At(590, 150)));
     }
 }

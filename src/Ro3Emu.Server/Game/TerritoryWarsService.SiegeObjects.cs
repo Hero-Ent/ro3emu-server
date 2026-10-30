@@ -134,11 +134,15 @@ public sealed partial class TerritoryWarsService
     private async Task SiegeObjectDestroyedAsync(SiegeRun battle, int point)
     {
         if (battle.State.Destroyed.Contains(point)) return;
+        int stage = battle.State.Stage;
+        var walls = SiegeActiveWalls(battle.State).ToHashSet();
         battle.State.Destroyed.Add(point);
         battle.State.ObjectHp.Remove(point);
         await SaveAsync(state);
         await SiegePublishObjectsAsync(battle);
         await SiegeAdvanceStageAsync(battle);
+        // A barricade or a fortress opens its walls without a new stage (var 133).
+        if (battle.State.Stage == stage && !walls.SetEquals(SiegeActiveWalls(battle.State))) await SiegeBroadcastBaseAsync(battle);
     }
 
     /// <summary>The siege clock: castle objects that died without a kill callback (their killer left meanwhile), then

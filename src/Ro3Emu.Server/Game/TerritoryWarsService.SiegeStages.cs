@@ -94,11 +94,13 @@ public sealed partial class TerritoryWarsService
         }
     }
 
-    /// <summary>The siege's dungeon vars in 30401: the stage's countdown (512 in Prepare, 542 [end, 0] after it; no kill adds
-    /// time here) and 513 the City Gate's uid while it is in the room.</summary>
+    /// <summary>The siege's dungeon vars in 30401: the standing air walls (133, TerritoryWarsService.SiegeWalls.cs), the
+    /// stage's countdown (512 in Prepare, 542 [end, 0] after it; no kill adds time here) and 513 the City Gate's uid while
+    /// it is in the room.</summary>
     private static IEnumerable<DungeonVar> SiegeVars(SiegeRun battle)
     {
         var r = battle.State;
+        yield return SiegeWallVar(r);
         long end = SiegeStageEnd(r) * 1000;
         if (r.Stage == SiegePrepareStage) yield return new DungeonVar { VarId = TopBarTimestampVar, Vi64 = { end } };
         else yield return new DungeonVar { VarId = StageCountdownVar, Vi64 = { end, 0 } };

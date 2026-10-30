@@ -367,6 +367,34 @@ Code: `TerritoryWarsService.SiegeStages.cs`.
 - AttackCityValue (statistics 1021001): an attacker's damage to the castle's objects, the crystal included.
   DefenseValue (1021004) stays 0.
 
+### Air walls
+
+Code: `TerritoryWarsService.SiegeWalls.cs`, `Data/Config/SceneEditorAirWalls.cs` (`MapWorld.AirWalls`).
+
+- The castle's navigation grid is open through the gateway (cells x 585-615, z 141-158), the barricades and the
+  bastions. They block only through the scene editor's air walls (`m_kAirWalls`: id, `gridLevel`, `GroupId`, `name`,
+  the 1 m cells of `wallPoints`), which a dungeon switches on with var 133 `CAirWallList`: a list of wall ids with
+  `DungeonVar.groupType`/`groupId` saying who may pass (All 0, Camp 1, Guild 2, Player 3); a wall of the group missing
+  from a new list is removed (`LC_SceneCom_AirWall.lua:322-480`, which lists 2210101 and 2230101 specially).
+- The siege's 30401 carries var 133 with the standing walls for everyone (groupType 0) on load and on every change.
+  The server treats their cells as blocked: a skill whose line enters one is refused (`SkillBlocked`), and a walk into
+  one is reported or refused by `ServerOptions.WalkCheck` (`SceneService.WalkBlocked`).
+- Walls of the scene: 72 "空气墙_城门阻挡(内)" and 74 "(外)" at the gateway (x 597-600, z 136-165); 71 "进攻方阻挡" and
+  264/265 "进攻方营地墙" around the attackers' camp; the ten barricade walls of group 77 "拒马&相应空气墙" (322, 117,
+  231-235, 243, 245, 247), each paired by name and position with an Obstacle's spawn point; 65/19 at the two ladder ends;
+  the fortress walls 221, 224, 225, 236-241 behind the Knight Guardians; 29/31/61/66 along the city wall and 32/33/67/68
+  beside the ladder lanes.
+
+**Inferred** (no client script switches the walls; the original's are server side):
+- Standing walls: the camp's (71, 264, 265) in Prepare; the gate's (72, 74) until the gate at 36 falls; 65/19 always
+  (the ladders are not spawned); a barricade's wall until it falls; fortress 4/5/6's walls (221/240/241, 224/238/239,
+  225/236/237) until the Knight Guardian of the same number (41/42/43) falls, as `DestoryModelPerformParams` breaks
+  the bastion with it. The walls 29/31/61/66 (mostly on unwalkable cells) and 32/33/67/68 stay off.
+- A wall whose footprint holds the walker's or caster's own cell never blocks, nor, for a skill, one holding the
+  target's: the gate and the barricades stand inside their own walls.
+- The navigation grid still stops skills at the castle's solid parts, with the crystal's own blocked cell allowed as
+  before.
+
 ## Descriptor and runtime evidence boundaries
 
 The checked-in `MG_Guild.proto` defines `TerritoryWarsGuildData.occupyWarzone` and places auction fields inside `guildData`. `LC_DAL_TerritoryWars.lua:884-925,988-1008` reads `campDatas` and some wrapper-level auction fields instead. Implementation sends the supplied descriptor, plus the coherent modern 5013/84037 and deadline notifications; exact legacy panel decoding remains unverified. A new field number is not invented.
