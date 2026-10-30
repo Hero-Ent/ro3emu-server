@@ -8,7 +8,7 @@ namespace Ro3Emu.Tests;
 /// <summary>The RO1 HP reference (Reconstructed/ro1-monster-hp.json, switch Ro3Emu:Ro1MonsterHp): the Pupa.</summary>
 public sealed class Ro1MonsterHpTests
 {
-    private const int Pupa = 5000035, Fabre = 5000003;
+    private const int Pupa = 5000035, PecoPecoEgg = 5000033, AntEgg = 5000085, Fabre = 5000003;
 
     [Fact]
     public void ThePupaIsListedWithItsRo1Hp()
@@ -17,7 +17,16 @@ public sealed class Ro1MonsterHpTests
         Assert.Equal((1008, 427, 427), (pupa.Ro1Id, pupa.Ro1Hp, pupa.Hp)); // rAthena pre-re mob_db: Pupa, Hp 427, used as it is
     }
 
-    private static async Task<(long Pupa, long Fabre)> HpsAsync(bool ro1Hp)
+    [Fact]
+    public void TheEggsThatDieInOneHitAreListedWithTheirRo1Hp()
+    {
+        var all = MonsterService.LoadRo1MonsterHp();
+        Assert.Equal((1047, 420, 420), (all[PecoPecoEgg].Ro1Id, all[PecoPecoEgg].Ro1Hp, all[PecoPecoEgg].Hp)); // mob_db: Peco Peco Egg
+        Assert.Equal((1097, 420, 420), (all[AntEgg].Ro1Id, all[AntEgg].Ro1Hp, all[AntEgg].Hp)); // mob_db: Ant Egg
+        Assert.All(all.Values, e => Assert.Equal(e.Ro1Hp, e.Hp));
+    }
+
+    private static async Task<(long Pupa, long PecoPecoEgg, long AntEgg, long Fabre)> HpsAsync(bool ro1Hp)
     {
         string dataDir = Path.Combine(Path.GetTempPath(), "ro3emu-ro1hp-" + Guid.NewGuid().ToString("N"));
         var (httpPort, microPort, gamePort) = TestPorts.FreePorts();
@@ -32,7 +41,7 @@ public sealed class Ro1MonsterHpTests
         try
         {
             var monsters = app.Services.GetRequiredService<MonsterService>();
-            return (monsters.Template(Pupa)!.MaxHp, monsters.Template(Fabre)!.MaxHp);
+            return (monsters.Template(Pupa)!.MaxHp, monsters.Template(PecoPecoEgg)!.MaxHp, monsters.Template(AntEgg)!.MaxHp, monsters.Template(Fabre)!.MaxHp);
         }
         finally
         {
@@ -44,15 +53,15 @@ public sealed class Ro1MonsterHpTests
     }
 
     [ClientDataFact]
-    public async Task WithTheSwitchOnThePupaHas427HpAndOtherMonstersKeepTheClients()
+    public async Task WithTheSwitchOnThePupaAndTheEggsHaveTheirRo1HpAndOtherMonstersKeepTheClients()
     {
         var on = await HpsAsync(true);
-        Assert.Equal(427, on.Pupa);
+        Assert.Equal((427, 420, 420), (on.Pupa, on.PecoPecoEgg, on.AntEgg));
         Assert.Equal((await HpsAsync(false)).Fabre, on.Fabre); // a monster that is not listed
     }
 
     [ClientDataFact]
-    public async Task WithTheSwitchOffThePupaKeepsTheClients4Hp() => Assert.Equal(4, (await HpsAsync(false)).Pupa);
+    public async Task WithTheSwitchOffTheClientsHpStays() => Assert.Equal((4L, 45L, 92L), await HpsAsync(false) is var off ? (off.Pupa, off.PecoPecoEgg, off.AntEgg) : default);
 
     private static string RepoRoot()
     {
