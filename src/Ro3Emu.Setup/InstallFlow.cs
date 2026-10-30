@@ -19,12 +19,20 @@ internal static class InstallFlow
 
         if (options.ServerFiles)
         {
-            // A server needs the game scripts and the VFS index, then only the VFS files that hold the walk maps.
+            // A server needs the game scripts and the VFS index, then only the VFS files that hold the walk maps and
+            // the panel's pictures. Pictures packed into a sprite atlas name it only once their own bundle is here: a
+            // second round fetches the atlases.
             await InstallAsync(folder, options, path => path.StartsWith("ro3_Data/StreamingAssets/Recovery/LuaPayload/", StringComparison.Ordinal)
                 || path == "ro3_Data/StreamingAssets/VFS/assetmeta.data");
-            var vfs = DataExport.GameDataExport.NavSourceFiles(folder).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            Ui.Info($"The walk maps are in {vfs.Count} VFS file(s).");
-            await InstallAsync(folder, options, vfs.Contains);
+            var vfs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int round = 0; round < 2; round++)
+            {
+                var needed = DataExport.GameDataExport.ServerSourceFiles(folder, icons: !options.NoIcons);
+                if (needed.All(vfs.Contains)) break;
+                vfs.UnionWith(needed);
+                Ui.Info($"The walk maps{(options.NoIcons ? "" : " and the panel's pictures")} are in {vfs.Count} VFS file(s).");
+                await InstallAsync(folder, options, vfs.Contains);
+            }
             Ui.Ok($"{folder} has what the server export needs.");
             return 0;
         }

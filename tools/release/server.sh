@@ -3,20 +3,21 @@
 # self-contained). Exports the game data from a game folder on the first run, then runs the server in this terminal
 # or as a systemd service. Players join from Windows with: RO3Emu.exe join <address>
 #
-# usage: ./server.sh [--client DIR | --download DIR] [--host ADDRESS] [--gm ACCOUNT] [--voice-port PORT] [--panel-port PORT | --no-panel] [--service] [--reexport]
+# usage: ./server.sh [--client DIR | --download DIR] [--host ADDRESS] [--gm ACCOUNT] [--voice-port PORT] [--panel-port PORT | --no-panel] [--no-icons] [--service] [--reexport]
 #   --client DIR    a game folder copied from Windows (at least its ro3_Data/StreamingAssets); first run only
 #   --download DIR  download only the game files the export needs from the official Genesis servers into DIR
 #   --host ADDRESS  the address players connect to (default: this machine's first address)
 #   --gm ACCOUNT    an account that gets GM commands in game (repeatable)
 #   --voice-port PORT  turn on party voice chat on this TCP port, for example 33101 (off by default)
 #   --panel-port PORT  the web panel for players and admins on this TCP port (default 5381); --no-panel: none
+#   --no-icons      no item, monster, class and map pictures for the web panel (decoded from the game; 110 MB)
 #   --service       install and start a systemd service (needs sudo) instead of running in this terminal
 #   --reexport      export the game data again (after a game update)
 set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")"
 root=$(pwd)
 
-client=""; download=""; host=""; voice=""; panel=5381; service=0; reexport=0; gms=()
+client=""; download=""; host=""; voice=""; panel=5381; service=0; reexport=0; gms=(); icons=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --client) client="$2"; shift 2 ;;
@@ -30,9 +31,10 @@ while [ $# -gt 0 ]; do
       [[ "$2" =~ ^[0-9]+$ ]] && [ "$2" -gt 0 ] && [ "$2" -lt 65536 ] || { echo "--panel-port needs a port number"; exit 1; }
       panel="$2"; shift 2 ;;
     --no-panel) panel=0; shift ;;
+    --no-icons) icons=(--no-icons); shift ;;
     --service) service=1; shift ;;
     --reexport) reexport=1; shift ;;
-    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "unknown option $1 (see ./server.sh --help)"; exit 1 ;;
   esac
 done
@@ -46,7 +48,7 @@ export RO3EMU_HOME="$root"
 # 1. Game data, exported once from the game folder.
 if [ -n "$download" ]; then
   step 'Downloading the game files the server needs from the official servers'
-  ./RO3Emu install "$download" --server-files --yes
+  ./RO3Emu install "$download" --server-files --yes "${icons[@]}"
   client="$download"
 fi
 if [ "$reexport" = 1 ] || [ ! -f data/config/MapResource.json ] || [ ! -f data/msgtable.tsv ]; then
@@ -57,7 +59,7 @@ if [ "$reexport" = 1 ] || [ ! -f data/config/MapResource.json ] || [ ! -f data/m
     read -r -p '  Path of the game folder: ' client
   fi
   [ -d "$client/ro3_Data/StreamingAssets/Recovery/LuaPayload" ] || fail "No ro3_Data/StreamingAssets/Recovery/LuaPayload in '$client'. Copy the whole game folder and pass it with --client."
-  ./RO3Emu export "$(readlink -f "$client")" "$root/data"
+  ./RO3Emu export "$(readlink -f "$client")" "$root/data" "${icons[@]}"
 fi
 
 # 2. Settings: the address players reach, GM accounts, open content and the battle pass.
