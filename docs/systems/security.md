@@ -72,6 +72,11 @@ Every client is untrusted:
 - **Every request** is validated against the client's configuration and refused with an `ErrorCodes` value.
   Game state changes only on the game loop.
 
+The web panel's admin area has its own staff roles (Moderator, GM, Admin: `Ro3Emu:Panel:Roles`, `GmAccounts` as
+Admin, or given on the panel by an Admin); every API route checks its role. GM and Admin accounts must use two-factor
+authentication when the panel listens on a public address (`Ro3Emu:Panel:RequireAdmin2FA`). See
+[web panel](../guide/panel.md#staff-roles).
+
 GM commands (`!` chat lines, the GM panel, 1031/1034) are limited to `Ro3Emu:GmAccounts`. An empty list means
 everyone outside Production. See [GM access](../guide/gm-access.md), and set the list on any public server.
 
@@ -79,7 +84,7 @@ everyone outside Production. See [GM access](../guide/gm-access.md), and set the
 
 `DataDir` holds:
 
-- `ro3emu.db`: accounts, password hashes and every role;
+- `ro3emu.db`: accounts, password hashes and every role, and the panel's two-factor secrets;
 - `gate_rsa_private.pem`: the gate key;
 - the logs. With `Ro3Emu:TrafficLog` on, these include the game traffic of the listed accounts.
 
