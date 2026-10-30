@@ -9,8 +9,10 @@ namespace Ro3Emu.Tests;
 public sealed partial class SiegeTests
 {
     private const int GatePoint = 36;
+    private const uint GlobalObjectNotify = 30115;
     private static readonly int[] OuterTowers = [38, 39, 40], InnerTowers = [41, 42, 43],
-        Barricades = [321, 80, 81, 83, 90, 93, 97, 101, 103, 107], BuildingMarkers = [254, 255, 256, 273, 274, 308, 299];
+        Barricades = [321, 80, 81, 83, 90, 93, 97, 101, 103, 107], BuildingMarkers = [254, 255, 256, 273, 274, 308, 299],
+        SeenOnLoad = [GatePoint, 41, 42, 43, 44, 254];
 
     /// <summary>A seeded siege of 1001 with both sides loaded in: the attackers' bot is the fixture's GM account.</summary>
     private async Task<(BotClient Attack, BotClient Defense)> SeededSiege(string tag, long at = 25)
@@ -74,5 +76,36 @@ public sealed partial class SiegeTests
         await OnLoop(Service<TerritoryWarsService>().ReconcileAsync);
         Assert.Contains(321, run.State.Destroyed);
         Assert.Same(barricade, run.Objects[321]); // not spawned again
+    }
+
+    private static GlobalObjectData? AtPoint(GlobalObjectDataNotify n, int point) =>
+        n.GlobalDatas.Values.FirstOrDefault(g => g.DungeonPointId == point);
+
+    [ClientDataFact]
+    public async Task ALoadedMemberSeesTheCastleAsGlobalObjectsAndTheirHpChanges()
+    {
+        var (attack, defense) = await SeededSiege("B");
+        await using var _ = attack;
+        await using var __ = defense;
+        var run = Run(attack);
+
+        // Loading in: every standing object at its point, alive; the building markers keep their models intact.
+        var full = await Next(defense, GlobalObjectNotify, GlobalObjectDataNotify.Parser,
+            n => SeenOnLoad.All(p => AtPoint(n, p) is { Hp: > 0 }));
+        var gate = AtPoint(full, GatePoint)!;
+        Assert.Equal((4900005L, 2L, run.Objects[GatePoint].Uid), (gate.ConfigId, gate.Camp, gate.GlobalObjId));
+        Assert.Equal(run.Objects[GatePoint].Template.MaxHp, gate.MaxHp);
+        Assert.Equal(run.Objects[44].Uid, AtPoint(full, 44)!.GlobalObjId);
+
+        // An HP change goes out with the siege clock; a death as hp 0, which deletes the object in the client.
+        var guardian = run.Objects[38];
+        await OnLoop(() => { guardian.Hp -= 1000; return Task.CompletedTask; });
+        await OnLoop(Service<TerritoryWarsService>().ReconcileAsync);
+        Assert.Equal(guardian.Template.MaxHp - 1000, AtPoint(await Next(defense, GlobalObjectNotify, GlobalObjectDataNotify.Parser,
+            n => AtPoint(n, 38) is { } g && g.Hp < g.MaxHp), 38)!.Hp);
+        await OnLoop(() => { guardian.Hp = 0; guardian.Dead = true; return Task.CompletedTask; });
+        await OnLoop(Service<TerritoryWarsService>().ReconcileAsync);
+        await Next(attack, GlobalObjectNotify, GlobalObjectDataNotify.Parser, n => AtPoint(n, 38) is { Hp: 0 });
+        Assert.Contains(38, run.State.Destroyed);
     }
 }

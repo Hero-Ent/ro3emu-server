@@ -116,12 +116,15 @@ public sealed partial class TerritoryWarsService
         battle.State.Destroyed.Add(point);
         battle.State.ObjectHp.Remove(point);
         await SaveAsync(state);
+        await SiegePublishObjectsAsync(battle);
     }
 
-    /// <summary>The siege clock: castle objects that died without a kill callback (their killer left meanwhile).</summary>
+    /// <summary>The siege clock: castle objects that died without a kill callback (their killer left meanwhile), then
+    /// the HP changes of the last second (30115).</summary>
     private async Task SiegeObjectsClockAsync(SiegeRun battle)
     {
         foreach (var (point, unit) in battle.Objects.ToArray())
             if (unit.Dead && point != SiegeCrystalPoint) await SiegeObjectDestroyedAsync(battle, point);
+        await SiegePublishObjectsAsync(battle);
     }
 }

@@ -55,6 +55,8 @@ public sealed partial class TerritoryWarsService
         public MonsterUnit? Crystal { get; set; }
         /// <summary>The castle objects of this room by scene point, the crystal included (dead ones stay listed).</summary>
         internal Dictionary<int, MonsterUnit> Objects { get; } = [];
+        /// <summary>The HP of each object last sent in 30115 (TerritoryWarsService.SiegeGlobalData.cs).</summary>
+        internal Dictionary<int, long> SentHp { get; } = [];
         internal CommandBoard Command { get; } = new();
         public bool Spawning { get; set; }
         /// <summary>For assists: each victim's recent hitters and when (TerritoryWarsService.QuestTargets.cs).</summary>
@@ -152,6 +154,7 @@ public sealed partial class TerritoryWarsService
         {
             await SiegeSpawnCrystalAsync(battle);
             await SiegeSpawnObjectsAsync(battle);
+            await SiegePublishObjectsAsync(battle);
         }
         finally { battle.Spawning = false; }
     }
@@ -178,6 +181,7 @@ public sealed partial class TerritoryWarsService
         var p = battle.State.Players[s.Role!.Id];
         p.Loaded = true; await SaveAsync(state);
         await Send(s, 30401, SiegeBaseInfo(battle));
+        await SendSiegeObjectsAsync(s, battle);
         SiegeTrack(battle, [p.Id]);
         await SendCommandBoardAsync(s);
         // DungeonLua_2230101: point 73 defender, point 75 attacker.

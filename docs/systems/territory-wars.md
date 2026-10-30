@@ -306,6 +306,14 @@ Code: `TerritoryWarsService.SiegeObjects.cs`.
   4903001, the fixed vehicles 4901004-4901009 and the invisible markers 4900017 are separate features.
 - `DungeonLua_2230101.lua` `UIModule_NpcData` (not exported, kept as code): 36 CityGate, 38-40 OuterTower, 41-43
   InnerTower, 44 Crystal, 46/47 Ladder, 48 Car, 286 Revive (`enum_SiegeObjectType`, `Lua_GameDefine.lua:14875`).
+- **30115.** The siege UI knows an object only through `GlobalObjectDataNotify` (`TerritoryWarsService.SiegeGlobalData.cs`):
+  `LC_SiegeHelper.GetNpcUIData` takes HP, max HP, position and camp from the entry at the object's point and counts the
+  object dead when there is none; an entry with hp 0 deletes it (`LC_SceneCom_GlobalObjMgr.lua:82-138`). Loading in
+  sends every standing object (all spawned NPCs have `_iNeedNotifyGlobalData` 1, the crystal too); HP changes go out
+  with the one-second siege clock (inferred cadence), a spawn and a death at once. `LC_DunGeon_Siege._updateDestoryPerform`
+  shows the intact or the broken model of the `DestoryModelPerformParams` buildings by whether an object stands at the
+  point: without 30115 every bastion, workshop and arrow tower was drawn broken; the markers 4903002 keep the workshops
+  and towers standing, the Knight Guardians the bastions.
 
 **Inferred:**
 - Row 4900016 places the revive point at 45, which is a group id and no point of the scene; `UIModule_NpcData` puts
