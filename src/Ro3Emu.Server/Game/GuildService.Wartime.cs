@@ -26,8 +26,9 @@ public sealed partial class GuildService
 
     /// <summary>
     /// Set by TerritoryWarsService: the side (1 attack, 2 defense) the role fights for in an active siege it is loaded
-    /// into, else 0. Machines are reserved and built only there (inferred: the battle bag that offers them is the
-    /// siege's, LC_WartimeItemHelper.TryBuildCannon).
+    /// into, 3 in an active territory battle of DungeonConfig _iGamePlayType 18, else 0. Machines are reserved and built
+    /// only there (inferred: the battle bag that offers them, LC_WartimeItemHelper.TryBuildCannon, opens from the
+    /// Instrument button of the siege's and the type-18 territory battle's button widgets).
     /// </summary>
     public Func<GameSession, int>? WarSideOf { get; set; }
 
