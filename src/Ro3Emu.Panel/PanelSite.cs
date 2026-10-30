@@ -33,6 +33,7 @@ public sealed partial class PanelSite
 
     private readonly PanelOptions _options;
     private readonly IPanelBackend _backend;
+    private readonly IPanelAdminTools _tools;
     private readonly TimeProvider _clock;
     private readonly ILogger<PanelSite> _log;
     private readonly PanelSessions _sessions;
@@ -40,15 +41,16 @@ public sealed partial class PanelSite
     private readonly IPAddress[] _proxies;
     private readonly Route[] _routes;
 
-    public PanelSite(PanelOptions options, IPanelBackend backend, TimeProvider clock, ILogger<PanelSite> log)
+    public PanelSite(PanelOptions options, IPanelBackend backend, IPanelAdminTools tools, TimeProvider clock, ILogger<PanelSite> log)
     {
         _options = options;
         _backend = backend;
+        _tools = tools;
         _clock = clock;
         _log = log;
         _sessions = new PanelSessions(clock, TimeSpan.FromHours(Math.Max(1, options.SessionHours)));
         _proxies = [.. options.TrustedProxies.Select(IPAddress.Parse).Select(Normalize)];
-        _routes = [.. PublicRoutes(), .. PlayerRoutes(), .. AdminRoutes()];
+        _routes = [.. PublicRoutes(), .. PlayerRoutes(), .. AdminRoutes(), .. ToolRoutes()];
     }
 
     /// <summary>
@@ -164,6 +166,7 @@ public sealed partial class PanelSite
         {
             try { reply = await DispatchAsync(context, route, segments); }
             catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested) { return; }
+            catch (PanelRefusalException refusal) { reply = Reply.Error(StatusCodes.Status400BadRequest, refusal.Message); }
             catch (Exception e)
             {
                 LogFailed(_log, e, route.Method, path);

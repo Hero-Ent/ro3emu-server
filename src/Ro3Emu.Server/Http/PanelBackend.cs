@@ -90,7 +90,7 @@ public sealed partial class PanelBackend(IOptions<ServerOptions> options, Accoun
 
     public async Task<IReadOnlyList<PanelNewsItem>> NewsAsync(int limit) =>
         [.. (await accounts.ReadAsync<List<PanelNewsRow>>(new PanelNewsRead(limit, Now)))
-            .Select(n => new PanelNewsItem(n.Id, n.Title, n.Body, n.Tag, DateTimeOffset.FromUnixTimeSeconds(n.PublishedUtc), n.Author))];
+            .Select(n => new PanelNewsItem(n.Id, n.Title, n.Body, n.Tag, DateTimeOffset.FromUnixTimeSeconds(n.PublishedUtc), n.Author, n.Pinned))];
 
     // ---------------------------------------------------------------- who is online
 

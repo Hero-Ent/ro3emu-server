@@ -76,7 +76,8 @@ public enum PanelRegistration { Created, Taken, Banned, Invalid }
 
 public sealed record PanelCounts(int Accounts, int Characters);
 
-public sealed record PanelNewsItem(long Id, string Title, string Body, string Tag, DateTimeOffset Published, string Author);
+public sealed record PanelNewsItem(long Id, string Title, string Body, string Tag, DateTimeOffset Published, string Author,
+    bool Pinned = false);
 
 public sealed record PanelOnlineRole(string Name, string Class, int Level, string Map, string Account);
 

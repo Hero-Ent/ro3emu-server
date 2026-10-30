@@ -221,6 +221,7 @@ public static partial class ServerHost
         builder.Services.AddSingleton(options.Panel);
         builder.Services.AddSingleton<PanelBackend>();
         builder.Services.AddSingleton<Ro3Emu.Panel.IPanelBackend>(sp => sp.GetRequiredService<PanelBackend>());
+        builder.Services.AddSingleton<Ro3Emu.Panel.IPanelAdminTools, PanelAdminTools>();
         builder.Services.AddSingleton<Ro3Emu.Panel.PanelSite>();
         builder.Services.AddSingleton<GiftCodeLimiter>();
         builder.Services.AddSingleton<GiftCodeService>();

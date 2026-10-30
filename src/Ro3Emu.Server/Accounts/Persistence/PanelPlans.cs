@@ -30,6 +30,8 @@ internal sealed class PanelSchemaPlan : DbPlan
                 published_utc INTEGER NOT NULL,
                 author TEXT NOT NULL DEFAULT '');
             """);
+        // Pinned news stay on top of the list whatever their date (the news editor).
+        SchemaSql.AddColumn(db, tx, "panel_news", "pinned", "INTEGER NOT NULL DEFAULT 0");
         return 1;
     }
 }
@@ -38,7 +40,9 @@ internal sealed class PanelSchemaPlan : DbPlan
 internal static class AdminAudit
 {
     /// <summary>The action column's values.</summary>
-    internal const string Ban = "ban", Unban = "unban";
+    internal const string Ban = "ban", Unban = "unban", Mail = "mail", Gm = "gm", Broadcast = "broadcast",
+        NewsSave = "news-save", NewsDelete = "news-delete", GiftCodeCreate = "gift-code-create",
+        GiftCodeDisable = "gift-code-disable", GiftCodeEnable = "gift-code-enable";
 
     internal static void Insert(SqliteConnection db, SqliteTransaction tx, long now, string admin, string action, string target, string detail)
     {
@@ -54,16 +58,26 @@ internal static class AdminAudit
 
 internal sealed record AdminAuditRow(long Id, long Utc, string Admin, string Action, string Target, string Detail);
 
-/// <summary>A page of admin_audit, newest first, with the total row count.</summary>
-internal sealed class AdminAuditRead(int offset, int limit) : DbReadPlan
+/// <summary>
+/// A page of admin_audit, newest first, with the total row count; only one <paramref name="action"/> and one
+/// <paramref name="admin"/>'s rows when they are given (the GM console's history).
+/// </summary>
+internal sealed class AdminAuditRead(int offset, int limit, string? action = null, string? admin = null) : DbReadPlan
 {
+    private const string Filter = " WHERE ($action IS NULL OR action=$action) AND ($admin IS NULL OR admin=$admin)";
+
     internal override int Bytes => 128 + limit * 256;
     internal override string Label => "panel/audit";
     internal override object Execute(SqliteConnection db, SqliteTransaction tx)
     {
-        using var count = DbSql.Command(db, tx, "SELECT COUNT(*) FROM admin_audit");
+        using var count = DbSql.Command(db, tx, "SELECT COUNT(*) FROM admin_audit" + Filter);
+        count.Parameters.AddWithValue("$action", action is null ? DBNull.Value : action);
+        count.Parameters.AddWithValue("$admin", admin is null ? DBNull.Value : admin);
         int total = (int)(long)count.ExecuteScalar()!;
-        using var select = DbSql.Command(db, tx, "SELECT id,utc,admin,action,target,detail FROM admin_audit ORDER BY id DESC LIMIT $limit OFFSET $offset");
+        using var select = DbSql.Command(db, tx, "SELECT id,utc,admin,action,target,detail FROM admin_audit" + Filter +
+            " ORDER BY id DESC LIMIT $limit OFFSET $offset");
+        select.Parameters.AddWithValue("$action", action is null ? DBNull.Value : action);
+        select.Parameters.AddWithValue("$admin", admin is null ? DBNull.Value : admin);
         select.Parameters.AddWithValue("$limit", limit);
         select.Parameters.AddWithValue("$offset", offset);
         using var rows = select.ExecuteReader();
@@ -74,23 +88,25 @@ internal sealed class AdminAuditRead(int offset, int limit) : DbReadPlan
     }
 }
 
-internal sealed record PanelNewsRow(long Id, string Title, string Body, string Tag, long PublishedUtc, string Author);
+internal sealed record PanelNewsRow(long Id, string Title, string Body, string Tag, long PublishedUtc, string Author, bool Pinned);
 
-/// <summary>The newest panel_news rows already published at <paramref name="now"/>.</summary>
-internal sealed class PanelNewsRead(int limit, long now) : DbReadPlan
+/// <summary>The panel_news rows already published at <paramref name="now"/>, pinned first, then newest; with
+/// <paramref name="scheduled"/> the ones published later too (the news editor).</summary>
+internal sealed class PanelNewsRead(int limit, long now, bool scheduled = false) : DbReadPlan
 {
     internal override int Bytes => 128 + limit * 1024;
     internal override string Label => "panel/news";
     internal override object Execute(SqliteConnection db, SqliteTransaction tx)
     {
-        using var select = DbSql.Command(db, tx, "SELECT id,title,body,tag,published_utc,author FROM panel_news " +
-            "WHERE published_utc <= $now ORDER BY published_utc DESC, id DESC LIMIT $limit");
+        using var select = DbSql.Command(db, tx, "SELECT id,title,body,tag,published_utc,author,pinned FROM panel_news " +
+            (scheduled ? "" : "WHERE published_utc <= $now ") + "ORDER BY pinned DESC, published_utc DESC, id DESC LIMIT $limit");
         select.Parameters.AddWithValue("$now", now);
         select.Parameters.AddWithValue("$limit", limit);
         using var rows = select.ExecuteReader();
         var news = new List<PanelNewsRow>();
         while (rows.Read())
-            news.Add(new PanelNewsRow(rows.GetInt64(0), rows.GetString(1), rows.GetString(2), rows.GetString(3), rows.GetInt64(4), rows.GetString(5)));
+            news.Add(new PanelNewsRow(rows.GetInt64(0), rows.GetString(1), rows.GetString(2), rows.GetString(3), rows.GetInt64(4),
+                rows.GetString(5), rows.GetInt64(6) != 0));
         return news;
     }
 }
