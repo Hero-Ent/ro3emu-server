@@ -289,6 +289,32 @@ Code: `TerritoryWarsService.MachineDamage.cs`, `TerritoryWarsService.WarRepair.c
 - Restocking the warehouse: 32275 has no client sender and no shop or award sells the machine items (the "War Machine
   Shop" text has no data behind it), so the stock is only `SiegeInitItemList` and what the machines leave or return.
 
+## Siege castle
+
+Code: `TerritoryWarsService.SiegeObjects.cs`.
+
+- **Placement.** `NpcLevelPointRespawnConfig` places the castle: `_iMapid` is the DungeonConfig id (2230101) and
+  `_iRespawnpointid` a point of its scene editor (`sc_gvg_gongchengzhan_001_dg01`). The siege room spawns, as monsters of
+  their NPCConfig rows: the City Gate 4900005 at 36 (the gateway, "城门刷新点") and 214 (the attackers' camp gate,
+  "进攻方城门"), the Bow Guardians 4901012 at 38-40 and the Knight Guardians 4901011 at 41-43, the ten Obstacles 4900022
+  (barricades: 321, 80, 81, 83, 90, 93, 97, 101, 103, 107), the revive point 4900010, the building markers 4903002 (254,
+  255, 256, 273, 274, 299, 308) and the revive markers 4901021 (attackers: 267, 268) / 4901022 (defenders: 270, 271).
+  The crystal 4900009 at 44 keeps its own spawn. A destroyed object stays destroyed for the rest of the siege, also in a
+  room opened again for it, and a damaged one keeps its HP (`SiegeRunState.Destroyed`, `ObjectHp`).
+- **Not yet spawned:** the ladders 4900000/4900012 (46, 47, 20) and the ram 4900002 (34, 48: its end point 35 is in front
+  of the gate) need their route AI and `UIModule_NpcRefreshDuration` respawns; the 38 archers 4901001, the guide arrows
+  4903001, the fixed vehicles 4901004-4901009 and the invisible markers 4900017 are separate features.
+- `DungeonLua_2230101.lua` `UIModule_NpcData` (not exported, kept as code): 36 CityGate, 38-40 OuterTower, 41-43
+  InnerTower, 44 Crystal, 46/47 Ladder, 48 Car, 286 Revive (`enum_SiegeObjectType`, `Lua_GameDefine.lua:14875`).
+
+**Inferred:**
+- Row 4900016 places the revive point at 45, which is a group id and no point of the scene; `UIModule_NpcData` puts
+  4900010 at 286, which is used.
+- The attackers' marker of the contested revive point (269, "争夺复活点-进攻方") stands on the same spot as the
+  defenders' 270: the point starts with the defenders and is not spawned for the attackers (its capture is unknown).
+- Who hits what: a camp 2 object (gates, guardians, barricades) by the attackers only, a camp 1 object by the
+  defenders only, the camp 4 revive point and anything with `_iNoSelected` 1 (the markers) by nobody.
+
 ## Descriptor and runtime evidence boundaries
 
 The checked-in `MG_Guild.proto` defines `TerritoryWarsGuildData.occupyWarzone` and places auction fields inside `guildData`. `LC_DAL_TerritoryWars.lua:884-925,988-1008` reads `campDatas` and some wrapper-level auction fields instead. Implementation sends the supplied descriptor, plus the coherent modern 5013/84037 and deadline notifications; exact legacy panel decoding remains unverified. A new field number is not invented.

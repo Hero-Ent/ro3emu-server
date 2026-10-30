@@ -31,6 +31,10 @@ public sealed partial class TerritoryWarsService
         public byte[] AttackSnapshot { get; set; } = [];
         public byte[] DefenseSnapshot { get; set; } = [];
         public long CrystalHp { get; set; }
+        /// <summary>The castle objects' HP below their maximum and the destroyed ones, by scene point
+        /// (TerritoryWarsService.SiegeObjects.cs).</summary>
+        public Dictionary<int, long> ObjectHp { get; set; } = [];
+        public List<int> Destroyed { get; set; } = [];
         public long SettledAt { get; set; }
         public bool Settled { get; set; }
         public long Winner { get; set; }
@@ -49,6 +53,8 @@ public sealed partial class TerritoryWarsService
             : owner.state.Epoch == Epoch && owner.state.SiegeRuns.TryGetValue(Key, out var current) ? current
               : throw new InvalidOperationException("Territory siege has no active or retiring epoch state.");
         public MonsterUnit? Crystal { get; set; }
+        /// <summary>The castle objects of this room by scene point, the crystal included (dead ones stay listed).</summary>
+        internal Dictionary<int, MonsterUnit> Objects { get; } = [];
         internal CommandBoard Command { get; } = new();
         public bool Spawning { get; set; }
         /// <summary>For assists: each victim's recent hitters and when (TerritoryWarsService.QuestTargets.cs).</summary>
@@ -131,29 +137,38 @@ public sealed partial class TerritoryWarsService
             if (!entered)
             { s.EventFaction = 0; if (added) { record.Players.Remove(s.Role.Id); await SaveAsync(state); } return true; }
             s.SiegeBattle = battle;
-            await SiegeSpawnCrystalAsync(battle);
+            await SiegeSpawnAsync(battle);
         }
         finally { stagedTerritoryState.Dispose(); _gate.Release(); reservation?.Dispose(); }
         return true;
     }
 
-    private async Task SiegeSpawnCrystalAsync(SiegeRun battle)
+    /// <summary>The crystal and the castle objects the room lacks (TerritoryWarsService.SiegeObjects.cs).</summary>
+    private async Task SiegeSpawnAsync(SiegeRun battle)
     {
-        if (battle.Spawning || battle.Room.Closed || battle.State.Settled || battle.Crystal is { Dead: false }) return;
+        if (battle.Spawning || battle.Room.Closed || battle.State.Settled) return;
         battle.Spawning = true;
         try
         {
-            var map = _maps.Map(SiegeScene);
-            if (map == null || !map.Points.TryGetValue(SiegeCrystalPoint, out var point))
-                throw new InvalidOperationException("Siege crystal point 44 is absent from scene 2230101");
-            var actor = await _instances.SpawnAsync(battle.Room, SiegeCrystal, map.Grounded(point));
-            if (actor == null) throw new InvalidOperationException("Configured Siege crystal 4900009 could not spawn");
-            if (battle.State.CrystalHp > 0) actor.Hp = Math.Min(actor.Hp, battle.State.CrystalHp);
-            battle.State.CrystalHp = actor.Hp;
-            battle.Crystal = actor;
-            await SaveAsync(state);
+            await SiegeSpawnCrystalAsync(battle);
+            await SiegeSpawnObjectsAsync(battle);
         }
         finally { battle.Spawning = false; }
+    }
+
+    private async Task SiegeSpawnCrystalAsync(SiegeRun battle)
+    {
+        if (battle.Crystal is { Dead: false }) return;
+        var map = _maps.Map(SiegeScene);
+        if (map == null || !map.Points.TryGetValue(SiegeCrystalPoint, out var point))
+            throw new InvalidOperationException("Siege crystal point 44 is absent from scene 2230101");
+        var actor = await _instances.SpawnAsync(battle.Room, SiegeCrystal, map.Grounded(point));
+        if (actor == null) throw new InvalidOperationException("Configured Siege crystal 4900009 could not spawn");
+        if (battle.State.CrystalHp > 0) actor.Hp = Math.Min(actor.Hp, battle.State.CrystalHp);
+        battle.State.CrystalHp = actor.Hp;
+        battle.Crystal = actor;
+        battle.Objects[SiegeCrystalPoint] = actor;
+        await SaveAsync(state);
     }
 
     private async Task SiegeLoadedAsync(GameSession s)
@@ -210,7 +225,8 @@ public sealed partial class TerritoryWarsService
 
     private bool SiegeCanHit(GameSession s, MonsterUnit m, SiegeRun battle)
         => MachineCamp(m) is { } camp ? MachineHittable(s, battle, camp)
-            : m != battle.Crystal || SiegeActive(battle) && SiegeMember(s, battle) && OwnId(s) == battle.State.Attack;
+            : m == battle.Crystal ? SiegeActive(battle) && SiegeMember(s, battle) && OwnId(s) == battle.State.Attack
+            : SiegeObjectPoint(battle, m) is null || SiegeObjectHittable(s, battle, m);
 
     /// <summary>
     /// CombatService.SkillLineBlocked: (inferred) inside a siege room the castle stops skills along the navigation grid,
@@ -262,6 +278,8 @@ public sealed partial class TerritoryWarsService
             if (!ReferenceEquals(s.SiegeBattle, battle) || !SiegeActive(battle) || !SiegeMember(s, battle)) return;
             battle.State.Players[s.Role.Id].Damage += Math.Max(0, amount);
             if (m == battle.Crystal) battle.State.CrystalHp = m.Hp;
+            else if (SiegeObjectPoint(battle, m) is int point && !battle.State.Destroyed.Contains(point))
+                battle.State.ObjectHp[point] = m.Hp;
             await SaveAsync(state);
         }
         finally { stagedTerritoryState.Dispose(); _gate.Release(); reservation?.Dispose(); }
@@ -308,6 +326,12 @@ public sealed partial class TerritoryWarsService
 
     private async Task SiegeKilledAsync(GameSession s, MonsterUnit m)
     {
+        if (s.SiegeBattle is { } siege && m != siege.Crystal && SiegeObjectPoint(siege, m) is int point
+            && m.InstanceId == siege.Room.Id)
+        {
+            await SiegeObjectKilledAsync(s, siege, point);
+            return;
+        }
         if (s.SiegeBattle is not { } battle || m != battle.Crystal || !SiegeActive(battle) || !SiegeMember(s, battle)) return;
         var role = s.Role;
         var attachment = s.Attachment;
@@ -347,7 +371,11 @@ public sealed partial class TerritoryWarsService
                 if (current.Settled && _clock.Now >= current.SettledAt + 30)
                     await RoleFanout.EachAsync(battle.Room.ActiveMembers.Select(m => m.Session), async s =>
                     { if (s.SiegeBattle == battle && !s.SceneLoading) await _instances.LeaveAsync(s); });
-                else if (!current.Settled) await SiegeSpawnCrystalAsync(battle);
+                else if (!current.Settled)
+                {
+                    await SiegeObjectsClockAsync(battle);
+                    await SiegeSpawnAsync(battle);
+                }
             }
         }
         if (_siegeDirty) { await SaveAsync(state); _siegeDirty = false; }
