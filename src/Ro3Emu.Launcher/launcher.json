@@ -1,5 +1,5 @@
 {
-  // Built into the exe. "ro3emu" is RO3Emu's own app (the one in the release zip): the game from the official servers,
+  // Built into the exe. "ro3emu" is RO3Emu's own app (the one in the release zip): the game from Genesis' update servers,
   // your own server on this PC, updates and news from RO3Emu's GitHub releases.
   // A server's own launcher uses "operator" with its "repository", "channel", "server", "serverName" and "links"
   // (docs/guide/launcher.md); build it with -p:LauncherConfigFile=<your file> or put a launcher.json beside the exe.

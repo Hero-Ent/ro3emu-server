@@ -38,7 +38,7 @@
     <td width="50%" valign="top"><b>One click to play</b><br>A single <code>RO3Emu.exe</code>, nothing to install. It finds your game, prepares it and starts both the server and the game.</td>
   </tr>
   <tr>
-    <td width="50%" valign="top"><b>Your own game files</b><br>We never host the game. No game yet? RO3Emu downloads it from the official servers and checks every file's signature.</td>
+    <td width="50%" valign="top"><b>Your own game files</b><br>We never host the game. No game yet? RO3Emu downloads it from Genesis' update servers and checks every file's signature.</td>
     <td width="50%" valign="top"><b>Play together</b><br>Host for your friends from Windows or a Linux box, with party voice chat. Built for hundreds of players on two cores.</td>
   </tr>
 </table>

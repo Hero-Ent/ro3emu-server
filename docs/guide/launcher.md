@@ -2,13 +2,13 @@
 
 Players can get one file, `Ro3EmuLauncher.exe` (`src/Ro3Emu.Launcher`, .NET 10 WPF + WebView2, self-contained). It
 installs the RO3 client patched for your server, keeps it updated, updates itself and starts `ro3.exe` with the launch
-proof. The official RO3 launchers cannot be reused for this: they pin the publisher's manifest signing key and update
+proof. The Genesis launcher cannot be reused for this: it pins Genesis' manifest signing key and update
 hosts in the exe, update themselves, and their Repair restores the original DLLs.
 
 The same exe runs in one of two modes, chosen by its `launcher.json`:
 
 - **RO3Emu mode** (`"mode": "ro3emu"`, the built-in default, and what the release zip ships): RO3Emu's own app, the
-  window over what `RO3Emu.exe` does. It finds the game (or downloads it from the official servers), exports the game
+  window over what `RO3Emu.exe` does. It finds the game (or downloads it from Genesis' update servers), exports the game
   data, starts your own server on this PC, patches the game and starts it. Settings → Play with friends hosts a server
   for friends or joins someone else's. Its news are RO3Emu's GitHub releases, it updates itself from the latest
   release (`RO3Emu-win-x64.zip`: downloaded, size and checksum checked, swapped in on restart; your game, `data`,
@@ -87,7 +87,7 @@ Set `repository` to the public URL of your repository folder and `server` to you
   progress (speed, time left, Pause; a paused download continues where it stopped).
 - **Settings** (the gear): the game folder (change, open), Repair, Desktop / Start menu shortcuts and **Uninstall**. Uninstall is
   offered only for a folder the launcher installed into while it was empty or new; a folder that already held a client
-  (for example the player's official ROO_PC) is never deleted.
+  (for example the player's own Genesis ROO_PC) is never deleted.
 - On the first run the launcher asks once whether to add Desktop / Start menu shortcuts to itself (it never moves or
   copies itself).
 - **Play** hides the launcher to a tray icon; it comes back when the game closes and checks for updates again. Tray
@@ -99,7 +99,7 @@ Set `repository` to the public URL of your repository folder and `server` to you
 
 ## Releasing
 
-All commands below use placeholders: `<client dir>` is a clean official RO3 PC install (the folder with `ro3.exe`),
+All commands below use placeholders: `<client dir>` is a clean Genesis RO3 PC install (the folder with `ro3.exe`),
 `<repo dir>` is your local copy of the repository folder, `<server url>` is your game server (for example
 `http://127.0.0.1:5380` for a local test) and `<channel>` is the channel name.
 
@@ -112,7 +112,7 @@ or gate key changes:
 Ro3Emu.ClientTools release <client dir> <server url> <gate_rsa_public.pem> <repo dir> <version> <channel>
 ```
 
-The published file set is exactly the official install (`.ro3-update/verified-baseline.txt`). The patched DLLs are
+The published file set is exactly the Genesis install (`.ro3-update/verified-baseline.txt`). The patched DLLs are
 rebuilt from the originals in `ro3emu-backup` inside a staging copy, so the source client itself may already be
 patched for another server. Only changed chunks are new, so a hooks change is a few MB.
 

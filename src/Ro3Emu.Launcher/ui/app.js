@@ -196,11 +196,11 @@
         ico = "i-wrench"; break;
       case "nogame":
         title = pausedByUser ? "Download paused" : "Ragnarok 3 not found";
-        sub = S.message || "Download the game from the official servers, or pick the folder you have.";
+        sub = S.message || "Download the game from Genesis' update servers, or pick the folder you have.";
         ico = "i-download"; break;
       case "gameupdate":
         title = "The game needs an update";
-        sub = S.message || "Update it from the official servers.";
+        sub = S.message || "Update it from Genesis' update servers.";
         ico = "i-download"; break;
       case "appupdate":
         title = "A new version is available";
@@ -407,10 +407,10 @@
     var busy = isTransfer(S.phase) || S.phase === "launching" || S.phase === "running";
     var app = ro3emuMode();
     $("set-dir-change").disabled = busy || S.phase === "checking";
-    // RO3Emu mode: repair compares the game with the official release; there is always an installed app version
+    // RO3Emu mode: repair compares the game with Genesis' release; there is always an installed app version
     $("set-repair").disabled = busy || (app ? !st.dir : !S.installed) || S.phase === "checking" || S.phase === "offline";
     $("set-repair-hint").textContent = app
-      ? "Checks every game file against the official release and fixes what differs. Your settings and screenshots are kept."
+      ? "Checks every game file against Genesis' release and fixes what differs. Your settings and screenshots are kept."
       : "Checks every game file and downloads only what is missing or damaged. Your settings and screenshots are kept.";
     $("set-uninstall").disabled = busy || S.phase === "checking";
     $("set-friends-field").hidden = !app;
@@ -816,8 +816,8 @@
       server();
       later(700, function () {
         switch (mode) {
-          case "nogame": state("nogame", "Download it from the official servers (about 24 GB) into D:\\Games\\Ragnarok3, or pick the folder you have.", "Ragnarok 3 not found", { text: "Pick game folder", cmd: "changeDir" }); break;
-          case "gameupdate": state("gameupdate", "This game folder does not fit this RO3Emu: a client file is older than the patch expects. Update it from the official servers.", "The game needs an update", { text: "Pick another folder", cmd: "changeDir" }); break;
+          case "nogame": state("nogame", "Download it from Genesis' update servers (about 24 GB) into D:\\Games\\Ragnarok3, or pick the folder you have.", "Ragnarok 3 not found", { text: "Pick game folder", cmd: "changeDir" }); break;
+          case "gameupdate": state("gameupdate", "This game folder does not fit this RO3Emu: a client file is older than the patch expects. Update it from Genesis' update servers.", "The game needs an update", { text: "Pick another folder", cmd: "changeDir" }); break;
           case "appupdate": state("appupdate", "Only RO3Emu itself is replaced. Your game, characters and settings are kept.", "RO3Emu 1.0.21 is available", { text: "Later", cmd: "later" }, "1.0.21"); break;
           case "exporting": exportThenPlay("local"); break;
           case "downloading": state("updating", null, null); emit({ type: "progress", stage: "Downloading", done: Math.round(9.4 * GB), total: Math.round(23.7 * GB), rate: 38 * MB, eta: 381, unit: "bytes" }); break;

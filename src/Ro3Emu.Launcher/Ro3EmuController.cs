@@ -11,7 +11,7 @@ namespace Ro3Emu.Launcher;
 /// RO3Emu's own app (no operator launcher.json): the window over what RO3Emu.exe does (Ro3Emu.Setup's flows run
 /// behind <see cref="Ui.Sink"/>), plus the app's updates and news from our GitHub releases.
 /// Phases sent to the page: checking, nogame (no game found: download it or pick its folder), gameupdate (the game
-/// does not fit: update it from the official servers), appupdate (a newer RO3Emu), updating (a download, pausable),
+/// does not fit: update it from Genesis' update servers), appupdate (a newer RO3Emu), updating (a download, pausable),
 /// working (export / server start, not pausable), ready (Play), launching, running, error.
 /// </summary>
 public sealed class Ro3EmuController : ILauncherController, IUiSink
@@ -205,7 +205,7 @@ public sealed class Ro3EmuController : ILauncherController, IUiSink
         string? client = await Task.Run(Client);
         if (client == null)
         {
-            PostState("nogame", $"Download it from the official servers (about 24 GB) into {InstallFlow.SuggestedFolder()}, or pick the folder you have.",
+            PostState("nogame", $"Download it from Genesis' update servers (about 24 GB) into {InstallFlow.SuggestedFolder()}, or pick the folder you have.",
                 "Ragnarok 3 not found", new { text = "Pick game folder", cmd = "changeDir" });
             return;
         }
@@ -215,7 +215,7 @@ public sealed class Ro3EmuController : ILauncherController, IUiSink
         }
         catch (SetupException e)
         {
-            PostState("gameupdate", FirstLine(e.Message) + " Update it from the official servers.", "The game needs an update",
+            PostState("gameupdate", FirstLine(e.Message) + " Update it from Genesis' update servers.", "The game needs an update",
                 new { text = "Pick another folder", cmd = "changeDir" });
             return;
         }
@@ -232,7 +232,7 @@ public sealed class Ro3EmuController : ILauncherController, IUiSink
         return lines.Length > 1 ? $"{first.TrimEnd(':')}: {lines[1].TrimEnd('.')}." : first + ".";
     }
 
-    /// <summary>Downloads the game (or the files that differ) from the official servers; pausable, continues where it stopped.</summary>
+    /// <summary>Downloads the game (or the files that differ) from Genesis' update servers; pausable, continues where it stopped.</summary>
     async Task InstallGameAsync(string folder)
     {
         if (GameRunning())

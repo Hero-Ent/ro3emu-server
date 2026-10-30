@@ -7,7 +7,7 @@ namespace Ro3Emu.Launcher;
 /// <summary>
 /// launcher.json: built into the exe (LauncherConfigFile in the csproj); a file beside the exe wins. Two modes:
 /// "operator" (a server's own launcher: its client repository, news, links) and "ro3emu" (RO3Emu's own app: the game
-/// from the official servers, a local server, updates from our GitHub releases). Without "mode", a config that names a
+/// from Genesis' update servers, a local server, updates from our GitHub releases). Without "mode", a config that names a
 /// "repository" is an operator's, anything else is RO3Emu's.
 /// </summary>
 public sealed class LauncherConfig
@@ -76,7 +76,7 @@ public sealed class UserSettings
     [JsonPropertyName("notesSeenVersion")] public string? NotesSeenVersion { get; set; }
     /// <summary>
     /// The game folder this launcher created by installing into an empty or new folder: the only one Settings →
-    /// Uninstall removes. A folder that already held a client (for example an official ROO_PC) is never deleted.
+    /// Uninstall removes. A folder that already held a client (for example a Genesis ROO_PC) is never deleted.
     /// </summary>
     [JsonPropertyName("ownedDirectory")] public string? OwnedDirectory { get; set; }
     /// <summary>RO3Emu mode: the app version whose release notes were shown; a newer running version shows its notes once.</summary>
