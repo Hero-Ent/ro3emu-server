@@ -103,7 +103,7 @@ Evidence for the rest: `LC_DAL_BattleGlory._updateRealLevel` shows `Lua_CFG_Batt
 
 ## War warehouse and machine permissions
 
-`GuildService.Wartime`, the guild's `guildWartimeInfo` (DBGuildData field 36): the warehouse view, the Tactics panel, reserving and building a cannon; firing and vehicles come later.
+`GuildService.Wartime`, the guild's `guildWartimeInfo` (DBGuildData field 36): the warehouse view, the Tactics panel, reserving and building a cannon; firing, vehicles and machine HP follow below.
 
 | Message | Use |
 |---|---|
@@ -297,9 +297,8 @@ Code: `TerritoryWarsService.MachineDamage.cs`, `TerritoryWarsService.WarRepair.c
   the two counters (`UI_Sys_TerritoryWars_PushUp_Achievements_ListWidgetCtrl`).
 - `OutCannonHpPercent` (80) sits among the GVE cannon parameters (`GVECannonExitInteractId`,
   `GVESwitchBulletInteractIds`), not the siege ones, so it is not applied to siege cannons.
-- `ArtilleryAttackCityGateReduceDamage` [3002, 3003, -9000] would lower cannon damage against the city gates. The
-  siege has no gate units yet (NPC 4900005 and the "Break Through the Castle Gate" phase are not spawned), so it is
-  not applied.
+- `ArtilleryAttackCityGateReduceDamage` [3002, 3003, -9000] lowers cannon damage against the gates, the barricades
+  and the other tag 3003 NPCs (see "Damage by tag" under "Siege castle").
 - Restocking the warehouse: 32275 has no client sender and no shop or award sells the machine items (the "War Machine
   Shop" text has no data behind it), so the stock is only `SiegeInitItemList` and what the machines leave or return.
 - When the siege settles, its standing machines leave with whoever is on them and their slots show nothing in use, as
@@ -339,6 +338,154 @@ Code: `TerritoryWarsService.WarRooms.cs` (`WarRoomOf`), the machine files above.
 - The machines leaving at the settlement (the siege as well): nothing says they outlive the battle, and the room closes
   shortly after.
 - 1031001 is the participant's battle score; territory battles count no assists (always 0).
+
+## Siege castle
+
+Code: `TerritoryWarsService.SiegeObjects.cs`.
+
+- **Placement.** `NpcLevelPointRespawnConfig` places the castle: `_iMapid` is the DungeonConfig id (2230101) and
+  `_iRespawnpointid` a point of its scene editor (`sc_gvg_gongchengzhan_001_dg01`). The siege room spawns, as monsters of
+  their NPCConfig rows: the City Gate 4900005 at 36 (the gateway, "城门刷新点") and 214 (the attackers' camp gate,
+  "进攻方城门"), the Bow Guardians 4901012 at 38-40 and the Knight Guardians 4901011 at 41-43, the ten Obstacles 4900022
+  (barricades: 321, 80, 81, 83, 90, 93, 97, 101, 103, 107), the revive point 4900010, the building markers 4903002 (254,
+  255, 256, 273, 274, 299, 308) and the revive markers 4901021 (attackers: 267, and 268 under the wall once the gate
+  fell, inferred) / 4901022 (defenders: 270, 271).
+  The crystal 4900009 at 44 keeps its own spawn. A destroyed object stays destroyed for the rest of the siege, also in a
+  room opened again for it, and a damaged one keeps its HP (`SiegeRunState.Destroyed`, `ObjectHp`).
+- **Not yet spawned:** the ladders 4900000/4900012 (46, 47, 20) and the ram 4900002 (34, 48: its end point 35 is in front
+  of the gate) need their route AI and `UIModule_NpcRefreshDuration` respawns; the 38 archers 4901001, the guide arrows
+  4903001, the fixed vehicles 4901004-4901009 and the invisible markers 4900017 are separate features.
+- `DungeonLua_2230101.lua` `UIModule_NpcData` (not exported, kept as code): 36 CityGate, 38-40 OuterTower, 41-43
+  InnerTower, 44 Crystal, 46/47 Ladder, 48 Car, 286 Revive (`enum_SiegeObjectType`, `Lua_GameDefine.lua:14875`).
+- **30115.** The siege UI knows an object only through `GlobalObjectDataNotify` (`TerritoryWarsService.SiegeGlobalData.cs`):
+  `LC_SiegeHelper.GetNpcUIData` takes HP, max HP, position and camp from the entry at the object's point and counts the
+  object dead when there is none; an entry with hp 0 deletes it (`LC_SceneCom_GlobalObjMgr.lua:82-138`). Loading in
+  sends every standing object (all spawned NPCs have `_iNeedNotifyGlobalData` 1, the crystal too); HP changes go out
+  with the one-second siege clock (inferred cadence), a spawn and a death at once. `LC_DunGeon_Siege._updateDestoryPerform`
+  shows the intact or the broken model of the `DestoryModelPerformParams` buildings by whether an object stands at the
+  point: without 30115 every bastion, workshop and arrow tower was drawn broken; the markers 4903002 keep the workshops
+  and towers standing, the Knight Guardians the bastions.
+
+**Inferred:**
+- Row 4900016 places the revive point at 45, which is a group id and no point of the scene; `UIModule_NpcData` puts
+  4900010 at 286, which is used.
+- The attackers' marker of the contested revive point (269, "争夺复活点-进攻方") stands on the same spot as the
+  defenders' 270: the point starts with the defenders and is not spawned for the attackers (its capture is unknown).
+- Who hits what: a camp 2 object (gates, guardians, barricades) by the attackers only, a camp 1 object by the
+  defenders only, the camp 4 revive point and anything with `_iNoSelected` 1 (the markers) by nobody.
+- A castle object keeps its damage for the whole siege: a field monster that loses its target and stands at home again
+  heals to full, a castle object does not (`MonsterUnit.KeepsDamage`). One whose AIConfig has `_iCanInBattle` 0 (the
+  City Gate's 4900000 "GVG_S0_Gate"; the barricades, markers and revive point have no AI) never takes a target, so a
+  hit neither locks its attacker (31052) nor starts the leash (`MonsterUnit.StaysOutOfBattle`); the guardians
+  (20000009) and the crystal (4900009) have `_iCanInBattle` 1 and fight back. The client never reads `_iCanInBattle`.
+  Before this a cannon shot from 70 m engaged the gate, which dropped its attacker at once (leash 15 m) and healed.
+
+### Siege stages
+
+Code: `TerritoryWarsService.SiegeStages.cs`.
+
+- `DungeonLua_2230101.lua` `DungeonBase.DungeonStageModule`: "0" 准备阶段 Prepare (maxTime 300 000 ms), "1" 城门阶段 Gate
+  (1 500 000), "2" 内城阶段 inner city (3 000 000), "3" 华丽阶段 the crystal (3 000 000); the top bar calls them Prepare,
+  Gate, Stronghold, Crystal. 30401 carries the stage in `stage` and `stageModuleData` (start, end); a change goes out as
+  `eChangeType_Change` (the client handles both types alike). The client pushes the stage's chat itself when the stage
+  changes (`UIModule_StageSwitchChatIdMap`: 4110141-4110146, "Phase I Destroy the Outer Gate" / "Defend the Gate" and on).
+- The top bar's countdown is var 512 `CSiegeTopBarTimestamp` (epoch ms) in Prepare and var 542 `CSiegeStageCountdown`
+  [end ms, ms added] after it (`UI_Sys_Siege_TopBarWidgetCtrl._refreshStage`). Nothing adds time yet (`UIModule_KillAddTimeList`
+  "0": [120, 300] is not applied).
+- Dungeon task 4900000 "Reach Dungeon Stage 1" is met when the Gate stage starts.
+
+**Inferred:**
+- Prepare runs from the siege's start for its 300 s; the Gate stage follows; the Stronghold stage starts when the gate at
+  36 falls and the Crystal stage when the three Knight Guardians (41-43, InnerTower) fall: the stage names and each
+  stage's top bar objects ("Destroy the Outer Gate", "Defeat the Protector", "Destroy the Ornate Metal").
+- A stage's countdown ends at its maxTime or at the siege's end, whichever is first. Only the siege's end (60 min,
+  `AttackCityEndTime`) settles the battle for the defenders: whether a Gate stage that runs out (30 min in) already
+  ends the siege is not known (`DungeonResultModule` has a type 4 time-out result without a stage).
+- The crystal can be hit in the Crystal stage only.
+
+### Gates
+
+- City Gate 4900005 (NPCConfig): `_iNPCType` 1 sub 204, camp 2, idle AI `GVG_S0_Gate`, speed 0, level 59,
+  AttriMonsterConfig 220059 (771 920 HP) scaled by `_kAttriScale` [101, 5 750 000] = 443 854 000 HP, `_kNpcTag` [3003],
+  `_iBodyRemainTime` 1. Its born buffs include 4904401 "Battle Start Protection" ("Immune to damage and debuffs",
+  `fx_gvg_buff_hudun`); the buff has no attribute, so its immunity is a server rule: nothing hits a unit carrying it.
+- The top bar's gate is `UIModule_NpcData` "36" [4900005, CityGate, area 319]: in the Gate stage it shows the HP of the
+  30115 entry at point 36 (`UI_Sys_Siege_TopBarWidgetCtrl.lua:449`). Var 513 `CSiegeGateNpcUid` carries the gate's uid
+  (`LC_DunGeon_VarDefine`; `DungeonVariableConfig` swaps the names of 513 and 514, the decoder is VarDefine).
+- When the gate at 36 falls, its 30115 entry goes out with hp 0 and the inner city's stage begins.
+
+**Inferred:**
+- Battle Start Protection stays until Prepare ends, then the gate at 36 loses it and the attackers can break it (the
+  defenders cannot: it is their camp's). Who breaks it in the original: the Battering Ram (its end point 35 is right
+  in front of the gate) and attacking players.
+- The attackers' camp gate at 214 leaves the field when Prepare ends, with the camp's air walls; it is not spawned
+  again in a later room.
+- AttackCityValue (statistics 1021001): an attacker's damage to the castle's objects, the crystal included.
+  DefenseValue (1021004) stays 0.
+
+### Air walls
+
+Code: `TerritoryWarsService.SiegeWalls.cs`, `Data/Config/SceneEditorAirWalls.cs` (`MapWorld.AirWalls`).
+
+- The castle's navigation grid is open through the gateway (cells x 585-615, z 141-158), the barricades and the
+  bastions. They block only through the scene editor's air walls (`m_kAirWalls`: id, `gridLevel`, `GroupId`, `name`,
+  the 1 m cells of `wallPoints`), which a dungeon switches on with var 133 `CAirWallList`: a list of wall ids with
+  `DungeonVar.groupType`/`groupId` saying who may pass (All 0, Camp 1, Guild 2, Player 3); a wall of the group missing
+  from a new list is removed (`LC_SceneCom_AirWall.lua:322-480`, which lists 2210101 and 2230101 specially).
+- The siege's 30401 carries var 133 with the standing walls for everyone (groupType 0) on load and on every change.
+  The server treats their cells as blocked: a skill whose line enters one is refused (`SkillBlocked`), and a walk into
+  one is reported or refused by `ServerOptions.WalkCheck` (`SceneService.WalkBlocked`).
+- Walls of the scene: 72 "空气墙_城门阻挡(内)" and 74 "(外)" at the gateway (x 597-600, z 136-165); 71 "进攻方阻挡" and
+  264/265 "进攻方营地墙" around the attackers' camp; the ten barricade walls of group 77 "拒马&相应空气墙" (322, 117,
+  231-235, 243, 245, 247), each paired by name and position with an Obstacle's spawn point; 65/19 at the two ladder ends;
+  the fortress walls 221, 224, 225, 236-241 behind the Knight Guardians; 29/31/61/66 along the city wall and 32/33/67/68
+  beside the ladder lanes.
+
+**Inferred** (no client script switches the walls; the original's are server side):
+- Standing walls: the camp's (71, 264, 265) in Prepare; the gate's (72, 74) until the gate at 36 falls; 65/19 always
+  (the ladders are not spawned); a barricade's wall until it falls; fortress 4/5/6's walls (221/240/241, 224/238/239,
+  225/236/237) until the Knight Guardian of the same number (41/42/43) falls, as `DestoryModelPerformParams` breaks
+  the bastion with it. The walls 29/31/61/66 (mostly on unwalkable cells) and 32/33/67/68 stay off.
+- A wall whose footprint holds the walker's or caster's own cell never blocks, nor, for a skill, one holding the
+  target's: the gate and the barricades stand inside their own walls.
+- The navigation grid still stops skills at the castle's solid parts, with the crystal's own blocked cell allowed as
+  before.
+
+### Damage by tag
+
+Code: `TerritoryWarsService.SiegeTags.cs` (a `CombatService.DamageAdjusters` entry).
+
+- `PublicParamConfig` has two rows the client never reads: `ArtilleryAttackCityGateReduceDamage` [3002, 3003, -9000]
+  and `GuardAttackOtherReduceDamage` [3004, 3005, -5000]. NPCConfig `_kNpcTag` 3002 is every siege cannon (4900013-4900016,
+  4900023-4900027) and bullet (4900101-4900108, `_iNPCType` 10); 3003 the City Gate 4900005, the ram 4900002, the ladders
+  4900000/4900012, the Obstacle 4900022 and the Barrier Stele 4905012; 3004 the archers 4901001; 3005 the ladders.
+
+**Inferred:**
+- Both rows read [attacker tag, target tag, change / 10 000]: a cannon shot on a tag 3003 NPC deals a tenth, and an
+  archer's hit on a ladder half (that one has no effect yet: no monster fights a monster here).
+- A player's cast carries the tags of the cannons whose `GVGCannonConfig._iSkillID` it is and of its bullet NPC
+  (`SkillConfig._kLogicData[2]`); every other skill, the war vehicles' seat skills included, carries none.
+
+### Bag NPCs
+
+Code: `TerritoryWarsService.SiegeBags.cs`.
+
+- NPCConfig 4900201 (camp 1) and 4900202 (camp 2): `_iNPCType` 2 sub 1, `_iInteractID` [4900004], `_iInteractDistance`
+  3. NPCInteractConfig 4900004 opens the war bag (`_iEXECAction` [1, TOPBAR, `UI_Sys_Siege_BattleBagPanel`], which the
+  client runs on the server's 32700 answer) when its condition 4900004 (no buff of group 49012 or 49013) and its NPC
+  condition 4900003 (`CheckCamp` 2200 and `CheckGVGPermission` 2202 with 2 = Vehicle) hold; otherwise 32700 answers
+  `NpcParameter`. A Vehicle-permission member has no other way to the bag in the siege: the siege button widget shows
+  the bag for the Firearm permission only (`UI_Sys_Dungeon_Siege_ButtonWidgetCtrl.lua` `_checkShowInstrument`).
+- Note: NpcLevelPointRespawnConfig rows 4900201/4900202 are row ids placing Obstacles, not these NPCs.
+
+- Their uids stay below 2^53, like every interactable unit's: `LC_InteractManager.AddRole` hands the uuid to the native
+  overlap test through a double array and `_calAllUnitInDistance` looks the returned id up in `m_kUnitDic`; a uid a
+  double cannot hold comes back changed, the lookup is nil and the client throws every frame (seen in the client with
+  a first uid of 2^53 + 2^52 + 1).
+
+**Inferred:** no table places the two NPCs; each stands 3 m in front of its camp's born point (75 the attackers', 73
+the defenders'), facing it, once per siege room. They are not combat units, but their entity carries the template HP of
+their NPCConfig stats (properties 101, 2000, 2002) for the HP bar the client draws.
 
 ## Descriptor and runtime evidence boundaries
 
