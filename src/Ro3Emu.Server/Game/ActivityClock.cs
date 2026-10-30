@@ -42,8 +42,12 @@ public sealed class ActivityClock(GameData data, SeasonService seasons, TimeProv
     private Dictionary<long, JsonElement[]>? _limitRows;
     private int _limitRowsCount;
 
+    /// <summary>GM test aid windows that stand in for a TimeLimitConfig id's own rows (PronteraDefenseService's !defense).</summary>
+    internal System.Collections.Concurrent.ConcurrentDictionary<long, Window> TestWindows { get; } = new();
+
     public IReadOnlyList<Window> Segments(long timeLimitId, long now, int playbook = 101)
     {
+        if (!TestWindows.IsEmpty && TestWindows.TryGetValue(timeLimitId, out var test)) return [test];
         var windows = new List<Window>();
         foreach (var row in LimitRows(timeLimitId))
         {
