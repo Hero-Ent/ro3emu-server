@@ -42,7 +42,30 @@ public sealed class FieldExpRatesTests
         };
         Assert.Equal(150, Assert.Single(FieldExpRates.Valid(options)).Percent);
         Assert.Empty(FieldExpRates.Valid(new ServerOptions()));
-        Assert.Empty(FieldExpRates.Valid(null));
+        Assert.Empty(FieldExpRates.Valid((ServerOptions?)null));
+    }
+
+    [Theory]
+    [InlineData("20 40 300", 1)]
+    [InlineData("20 30 200 31 40 400", 2)]
+    public void ASetLineHoldsOneRulePerGroupOfThreeNumbers(string line, int rules) =>
+        Assert.Equal(rules, FieldExpRates.Parse(line.Split(' ')).Length);
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("20 40")] // a group is three numbers
+    [InlineData("0 40 300")] // levels start at 1
+    [InlineData("40 20 300")] // min above max
+    [InlineData("20 40 0")]
+    [InlineData("20 40 10001")]
+    public void ALineWithAnUnusableRuleIsRefused(string line) =>
+        Assert.Throws<ArgumentException>(() => FieldExpRates.Parse(line.Split(' ', StringSplitOptions.RemoveEmptyEntries)));
+
+    [Fact]
+    public void TheDescriptionNamesEveryRule()
+    {
+        Assert.Equal("none (the client's rates)", FieldExpRates.Describe([]));
+        Assert.Equal("Lv 20-30 200%, Lv 31-40 400%", FieldExpRates.Describe(FieldExpRates.Parse("20 30 200 31 40 400".Split(' '))));
     }
 
     private static async Task<(long Field, long Story, long OtherLevel)> ExpOfAsync(params FieldExpRule[] rules)
