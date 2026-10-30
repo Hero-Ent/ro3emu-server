@@ -64,7 +64,8 @@ The client's Pupa (NPCConfig 5000035, level 4) has 4 HP: AttriMonsterConfig 1100
 `[[101, 1000]]` takes it to 10%, so it dies in one hit. In Ragnarok Online 1 the Pupa is a level 2 cocoon with 427 HP (rAthena
 pre-renewal `mob_db.yml`, id 1008). The client's beginner monsters already sit on the RO1 scale once `_kAttriScale` is applied
 (Fabre 63 HP against RO1's 63, Lunatic 58 against 60, Drops 40 against 55, Poring 32 to 65 against 50), so the RO1 number is used
-as it is. `Reconstructed/ro1-monster-hp.json` lists the monsters; with the switch on (the default, a trial like
-`Ro1AggressiveMonsters`) their templates take that HP, with it off nothing changes. Every client monster whose name has Egg or Pupa was checked: the Thief Bug Egg (83 against 48), the Eggyra, the story dungeon's Ant Egg (5300036, 830) and the level 50 Peco Peco Egg are not below RO1 and are not listed. An RO1 reference, not client evidence
+as it is. `Reconstructed/ro1-monster-hp.json` lists the monsters; with the switch on their templates take that HP. It is off
+by default: the client cuts their HP on purpose (`_kAttriScale`), so a 1:1 server keeps it, and an operator turns it on for the
+RO1 feel (`Ro3Emu__Ro1MonsterHp=true`). Every client monster whose name has Egg or Pupa was checked: the Thief Bug Egg (83 against 48), the Eggyra, the story dungeon's Ant Egg (5300036, 830) and the level 50 Peco Peco Egg are not below RO1 and are not listed. An RO1 reference, not client evidence
 (**inferred**).
 
