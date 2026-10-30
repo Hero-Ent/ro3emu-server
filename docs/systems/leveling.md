@@ -51,6 +51,11 @@ are rolled as their claim would have paid them, kept in `DailyState.Compensation
 (delivery key `daily-compensation/{role}/{epoch}`), at the running reset or the next login
 (`DailyActivityService.Compensation.cs`). A letter that cannot be delivered stays owed and is retried.
 
+## Faster field levelling
+
+Not original: an operator who wants quicker levelling sets `Ro3Emu:FieldExpRates` (or `!fieldexp` in game), which scales
+the Base EXP of open-field kills by the killer's level ([monster AI](monster-ai.md)). Empty by default.
+
 ## Tests
 
 ```powershell
