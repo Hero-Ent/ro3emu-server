@@ -148,60 +148,40 @@ public sealed class CharacterTests : IAsyncLifetime
     }
 
     [ClientDataFact]
-    public async Task AssassinCanEquipDaggersInBothHandsOnlyAfterLearningDualWieldMastery()
+    public async Task OnlyACareerWithTheDoubleHandFormWieldsAOneHandedWeaponInEachHand()
     {
         await using var alice = await InWorld("Alice");
         var bag = await Next(alice, CharacterService.ItemsSync, DBItemsInfoIncrement.Parser);
         long mainHand = bag.PackInfo[2].All.Items.Values.Single(i => i.ItemEntry == Dagger).ItemGuid;
-
-        await Gm("alice", "!job 5200");
-        await Next(alice, CharacterService.RoleBaseInfoSync, RoleBaseInfoIncrement.Parser, m => m.Career == 5200);
         await Gm("alice", $"!item {Dagger}");
         var added = await Next(alice, CharacterService.ItemsSync, DBItemsInfoIncrement.Parser, m => m.GuidToNew.Count > 0);
         long offHand = added.PackInfo[2].Inc.Items.Values.Single().All.ItemGuid;
-
-        await alice.SendGameAsync(CharacterService.EquipItemOpr,
-            new EquipItemOprReq { Opr = 0, Pos = (EquipGridType)1, ItemGUID = mainHand });
-        await Next(alice, CharacterService.EquipSync, DBEquipInfoIncrement.Parser, m => !m.SyncAllMark);
-        Assert.Equal(0, (await Next(alice, CharacterService.EquipItemOpr, EquipItemOprResp.Parser)).Result);
-
-        // An Assassin who has not learned Dual-Wield Mastery (15107) still only has grid 1 for daggers: the request
-        // is not refused, it redirects to that one grid (swapping the main hand) instead of opening a second.
-        await alice.SendGameAsync(CharacterService.EquipItemOpr,
-            new EquipItemOprReq { Opr = 0, Pos = (EquipGridType)2, ItemGUID = offHand });
-        await Next(alice, CharacterService.EquipSync, DBEquipInfoIncrement.Parser, m => !m.SyncAllMark);
-        Assert.Equal(0, (await Next(alice, CharacterService.EquipItemOpr, EquipItemOprResp.Parser)).Result);
-        await _app.Services.GetRequiredService<GameLoop>().InvokeAsync(() =>
+        async Task Equip(long guid, int grid)
+        {
+            await alice.SendGameAsync(CharacterService.EquipItemOpr, new EquipItemOprReq { Opr = 0, Pos = (EquipGridType)grid, ItemGUID = guid });
+            await Next(alice, CharacterService.EquipSync, DBEquipInfoIncrement.Parser, m => !m.SyncAllMark);
+            Assert.Equal(0, (await Next(alice, CharacterService.EquipItemOpr, EquipItemOprResp.Parser)).Result);
+        }
+        Task<(int Main, int Off)> Grids() => _app.Services.GetRequiredService<GameLoop>().InvokeAsync(() =>
         {
             var s = _app.Services.GetRequiredService<SessionRegistry>().All().Single(s => s.Account == "alice");
-            Assert.Equal(1, s.Items.Single(i => i.Guid == offHand).Grid);
-            Assert.Equal(0, s.Items.Single(i => i.Guid == mainHand).Grid);
-            return Task.CompletedTask;
+            return Task.FromResult((s.Items.Single(i => i.Guid == mainHand).Grid, s.Items.Single(i => i.Guid == offHand).Grid));
         });
 
-        await _app.Services.GetRequiredService<GameLoop>().InvokeAsync(() =>
-        {
-            _app.Services.GetRequiredService<SessionRegistry>().All().Single(s => s.Account == "alice").Progress!.Skills[15107] = 1;
-            return Task.CompletedTask;
-        });
-        // Re-seat the main hand in grid 1 (the pre-skill attempt swapped it out), then the off hand opens grid 2.
-        await alice.SendGameAsync(CharacterService.EquipItemOpr,
-            new EquipItemOprReq { Opr = 0, Pos = (EquipGridType)1, ItemGUID = mainHand });
-        await Next(alice, CharacterService.EquipSync, DBEquipInfoIncrement.Parser, m => !m.SyncAllMark);
-        Assert.Equal(0, (await Next(alice, CharacterService.EquipItemOpr, EquipItemOprResp.Parser)).Result);
+        // A career whose JobConfig _kWeaponForm has SingleHand (1): the second dagger takes grid 1 and swaps the first out.
+        await Equip(mainHand, 1);
+        await Equip(offHand, 2);
+        Assert.Equal((0, 1), await Grids());
 
-        await alice.SendGameAsync(CharacterService.EquipItemOpr,
-            new EquipItemOprReq { Opr = 0, Pos = (EquipGridType)2, ItemGUID = offHand });
+        // Assassin 5200, _kWeaponForm [2,3] (TwoHand, DoubleHand): the client's TwoHandAndDoubleHand puts it in the off hand.
+        await Gm("alice", "!job 5200");
+        await Next(alice, CharacterService.RoleBaseInfoSync, RoleBaseInfoIncrement.Parser, m => m.Career == 5200);
+        await Equip(mainHand, 1);
+        await alice.SendGameAsync(CharacterService.EquipItemOpr, new EquipItemOprReq { Opr = 0, Pos = (EquipGridType)2, ItemGUID = offHand });
         var equipped = await Next(alice, CharacterService.EquipSync, DBEquipInfoIncrement.Parser, m => !m.SyncAllMark);
         Assert.Equal(offHand, equipped.EquipPlans[0].Inc.ItemsEquipGrid[2].All);
         Assert.Equal(0, (await Next(alice, CharacterService.EquipItemOpr, EquipItemOprResp.Parser)).Result);
-        await _app.Services.GetRequiredService<GameLoop>().InvokeAsync(() =>
-        {
-            var s = _app.Services.GetRequiredService<SessionRegistry>().All().Single(s => s.Account == "alice");
-            Assert.Equal(1, s.Items.Single(i => i.Guid == mainHand).Grid);
-            Assert.Equal(2, s.Items.Single(i => i.Guid == offHand).Grid);
-            return Task.CompletedTask;
-        });
+        Assert.Equal((1, 2), await Grids());
     }
 
     [ClientDataFact]

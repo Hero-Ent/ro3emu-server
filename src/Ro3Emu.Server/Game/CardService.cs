@@ -282,7 +282,7 @@ public sealed partial class CardService
     private long Part(int entry) => _data.Row("ItemConfig", entry) is { } row ? GameData.Int(row, "_iCardPart") : 0;
 
     private bool CardFitsGrid(GameSession session, int entry, int grid) =>
-        GridsFor(Part(entry)).Contains(grid) || Part(entry) == 1 && _character.IsDualWieldDaggerEquipped(session, grid);
+        GridsFor(Part(entry)).Contains(grid) || Part(entry) == 1 && _character.IsDualWieldOffHand(session, grid);
 
     private static InvItem CloneOne(InvItem stack)
     {
