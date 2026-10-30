@@ -343,6 +343,7 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
                     || CompanionUnit.Build(data, monsters, c.NpcId) == null)) return [];
             if (step.Story != 0 && data.Row("PlotInterpretation", step.Story) == null) return [];
             if (step.TeleportAfter != 0 && !map.Points.ContainsKey(step.TeleportAfter)) return [];
+            if (step.HoldAfterMs is < 0 or > 60000) return [];
             // A ride needs its route, an actor that walks (a UnitConfig speed) and an actor interaction that completes the step.
             if (step.RideAfter != 0 && (!map.GuidePaths.ContainsKey(step.RideAfter)
                 || !step.Complete.Any(t => t.Kind is ReconstructedDungeons.TriggerKind.Interaction or ReconstructedDungeons.TriggerKind.Message)

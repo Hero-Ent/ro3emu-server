@@ -37,6 +37,24 @@ public sealed partial class DungeonTests
         Assert.Equal(plan.Waves.Select(w => w.Quest).Order(), plan.Waves.Select(w => w.Quest));
     }
 
+    // The chitchat's last bubble is still being read when it completes the step: the crew stays for the step's hold (13 s,
+    // 1.3 s at the tests' pace) instead of leaving with the same tick.
+    [ClientDataFact]
+    public async Task TheAirshipCrewStaysWhileTheLastChitchatBubbleIsRead()
+    {
+        const long scene = 1000501;
+        Service<IOptions<ServerOptions>>().Value.ScriptedScenePacePercent = 10;
+        await using var alice = await InWorld("Alice");
+        Assert.Equal(0, await Enter(alice, new EnterDungeonReq { SceneEntry = scene }));
+        await Load(alice, scene);
+        await Stage(alice, 1, quest: 1);
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        await Gm(alice, "!actors use"); // the four bubbles complete the step
+        Assert.Equal(1, Session(alice).DungeonAttempt!.Wave + 1);
+        await Stage(alice, 2, quest: 2);
+        Assert.True(started.ElapsedMilliseconds >= 1000, $"the next step came after {started.ElapsedMilliseconds} ms");
+    }
+
     // The airship's cannons (inferred): 'Board the Cannon' (5300006) on a Cannon fires 5365001 at the nearest enemy
     // airship, three boardings a ship; sinking both (5300015 at point 24, 5300053 at 61) ends stage 2 and the boarders come.
     [ClientDataFact]

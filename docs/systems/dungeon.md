@@ -251,6 +251,12 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
   **(inferred)**: the client has no ride rule (the route and the scene's camera animation are data with no trigger, and
   the original's server script is not shipped), so the speed, the step size and the missing mount are guesses and the
   camera animation (`mianstorybingyicamera`) is not played.
+  A step may also hold (`after.hold`, ms, scaled by `ScriptedScenePacePercent`): once it is completed, the next step or the
+  result waits that long, so what the step showed is not cut. **(inferred)**: the original script is not shipped and the
+  client data has no duration for these, so the airship's holds are estimates (the chitchat's 13 s is the longest of its four
+  bubbles, 12 to 22 words each at `PublicParamConfig.BubblePerWordTime` 2; 2 s between boarding groups, 3 s after the Evil Boss,
+  4.5 s for the captain's closing line). When a scripted scene is settled its defeated enemies keep their bodies and go by their
+  own `_iBodyRemainTime` (Eddga's body stays where it fell); the living ones and the scene actors are cleared as before.
   An actor interaction whose `NPCInteractConfig._iStatusID` is a vehicle status (the Deniro's first Ride, 5300005)
   seats the player in the actor's seat through `WorldInteractionService` (32702, seat 32704; the client's exit button
   works as for any vehicle); the actor puts them down after 2 s (`SeatedRideMs`, **(inferred)**: nothing in the
