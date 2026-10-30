@@ -163,7 +163,6 @@ svg.i{width:1em;height:1em;flex:none}
 .kpi .label svg{font-size:14px}
 .kpi .value{display:flex;align-items:baseline;gap:var(--s1);margin-top:var(--s2);white-space:nowrap;overflow:hidden}
 .kpi .value b{font:700 var(--t-2xl)/32px var(--body);font-variant-numeric:tabular-nums}
-.kpi .value b.mono{font-family:var(--mono);font-size:24px;font-weight:600}
 .kpi .value small{font-size:var(--t-sm);color:var(--muted);font-weight:500}
 .kpi .detail{margin-top:var(--s1);font-size:var(--t-xs);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kpi.warn .value b{color:var(--red-ink)}
@@ -330,7 +329,6 @@ select.input{padding-right:var(--s6)}
   :root{--gutter:var(--s4);--pad:var(--s4);--t-2xl:24px;--t-3xl:28px}
   .view{padding-top:var(--s4)}
   .kpi .value b{font-size:24px;line-height:28px}
-  .kpi .value b.mono{font-size:20px}
   .data .opt{display:none}
   .data th,.data td{padding:0 var(--s3)}
   .page-head{align-items:flex-start}

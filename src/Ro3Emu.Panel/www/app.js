@@ -102,11 +102,11 @@ function emptyState(iconName, title, text) {
   return h('div', { class: 'empty' }, icon(iconName), h('b', null, title), text && h('p', null, text));
 }
 
-/** Key figure: label, value with its unit, one line of detail. */
+/** Key figure: label, value with its unit (one face and size for every value), one line of detail. */
 function kpi(label, iconName, value, unit, detail, opts = {}) {
   return h('div', { class: 'card kpi' + (opts.warn ? ' warn' : '') },
     h('span', { class: 'label' }, icon(iconName), label),
-    h('div', { class: 'value' }, h('b', { class: opts.mono ? 'mono' : null, title: String(value) }, value), unit && h('small', null, unit)),
+    h('div', { class: 'value' }, h('b', { title: String(value) }, value), unit && h('small', null, unit)),
     h('p', { class: 'detail' }, detail ?? ' '));
 }
 
@@ -344,7 +344,7 @@ async function homePage() {
   });
   const kpis = h('section', { class: 'kpis', 'aria-label': 'Server figures' },
     kpi('Online now', 'users', num(status.players), status.players === 1 ? 'player' : 'players', 'characters in the world'),
-    kpi('Uptime', 'clock', duration(status.uptimeSeconds), null, ['since ', stamp(status.startedUtc)], { mono: true }),
+    kpi('Uptime', 'clock', duration(status.uptimeSeconds), null, ['since ', stamp(status.startedUtc)]),
     kpi('Accounts', 'user', num(status.accounts), null, 'registered on this realm'),
     kpi('Characters', 'trophy', num(status.characters), null, 'created in the game'));
   const newsCard = card('Latest news', link('/news', { class: 'more' }, 'All news', icon('arrow')),
@@ -558,9 +558,9 @@ async function adminDashboard() {
       kpi('Accounts', 'shield', num(d.accounts), null, `${num(d.characters)} characters`),
       kpi('Connections', 'pulse', num(d.connections), null, 'micro and game gates')),
     h('section', { class: 'kpis', 'aria-label': 'Server' },
-      kpi('Tick p99', 'clock', d.tickP99Ms.toFixed(1), 'ms', `p50 ${d.tickP50Ms.toFixed(1)} ms · max ${d.tickMaxMs.toFixed(0)} ms`, { mono: true, warn: d.tickP99Ms > 50 }),
-      kpi('Ticks', 'pulse', d.ticksPerSecond.toFixed(1), '/ s', `${num(d.overruns)} overruns · queue ${num(d.queueLength)}`, { mono: true }),
-      kpi('Memory', 'box', num(megabytes(d.workingSetBytes)), 'MB', `${d.cpuSeconds.toFixed(0)} s CPU · ${num(d.gen2Collections)} gen 2 GCs`, { mono: true }),
+      kpi('Tick p99', 'clock', d.tickP99Ms.toFixed(1), 'ms', `p50 ${d.tickP50Ms.toFixed(1)} ms · max ${d.tickMaxMs.toFixed(0)} ms`, { warn: d.tickP99Ms > 50 }),
+      kpi('Ticks', 'pulse', d.ticksPerSecond.toFixed(1), '/ s', `${num(d.overruns)} overruns · queue ${num(d.queueLength)}`),
+      kpi('Memory', 'box', num(megabytes(d.workingSetBytes)), 'MB', `${d.cpuSeconds.toFixed(0)} s CPU · ${num(d.gen2Collections)} gen 2 GCs`),
       kpi('Errors', 'alert', num(d.exceptions + d.errorLogs), null, `${num(d.exceptions)} exceptions · ${num(d.errorLogs)} error logs`, { warn: d.exceptions + d.errorLogs > 0 })),
     h('div', { class: 'grid' },
       h('div', { class: 'span-7' }, card('Busiest maps', null, maps)),
