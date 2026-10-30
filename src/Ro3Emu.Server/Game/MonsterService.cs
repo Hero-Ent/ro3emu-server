@@ -338,13 +338,14 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     /// A monster outside the map's spawn groups (field MVPs): no group respawn, the caller decides when it comes back.
     /// </summary>
     public async Task<MonsterUnit?> SpawnSingleAsync(long scene, int npcId, MapPoint at, long instanceId = 0,
-        int hpRatio = 10000, int damageRatio = 10000, MonsterTemplate? customTemplate = null)
+        int hpRatio = 10000, int damageRatio = 10000, MonsterTemplate? customTemplate = null, bool grounded = true)
         => await SpawnSingleAsync(instanceId == 0 ? RuntimeMapKey.Public(scene) : RuntimeMapKey.Private(scene, instanceId),
-            npcId, at, hpRatio, damageRatio, customTemplate);
+            npcId, at, hpRatio, damageRatio, customTemplate, grounded);
 
-    /// <summary>Spawn an independent actor on an explicit public line/private room/event runtime.</summary>
+    /// <summary>Spawn an independent actor on an explicit public line/private room/event runtime; <paramref name="grounded"/>
+    /// false keeps the given height (NpcLevelPointRespawnConfig _iNotGroundBorn).</summary>
     public async Task<MonsterUnit?> SpawnSingleAsync(RuntimeMapKey runtime, int npcId, MapPoint at,
-        int hpRatio = 10000, int damageRatio = 10000, MonsterTemplate? customTemplate = null)
+        int hpRatio = 10000, int damageRatio = 10000, MonsterTemplate? customTemplate = null, bool grounded = true)
     {
         if ((customTemplate ?? Template(npcId)) is not { } template || template.NpcId != npcId
             || _worldData.Map(runtime.SceneEntry) is not { } map
@@ -363,7 +364,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
                 + (template.MaxHp % 10000 * hpRatio + 5000) / 10000);
             template = template with { MaxHp = hp };
             var point = new SpawnPoint(-1, at.X, at.Y, at.Z, at.Face, npcId);
-            var pos = map.Grounded(at);
+            var pos = grounded ? map.Grounded(at) : at;
             var monster = new MonsterUnit
             {
                 Uid = UidBase | ++_serial, SceneEntry = runtime.SceneEntry, RuntimeMap = runtime,
@@ -401,7 +402,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         float best = float.MaxValue;
         foreach (var p in m.Viewers)
         {
-            if (p.Role == null || p.Dead || TargetVisible?.Invoke(m, p) == false) continue;
+            if (p.Role == null || p.Dead || TargetVisible?.Invoke(m, p) == false || Spares?.Invoke(m, p) == true) continue;
             float d = Distance(m, p);
             if (d <= m.Template.ViewRange && d < best) { best = d; near = p; }
         }
@@ -409,6 +410,10 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     }
 
     internal Func<MonsterUnit, GameSession, bool>? TargetVisible { get; set; }
+
+    /// <summary>Set by a gameplay: a player the monster never takes as its target (the siege castle spares its own
+    /// camp, TerritoryWarsService.SiegeUnits).</summary>
+    internal Func<MonsterUnit, GameSession, bool>? Spares { get; set; }
 
     internal Func<WorldUnit, int, bool>? Forbidden { get; set; }
 
@@ -545,7 +550,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     private void Engage(MonsterUnit m, GameSession target, bool called)
     {
         if (m.Dead || m.StaysOutOfBattle || m.WorldScene != target.WorldScene || TargetVisible?.Invoke(m, target) == false
-            || m.Template.SpeedCm == 0 && m.Template.AttackRange <= 0) return;
+            || Spares?.Invoke(m, target) == true || m.Template.SpeedCm == 0 && m.Template.AttackRange <= 0) return;
         bool entering = m.Target == null;
         if (entering) m.NextSwingMs = NowMs + 300;
         SetTarget(m, target);

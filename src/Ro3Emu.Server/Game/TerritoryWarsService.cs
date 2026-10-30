@@ -194,6 +194,8 @@ public sealed partial class TerritoryWarsService : IGameTicker
         scene.Leaving.Add(CannonLeavingAsync);
         scene.Leaving.Add(VehicleLeavingAsync);
         scene.WalkBlocked = SiegeWalkBlocked;
+        scene.WalkBridged = SiegeWalkBridged;
+        monsters.Spares = SiegeSpares;
         combat.Killed.Add(KilledAsync);
         combat.Killed.Add(SiegeKilledAsync);
         combat.Killed.Add(WorldKilledAsync);
