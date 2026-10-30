@@ -40,13 +40,28 @@ public sealed partial class TerritoryWarsService
     /// </summary>
     private static readonly HashSet<long> SiegeSpawnedNpcs = [4900005, 4901011, 4901012, 4900022, 4903002, 4900010, 4901021, 4901022];
 
-    private const int SiegeGatePoint = 36;
+    /// <summary>The City Gates: 36 "城门刷新点" in the castle's gateway, 214 "进攻方城门" the attackers' camp gate.</summary>
+    private const int SiegeGatePoint = 36, SiegeCampGatePoint = 214;
     private const int SiegeReviveNpc = 4900010, SiegeReviveRowPoint = 45, SiegeRevivePoint = 286;
     /// <summary>
     /// (inferred) The attackers' marker of the contested revive point 269 ("争夺复活点-进攻方") stands on the same spot as
     /// the defenders' 270 ("争夺复活点-防守方"): the point starts with the defenders, and its capture is not known.
     /// </summary>
     private const int SiegeContestedAttackerRevive = 269;
+    /// <summary>(inferred) The attackers' revive marker under the castle wall (268 "进攻方城墙下") stands once the gate fell.</summary>
+    private const int SiegeWallRevive = 268;
+
+    /// <summary>Whether a castle object stands in the run's stage: the camp gate in Prepare only (TerritoryWarsService.SiegeStages.cs
+    /// SiegeGateRulesAsync), the attackers' wall revive marker from the inner city on.</summary>
+    private static bool SiegePointStands(SiegeRunState r, int point) => point switch
+    {
+        SiegeCampGatePoint => r.Stage == SiegePrepareStage,
+        SiegeWallRevive => r.Stage >= SiegeStrongholdStage,
+        _ => true,
+    };
+
+    /// <summary>A unit carrying Battle Start Protection takes no damage.</summary>
+    private bool SiegeProtected(MonsterUnit m) => _buffs.UnitBuffs(m).Any(b => b.ConfigId == BattleStartProtection);
 
     /// <summary>(point, npc) of every spawned castle object, in point order; read once.</summary>
     private (int Point, int Npc)[]? _siegeObjectRows;
@@ -72,21 +87,25 @@ public sealed partial class TerritoryWarsService
 
     /// <summary>
     /// Spawns the castle objects the room lacks at their scene-editor points: neither standing nor destroyed earlier in
-    /// this siege. A damaged object comes back with its HP.
+    /// this siege, and standing in the run's stage. A damaged object comes back with its HP. True when one spawned.
     /// </summary>
-    private async Task SiegeSpawnObjectsAsync(SiegeRun battle)
+    private async Task<bool> SiegeSpawnObjectsAsync(SiegeRun battle)
     {
-        if (battle.Room.Closed || battle.State.Settled) return;
+        if (battle.Room.Closed || battle.State.Settled) return false;
         var map = _maps.Map(SiegeScene) ?? throw new InvalidOperationException("Siege scene 2230101 is absent");
+        bool spawned = false;
         foreach (var (point, npc) in SiegeObjectRows())
         {
-            if (battle.Objects.ContainsKey(point) || battle.State.Destroyed.Contains(point)) continue;
+            if (battle.Objects.ContainsKey(point) || battle.State.Destroyed.Contains(point)
+                || !SiegePointStands(battle.State, point)) continue;
             if (!map.Points.TryGetValue(point, out var at))
                 throw new InvalidOperationException($"Siege object point {point} is absent from scene 2230101");
-            if (await _instances.SpawnAsync(battle.Room, npc, map.Grounded(at)) is not { } actor) return; // the room closed
+            if (await _instances.SpawnAsync(battle.Room, npc, map.Grounded(at)) is not { } actor) break; // the room closed
             if (battle.State.ObjectHp.TryGetValue(point, out long hp) && hp > 0) actor.Hp = Math.Min(actor.Hp, hp);
             battle.Objects[point] = actor;
+            spawned = true;
         }
+        return spawned;
     }
 
     /// <summary>
@@ -96,7 +115,8 @@ public sealed partial class TerritoryWarsService
     /// </summary>
     private bool SiegeObjectHittable(GameSession s, SiegeRun battle, MonsterUnit m) =>
         SiegeActive(battle) && SiegeMember(s, battle)
-        && NPCConfig.Get(_data, m.Template.NpcId) is { NoSelected: 0, Camp: 1 or 2 } npc && npc.Camp != CampOf(s);
+        && NPCConfig.Get(_data, m.Template.NpcId) is { NoSelected: 0, Camp: 1 or 2 } npc && npc.Camp != CampOf(s)
+        && !SiegeProtected(m);
 
     /// <summary>CombatService.Killed on a castle object of the killer's siege.</summary>
     private async Task SiegeObjectKilledAsync(GameSession s, SiegeRun battle, int point)

@@ -157,8 +157,11 @@ public sealed partial class TerritoryWarsService
         try
         {
             await SiegeSpawnCrystalAsync(battle);
-            await SiegeSpawnObjectsAsync(battle);
+            bool spawned = await SiegeSpawnObjectsAsync(battle);
+            await SiegeGateRulesAsync(battle);
             await SiegePublishObjectsAsync(battle);
+            // A member loaded before the castle stood learns the gate's uid (var 513).
+            if (spawned) await SiegeBroadcastBaseAsync(battle);
         }
         finally { battle.Spawning = false; }
     }
@@ -218,7 +221,7 @@ public sealed partial class TerritoryWarsService
             },
             ChangeType = (DungeonBaseInfoNotify.Types.eChangeType)2
         };
-        info.Vars.Add(SiegeStageVars(r));
+        info.Vars.Add(SiegeVars(battle));
         return info;
     }
 
@@ -289,10 +292,15 @@ public sealed partial class TerritoryWarsService
         try
         {
             if (!ReferenceEquals(s.SiegeBattle, battle) || !SiegeActive(battle) || !SiegeMember(s, battle)) return;
-            battle.State.Players[s.Role.Id].Damage += Math.Max(0, amount);
-            if (m == battle.Crystal) battle.State.CrystalHp = m.Hp;
-            else if (SiegeObjectPoint(battle, m) is int point && !battle.State.Destroyed.Contains(point))
-                battle.State.ObjectHp[point] = m.Hp;
+            var p = battle.State.Players[s.Role.Id];
+            p.Damage += Math.Max(0, amount);
+            if (SiegeObjectPoint(battle, m) is int point)
+            {
+                // (inferred) AttackCityValue: what the attackers' blows took from the castle, the crystal included.
+                if (p.Guild == battle.State.Attack) p.CityDamage += Math.Max(0, amount);
+                if (m == battle.Crystal) battle.State.CrystalHp = m.Hp;
+                else if (!battle.State.Destroyed.Contains(point)) battle.State.ObjectHp[point] = m.Hp;
+            }
             await SaveAsync(state);
         }
         finally { stagedTerritoryState.Dispose(); _gate.Release(); reservation?.Dispose(); }
@@ -541,7 +549,7 @@ public sealed partial class TerritoryWarsService
             role.ExtraData[1001003] = new ExtraValueData { LongValue = p.Healed }; // heal
             role.ExtraData[1001004] = new ExtraValueData { LongValue = p.Kills }; // KillPlayer
             role.ExtraData[1001005] = new ExtraValueData { LongValue = p.Assists }; // AssistKill
-            role.ExtraData[1021001] = new ExtraValueData(); // AttackCityValue (no supported formula)
+            role.ExtraData[1021001] = new ExtraValueData { LongValue = p.CityDamage }; // AttackCityValue (inferred formula)
             role.ExtraData[1021002] = new ExtraValueData(); // DestroyMachinery (not implemented)
             role.ExtraData[1021003] = new ExtraValueData(); // MachineryDamage (not implemented)
             role.ExtraData[1021004] = new ExtraValueData(); // DefenseValue (no supported formula)

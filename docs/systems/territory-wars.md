@@ -298,7 +298,8 @@ Code: `TerritoryWarsService.SiegeObjects.cs`.
   their NPCConfig rows: the City Gate 4900005 at 36 (the gateway, "城门刷新点") and 214 (the attackers' camp gate,
   "进攻方城门"), the Bow Guardians 4901012 at 38-40 and the Knight Guardians 4901011 at 41-43, the ten Obstacles 4900022
   (barricades: 321, 80, 81, 83, 90, 93, 97, 101, 103, 107), the revive point 4900010, the building markers 4903002 (254,
-  255, 256, 273, 274, 299, 308) and the revive markers 4901021 (attackers: 267, 268) / 4901022 (defenders: 270, 271).
+  255, 256, 273, 274, 299, 308) and the revive markers 4901021 (attackers: 267, and 268 under the wall once the gate
+  fell, inferred) / 4901022 (defenders: 270, 271).
   The crystal 4900009 at 44 keeps its own spawn. A destroyed object stays destroyed for the rest of the siege, also in a
   room opened again for it, and a damaged one keeps its HP (`SiegeRunState.Destroyed`, `ObjectHp`).
 - **Not yet spawned:** the ladders 4900000/4900012 (46, 47, 20) and the ram 4900002 (34, 48: its end point 35 is in front
@@ -345,6 +346,26 @@ Code: `TerritoryWarsService.SiegeStages.cs`.
   `AttackCityEndTime`) settles the battle for the defenders: whether a Gate stage that runs out (30 min in) already
   ends the siege is not known (`DungeonResultModule` has a type 4 time-out result without a stage).
 - The crystal can be hit in the Crystal stage only.
+
+### Gates
+
+- City Gate 4900005 (NPCConfig): `_iNPCType` 1 sub 204, camp 2, idle AI `GVG_S0_Gate`, speed 0, level 59,
+  AttriMonsterConfig 220059 (771 920 HP) scaled by `_kAttriScale` [101, 5 750 000] = 443 854 000 HP, `_kNpcTag` [3003],
+  `_iBodyRemainTime` 1. Its born buffs include 4904401 "Battle Start Protection" ("Immune to damage and debuffs",
+  `fx_gvg_buff_hudun`); the buff has no attribute, so its immunity is a server rule: nothing hits a unit carrying it.
+- The top bar's gate is `UIModule_NpcData` "36" [4900005, CityGate, area 319]: in the Gate stage it shows the HP of the
+  30115 entry at point 36 (`UI_Sys_Siege_TopBarWidgetCtrl.lua:449`). Var 513 `CSiegeGateNpcUid` carries the gate's uid
+  (`LC_DunGeon_VarDefine`; `DungeonVariableConfig` swaps the names of 513 and 514, the decoder is VarDefine).
+- When the gate at 36 falls, its 30115 entry goes out with hp 0 and the inner city's stage begins.
+
+**Inferred:**
+- Battle Start Protection stays until Prepare ends, then the gate at 36 loses it and the attackers can break it (the
+  defenders cannot: it is their camp's). Who breaks it in the original: the Battering Ram (its end point 35 is right
+  in front of the gate) and attacking players.
+- The attackers' camp gate at 214 leaves the field when Prepare ends, with the camp's air walls; it is not spawned
+  again in a later room.
+- AttackCityValue (statistics 1021001): an attacker's damage to the castle's objects, the crystal included.
+  DefenseValue (1021004) stays 0.
 
 ## Descriptor and runtime evidence boundaries
 

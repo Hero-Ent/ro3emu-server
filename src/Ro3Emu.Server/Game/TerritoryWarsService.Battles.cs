@@ -43,6 +43,8 @@ public sealed partial class TerritoryWarsService
         public int Kills { get; set; }
         /// <summary>Siege assists (TerritoryWarsService.QuestTargets.cs).</summary>
         public int Assists { get; set; }
+        /// <summary>Siege: an attacker's damage to the castle's objects (AttackCityValue, TerritoryWarsService.SiegeObjects.cs).</summary>
+        public long CityDamage { get; set; }
         public int Deaths { get; set; }
         public long DeadUntil { get; set; }
         public long Joined { get; set; }

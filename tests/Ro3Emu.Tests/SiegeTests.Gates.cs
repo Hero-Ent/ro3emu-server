@@ -158,4 +158,46 @@ public sealed partial class SiegeTests
         Assert.True(wars.CanHitObjective(Session(attack), run.Crystal!));
         Assert.False(wars.CanHitObjective(Session(defense), run.Crystal!));
     }
+
+    [ClientDataFact]
+    public async Task TheGateHoldsThroughPrepareAndItsFallOpensTheInnerCity()
+    {
+        var (attack, defense) = await SeededSiege("D");
+        await using var _ = attack;
+        await using var __ = defense;
+        var run = Run(attack);
+        var wars = Service<TerritoryWarsService>();
+        var gate = run.Objects[GatePoint];
+        bool Protected(MonsterUnit m) => Service<BuffService>().UnitBuffs(m).Any(b => b.ConfigId == 4904401);
+
+        // Prepare: both gates carry Battle Start Protection, so nobody breaks them; var 513 names the gateway's gate.
+        Assert.True(Protected(gate) && Protected(run.Objects[214]));
+        Assert.False(wars.CanHitObjective(Session(attack), gate));
+        Assert.Equal(gate.Uid, Assert.Single(LastBaseInfo(attack).Vars, v => v.VarId == 513).Vi64.Single());
+
+        // The Gate stage: the protection goes and the attackers' camp gate leaves the field.
+        _clock.Set(_siege.Start + 300);
+        await OnLoop(wars.ReconcileAsync);
+        await Next(attack, GlobalObjectNotify, GlobalObjectDataNotify.Parser, n => AtPoint(n, 214) is { Hp: 0 });
+        Assert.DoesNotContain(214, run.Objects.Keys);
+        Assert.False(Protected(gate));
+        Assert.True(wars.CanHitObjective(Session(attack), gate));
+        Assert.False(wars.CanHitObjective(Session(defense), gate));
+
+        // The attackers break it: the client deletes it (hp 0) and the inner city's stage begins.
+        await OnLoop(async () =>
+        {
+            gate.Hp = 1;
+            await Service<SceneService>().TeleportInMapAsync(Session(attack), new MapPoint(gate.X + 1.5f, gate.Y, gate.Z, 270));
+        });
+        await attack.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1000001, TargetId = gate.Uid });
+        Assert.Equal(0, (await Next(attack, CombatService.UseSkill, CastSkillRsp.Parser)).Result);
+        await Next(defense, GlobalObjectNotify, GlobalObjectDataNotify.Parser, n => AtPoint(n, GatePoint) is { Hp: 0 });
+        await Next(defense, 30401, DungeonBaseInfoNotify.Parser, i => i.StageModuleData.Stage == 2);
+        Assert.Contains(GatePoint, run.State.Destroyed);
+        Assert.True(run.State.Players[Session(attack).Role!.Id].CityDamage > 0); // AttackCityValue
+        await attack.SendGameAsync(30117, new GetDungeonStatisticsInDungeonReq());
+        var stats = (await Next(attack, 30117, GetDungeonStatisticsInDungeonResp.Parser)).DungeonStatistics;
+        Assert.True(stats.SceneStatistics.Values.Single().RoleStatistics[Session(attack).Role!.Id].ExtraData[1021001].LongValue > 0);
+    }
 }
