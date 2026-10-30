@@ -26,6 +26,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         this._reconstructed = reconstructed;
         _bossOptions = options?.Value.BossSkills ?? new BossSkillOptions();
         _ro1Aggressive = Ro1Aggressive(options?.Value); // MonsterService.Ro1Aggression
+        _ro1Hp = Ro1Hp(options?.Value); // MonsterService.Ro1Hp
         this._world = world;
         this._worldData = worldData;
         this._data = data;
@@ -142,7 +143,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
                 attr[id] = attr[id] * (id == 101 ? solo.Hp : solo.Attack) / 10000;
         }
         return new MonsterTemplate(
-            npcId, level, Math.Max(1, A(101)), A(102), A(103), A(104), A(105), A(106),
+            npcId, level, _ro1Hp.TryGetValue(npcId, out int ro1Hp) ? ro1Hp : Math.Max(1, A(101)), A(102), A(103), A(104), A(105), A(106),
             Hit: attr.ContainsKey(109) ? A(109) : level + 1, Flee: attr.ContainsKey(110) ? A(110) : level, Cri: A(111),
             speed, (int)GameData.Int(npc, "_iElement"), (int)GameData.Int(npc, "_iRace"), (int)GameData.Int(npc, "_iSize"),
             Math.Max(1, (int)GameData.Int(npc, "_iCamp")),

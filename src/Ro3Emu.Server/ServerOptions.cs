@@ -36,6 +36,11 @@ public sealed class ServerOptions
     /// reference, not client evidence (inferred); on by default as a trial (owner's decision, 28.10), off changes nothing.</summary>
     public bool Ro1AggressiveMonsters { get; set; } = true;
 
+    /// <summary>Monsters whose Ragnarok Online 1 counterpart is much tougher than the client makes them get the RO1 HP
+    /// (Reconstructed/ro1-monster-hp.json: the Pupa, 4 HP in the client, 427 here). An RO1 reference, not
+    /// client evidence (inferred); on by default as a trial (owner's decision, 29.10), off changes nothing.</summary>
+    public bool Ro1MonsterHp { get; set; } = true;
+
     /// <summary>Game-message JSON log (data/logs/traffic-*.jsonl): "off", "on" or a comma-separated account list.
     /// Formatting and writes run off the game loop; keep it off for load tests and production.</summary>
     public string TrafficLog { get; set; } = "off";

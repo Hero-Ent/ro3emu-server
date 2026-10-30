@@ -54,3 +54,14 @@ Everything in this section is *(inferred)*.
 - a row with `_iIsSurround` 0 keeps the straight approach;
 - against a player strafing within reach, a surrounding monster swings as often as one without surround (within one
   swing over 8 s).
+
+## RO1 HP reference (`Ro3Emu:Ro1MonsterHp`)
+
+The client's Pupa (NPCConfig 5000035, level 4) has 4 HP: AttriMonsterConfig 110004 gives 40 and the NPC's own `_kAttriScale`
+`[[101, 1000]]` takes it to 10%, so it dies in one hit. In Ragnarok Online 1 the Pupa is a level 2 cocoon with 427 HP (rAthena
+pre-renewal `mob_db.yml`, id 1008). The client's beginner monsters already sit on the RO1 scale once `_kAttriScale` is applied
+(Fabre 63 HP against RO1's 63, Lunatic 58 against 60, Drops 40 against 55, Poring 32 to 65 against 50), so the RO1 number is used
+as it is. `Reconstructed/ro1-monster-hp.json` lists the monsters; with the switch on (the default, a trial like
+`Ro1AggressiveMonsters`) their templates take that HP, with it off nothing changes. An RO1 reference, not client evidence
+(**inferred**).
+
