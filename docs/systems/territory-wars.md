@@ -409,6 +409,21 @@ Code: `TerritoryWarsService.SiegeTags.cs` (a `CombatService.DamageAdjusters` ent
 - A player's cast carries the tags of the cannons whose `GVGCannonConfig._iSkillID` it is and of its bullet NPC
   (`SkillConfig._kLogicData[2]`); every other skill, the war vehicles' seat skills included, carries none.
 
+### Bag NPCs
+
+Code: `TerritoryWarsService.SiegeBags.cs`.
+
+- NPCConfig 4900201 (camp 1) and 4900202 (camp 2): `_iNPCType` 2 sub 1, `_iInteractID` [4900004], `_iInteractDistance`
+  3. NPCInteractConfig 4900004 opens the war bag (`_iEXECAction` [1, TOPBAR, `UI_Sys_Siege_BattleBagPanel`], which the
+  client runs on the server's 32700 answer) when its condition 4900004 (no buff of group 49012 or 49013) and its NPC
+  condition 4900003 (`CheckCamp` 2200 and `CheckGVGPermission` 2202 with 2 = Vehicle) hold; otherwise 32700 answers
+  `NpcParameter`. A Vehicle-permission member has no other way to the bag in the siege: the siege button widget shows
+  the bag for the Firearm permission only (`UI_Sys_Dungeon_Siege_ButtonWidgetCtrl.lua` `_checkShowInstrument`).
+- Note: NpcLevelPointRespawnConfig rows 4900201/4900202 are row ids placing Obstacles, not these NPCs.
+
+**Inferred:** no table places the two NPCs; each stands 3 m in front of its camp's born point (75 the attackers', 73
+the defenders'), facing it, once per siege room. They are NPC entities without HP, not combat units.
+
 ## Descriptor and runtime evidence boundaries
 
 The checked-in `MG_Guild.proto` defines `TerritoryWarsGuildData.occupyWarzone` and places auction fields inside `guildData`. `LC_DAL_TerritoryWars.lua:884-925,988-1008` reads `campDatas` and some wrapper-level auction fields instead. Implementation sends the supplied descriptor, plus the coherent modern 5013/84037 and deadline notifications; exact legacy panel decoding remains unverified. A new field number is not invented.

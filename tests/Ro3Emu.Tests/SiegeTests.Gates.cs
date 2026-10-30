@@ -275,4 +275,34 @@ public sealed partial class SiegeTests
         Assert.Equal(10000, Hit(run.Objects[38], 4900701, 10000)); // a guardian has no tag
         Assert.Equal(10000, Hit(run.Objects[GatePoint], 1000001, 10000)); // a player's own attack is no cannon
     }
+
+    [ClientDataFact]
+    public async Task TheAttackersBagNpcOpensTheWarBagForVehicleOperatorsOnly()
+    {
+        var (attack, defense) = await SeededSiege("G");
+        await using var _ = attack;
+        await using var __ = defense;
+        var map = Service<WorldData>().Map(2230101)!;
+
+        // 4900201 (camp 1) in front of the attackers' born point 75; the attackers see it on arrival.
+        var bag = (await Next(attack, GameAoiSink.SyncAoiView, AoIViewChangeData.Parser,
+            v => v.Bases.Any(b => b.EntityTemplateID == 4900201))).Bases.Single(b => b.EntityTemplateID == 4900201);
+        Assert.Equal((2, 1L), (bag.EntityType, bag.EntityCamp));
+        Assert.Equal(3, MonsterService.Distance(bag.MovementInfo.Pos.X, bag.MovementInfo.Pos.Z, map.Points[75].X, map.Points[75].Z), 1);
+
+        // Interaction 4900004 needs the Vehicle permission (NPC condition 4900003): without it nothing opens.
+        Assert.Equal(ErrorCodes.NpcParameter, await Interact(attack, bag.Uuid, 4900004));
+        Assert.Equal(ErrorCodes.NpcParameter, await Interact(attack, bag.Uuid, 4900005)); // not this NPC's interaction
+        await attack.SendGameAsync(GuildService.ToolAssign, new GuildWartimeToolBelongOperReq
+        { ToolType = WartimeToolType.Vehicle, BagIndex = 1, RoleGuildId = Session(attack).Role!.Id });
+        Assert.Equal(0, (await Next(attack, GuildService.ToolAssign, GuildWartimeToolBelongOperRsp.Parser)).Result);
+        Assert.Equal(0, await Interact(attack, bag.Uuid, 4900004));
+
+        // The defenders' own bag NPC stands at their born point; the attackers' one is not theirs (CheckCamp).
+        await OnLoop(() => Service<SceneService>().TeleportInMapAsync(Session(defense),
+            new MapPoint(bag.MovementInfo.Pos.X + 1, bag.MovementInfo.Pos.Y, bag.MovementInfo.Pos.Z, 0)));
+        Assert.Equal(ErrorCodes.NpcParameter, await Interact(defense, bag.Uuid, 4900004));
+        Assert.Contains(Run(defense).Bags.Values, b => b.NpcId == 4900202
+            && MonsterService.Distance(b.X, b.Z, map.Points[73].X, map.Points[73].Z) is > 2.9f and < 3.1f);
+    }
 }

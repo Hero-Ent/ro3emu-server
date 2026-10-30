@@ -60,6 +60,8 @@ public sealed partial class TerritoryWarsService
         internal Dictionary<int, MonsterUnit> Objects { get; } = [];
         /// <summary>The HP of each object last sent in 30115 (TerritoryWarsService.SiegeGlobalData.cs).</summary>
         internal Dictionary<int, long> SentHp { get; } = [];
+        /// <summary>The two bag NPCs by uid (TerritoryWarsService.SiegeBags.cs).</summary>
+        internal Dictionary<long, SiegeBagUnit> Bags { get; } = [];
         internal CommandBoard Command { get; } = new();
         public bool Spawning { get; set; }
         /// <summary>For assists: each victim's recent hitters and when (TerritoryWarsService.QuestTargets.cs).</summary>
@@ -158,6 +160,7 @@ public sealed partial class TerritoryWarsService
         {
             await SiegeSpawnCrystalAsync(battle);
             bool spawned = await SiegeSpawnObjectsAsync(battle);
+            await SiegeSpawnBagsAsync(battle);
             await SiegeGateRulesAsync(battle);
             await SiegePublishObjectsAsync(battle);
             // A member loaded before the castle stood learns the gate's uid (var 513).
