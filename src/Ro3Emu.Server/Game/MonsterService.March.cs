@@ -32,7 +32,8 @@ public sealed partial class MonsterService
 
     private void March(MonsterUnit m, MapInstance map, MonsterMarch march, long now)
     {
-        if (march.Arrived || march.Failures >= MarchGiveUp || m.Moving || m.Template.SpeedCm <= 0 || m.BusyUntilMs > now) return;
+        if (march.Arrived || march.Halted || march.Failures >= MarchGiveUp || m.Moving || m.Template.SpeedCm <= 0
+            || m.BusyUntilMs > now) return;
         if (Distance(m.X, m.Z, march.GoalX, march.GoalZ) <= march.ArriveRadius)
         {
             march.Arrived = true;
@@ -53,6 +54,24 @@ public sealed partial class MonsterService
             march.Route.Clear(); // no straight way on from here (a cached route of another start): plan again
         }
         if (++march.Failures >= MarchGiveUp) SendStop(m, now);
+    }
+
+    /// <summary>
+    /// Holds a marching monster where it stands (it stops at once, mid-leg) or lets it take up its way again from
+    /// there. True when the hold changed.
+    /// </summary>
+    internal async Task<bool> HoldMarchAsync(MonsterUnit m, bool hold)
+    {
+        if (m.March is not { } march || march.Halted == hold) return false;
+        march.Halted = hold;
+        if (!hold) return true;
+        march.Route.Clear(); // planned again from where it stopped
+        if (!m.Moving) return true;
+        long now = NowMs;
+        m.Advance(now);
+        m.Moving = false;
+        await _world.MoveUnitAsync(m, Stop(m, now));
+        return true;
     }
 
     private bool PlanMarch(MonsterUnit m, MonsterMarch march)

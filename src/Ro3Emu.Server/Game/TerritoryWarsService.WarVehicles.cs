@@ -95,21 +95,31 @@ public sealed partial class TerritoryWarsService
     /// </summary>
     private async Task<long> RaiseVehicleAsync(GameSession owner, int npcId)
     {
-        if (WarRoomOf(owner) is not { } battle || owner.Role is not { } role
-            || NPCConfig.Get(_data, npcId) is not { NPCSubType: 103 } npc
-            || VehicleConfig.Get(_data, npc.SubTypeValue) is not { Seats: { Length: > 0 } seats }
-            || _monsters.MachineTemplate(npcId) is not { } template) return 0;
+        if (WarRoomOf(owner) is not { } battle || owner.Role is not { } role) return 0;
         foreach (var (uid, old) in _vehicles)
             if (old.Unit.Removed || old.Room.Closed) _vehicles.TryRemove(uid, out _);
         float rad = owner.Face * MathF.PI / 180f;
         var spot = new MapPoint(owner.Position.X + 2 * MathF.Sin(rad), owner.Position.Y, owner.Position.Z + 2 * MathF.Cos(rad), owner.Face);
         if (_maps.Map(owner.SceneEntry) is { } map) spot = map.Grounded(spot);
+        if (NewVehicle(npcId, battle.Room, spot, role.Id, CampOf(owner), battle.Guild) is not { } unit
+            || !await _instances.AddPropAsync(battle.Room, unit)) return 0;
+        _vehicles[unit.Uid] = (unit, battle.Room);
+        return unit.Uid;
+    }
+
+    /// <summary>A vehicle NPC of <paramref name="room"/> at <paramref name="spot"/>, of its owner (0: none), camp and guild,
+    /// with NPCConfig _kBornEventBuff standing on it; null for an NPC that is no vehicle with seats.</summary>
+    private VehicleUnit? NewVehicle(int npcId, InstanceService.Room room, MapPoint spot, long owner, long camp, long guild)
+    {
+        if (NPCConfig.Get(_data, npcId) is not { NPCSubType: 103 } npc
+            || VehicleConfig.Get(_data, npc.SubTypeValue) is not { Seats: { Length: > 0 } seats }
+            || _monsters.MachineTemplate(npcId) is not { } template) return null;
         var (group, home) = MachineHome(npcId, spot);
         var unit = new VehicleUnit
         {
-            Uid = VehicleUidBase | Interlocked.Increment(ref _vehicleSerial), SceneEntry = owner.SceneEntry, InstanceId = battle.Room.Id,
-            X = spot.X, Y = spot.Y, Z = spot.Z, Face = owner.Face, NpcId = npcId, Owner = role.Id, Camp = CampOf(owner), Guild = battle.Guild,
-            CampOverride = (int)CampOf(owner), Name = npc.Name is [var nameId, ..] ? _data.Text(nameId) : "",
+            Uid = VehicleUidBase | Interlocked.Increment(ref _vehicleSerial), SceneEntry = room.SceneEntry, InstanceId = room.Id,
+            X = spot.X, Y = spot.Y, Z = spot.Z, Face = spot.Face, NpcId = npcId, Owner = owner, Camp = camp, Guild = guild,
+            CampOverride = (int)camp, Name = npc.Name is [var nameId, ..] ? _data.Text(nameId) : "",
             Template = template, Group = group, Home = home, Hp = template.MaxHp, BornTimeMs = MonsterService.NowMs,
             SeatRows = seats, Seats = new GameSession?[seats.Length],
             SeatTypes = [.. seats.Select(seat => VehicleSeatConfig.Get(_data, seat)?.Type ?? 0)],
@@ -122,9 +132,7 @@ public sealed partial class TerritoryWarsService
                 {
                     BuffGuid = Interlocked.Increment(ref _vehicleBuffGuid), ConfigId = (int)buff, PileCount = 1, SourceId = unit.Uid,
                 });
-        if (!await _instances.AddPropAsync(battle.Room, unit)) return 0;
-        _vehicles[unit.Uid] = (unit, battle.Room);
-        return unit.Uid;
+        return unit;
     }
 
     private bool VehicleStanding(long uid) => _vehicles.TryGetValue(uid, out var v) && !v.Unit.Removed && !v.Room.Closed;
