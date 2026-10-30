@@ -20,4 +20,5 @@ public readonly partial record struct JobConfig(JsonElement Row)
     [ConfigField("_kAttri")] public partial long[][] Attri { get; }
     [ConfigField("_kSkillNormalID")] public partial long[] SkillNormalId { get; }
     [ConfigField("_kSkillReplace")] public partial long[][] SkillReplace { get; }
+    [ConfigField("_kWeaponForm")] public partial long[] WeaponForm { get; }
 }
