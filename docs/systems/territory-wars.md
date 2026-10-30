@@ -472,8 +472,14 @@ Code: `TerritoryWarsService.SiegeBags.cs`.
   the bag for the Firearm permission only (`UI_Sys_Dungeon_Siege_ButtonWidgetCtrl.lua` `_checkShowInstrument`).
 - Note: NpcLevelPointRespawnConfig rows 4900201/4900202 are row ids placing Obstacles, not these NPCs.
 
+- Their uids stay below 2^53, like every interactable unit's: `LC_InteractManager.AddRole` hands the uuid to the native
+  overlap test through a double array and `_calAllUnitInDistance` looks the returned id up in `m_kUnitDic`; a uid a
+  double cannot hold comes back changed, the lookup is nil and the client throws every frame (seen in the client with
+  a first uid of 2^53 + 2^52 + 1).
+
 **Inferred:** no table places the two NPCs; each stands 3 m in front of its camp's born point (75 the attackers', 73
-the defenders'), facing it, once per siege room. They are NPC entities without HP, not combat units.
+the defenders'), facing it, once per siege room. They are not combat units, but their entity carries the template HP of
+their NPCConfig stats (properties 101, 2000, 2002) for the HP bar the client draws.
 
 ## Descriptor and runtime evidence boundaries
 

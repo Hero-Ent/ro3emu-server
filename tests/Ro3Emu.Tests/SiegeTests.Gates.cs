@@ -288,6 +288,14 @@ public sealed partial class SiegeTests
         var bag = (await Next(attack, GameAoiSink.SyncAoiView, AoIViewChangeData.Parser,
             v => v.Bases.Any(b => b.EntityTemplateID == 4900201))).Bases.Single(b => b.EntityTemplateID == 4900201);
         Assert.Equal((2, 1L), (bag.EntityType, bag.EntityCamp));
+        // LC_InteractManager passes an interactable unit's uuid through a double array to the native overlap test and
+        // looks the returned id up again: every uid of the siege room must survive a double unchanged.
+        Assert.Equal(bag.Uuid, (ulong)(double)bag.Uuid);
+        Assert.All(Run(attack).Objects.Values.Select(u => u.Uid).Concat(Run(attack).Bags.Keys),
+            uid => Assert.True(uid < 1L << 53 && (long)(double)uid == uid, $"uid {uid} does not fit a double"));
+        // Its NPCConfig stats give it a full HP bar (properties 101 max HP, 2000 HP).
+        Assert.True(Property(bag, 101) > 0);
+        Assert.Equal(Property(bag, 101), Property(bag, 2000));
         Assert.Equal(3, MonsterService.Distance(bag.MovementInfo.Pos.X, bag.MovementInfo.Pos.Z, map.Points[75].X, map.Points[75].Z), 1);
 
         // Interaction 4900004 needs the Vehicle permission (NPC condition 4900003): without it nothing opens.

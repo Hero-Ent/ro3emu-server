@@ -15,7 +15,13 @@ namespace Ro3Emu.Server.Game;
 /// </summary>
 public sealed partial class TerritoryWarsService
 {
-    private const long SiegeBagUidBase = (1L << 53) | (1L << 52), SiegeBagUidMask = ~((1L << 52) - 1);
+    /// <summary>
+    /// Bag NPC uids: below 2^53 like the other machines' (TerritoryWarsService.WarMachines.cs CannonUidBase). The client's
+    /// LC_InteractManager hands an interactable unit's uuid to the native overlap test through a double array (AddRole:
+    /// m_kShareMemory[2] = m_kUUID) and looks the returned id up in m_kUnitDic (_calAllUnitInDistance): an id a double
+    /// cannot hold exactly comes back as another number, the lookup is nil and the client fails every frame.
+    /// </summary>
+    private const long SiegeBagUidBase = (1L << 49) | (1L << 46), SiegeBagUidMask = ~((1L << 46) - 1);
     private const long CheckHaveBuff = 1004;
     /// <summary>
     /// (inferred) No table places them (NpcLevelPointRespawnConfig rows 4900201/4900202 are row keys placing Obstacles):
@@ -25,22 +31,34 @@ public sealed partial class TerritoryWarsService
     private static readonly (int Npc, int Born)[] SiegeBagNpcs = [(4900201, 75), (4900202, 73)];
     private long _siegeBagSerial;
 
-    /// <summary>A bag NPC: an NPC entity (type 2) of its camp, not a combat unit.</summary>
+    /// <summary>
+    /// A bag NPC: an NPC entity (type 2) of its camp, not a combat unit. NPCConfig gives it monster stats
+    /// (_iAttributeVariated 220, _kAttriScale) and the client draws its HP bar, so (inferred) the entity carries its full
+    /// template HP like a war machine's (properties 101, 2000, 2002), not an empty bar.
+    /// </summary>
     internal sealed class SiegeBagUnit : WorldUnit
     {
         public required int NpcId { get; init; }
         public required long Camp { get; init; }
+        public MonsterTemplate? Template { get; init; }
 
-        public override EntityBase Entity() => new()
+        public override EntityBase Entity()
         {
-            Uuid = (ulong)Uid, EntityTemplateID = (ulong)NpcId, EntityType = 2, EntityCamp = Camp, Face = Face,
-            State = EntityState.Alive, NotifyType = EntityBase.Types.NotifyType.All,
-            MovementInfo = new MovementInfo
+            var entity = new EntityBase
             {
-                Pos = new Vec3 { X = X, Y = Y, Z = Z }, Face = Face, ServerTime = MonsterService.NowMs,
-                MoveType = MovementType.MoveTypeNone,
-            },
-        };
+                Uuid = (ulong)Uid, EntityTemplateID = (ulong)NpcId, EntityType = 2, EntityCamp = Camp, Face = Face,
+                State = EntityState.Alive, NotifyType = EntityBase.Types.NotifyType.All,
+                MovementInfo = new MovementInfo
+                {
+                    Pos = new Vec3 { X = X, Y = Y, Z = Z }, Face = Face, ServerTime = MonsterService.NowMs,
+                    MoveType = MovementType.MoveTypeNone,
+                },
+            };
+            if (Template is { } t)
+                foreach (var (idx, value) in new (long, long)[] { (101, t.MaxHp), (2000, t.MaxHp), (2002, t.Level) })
+                    entity.Property.Add(new AoIProperty { Idx = idx, Data = value, BaseData = value });
+            return entity;
+        }
     }
 
     /// <summary>Both bag NPCs, once per room.</summary>
@@ -56,6 +74,7 @@ public sealed partial class TerritoryWarsService
             {
                 Uid = SiegeBagUidBase | Interlocked.Increment(ref _siegeBagSerial), SceneEntry = battle.Room.SceneEntry,
                 InstanceId = battle.Room.Id, X = spot.X, Y = spot.Y, Z = spot.Z, Face = spot.Face, NpcId = npcId, Camp = npc.Camp,
+                Template = _monsters.MachineTemplate(npcId),
             };
             if (!await _instances.AddPropAsync(battle.Room, unit)) return;
             battle.Bags[unit.Uid] = unit;
