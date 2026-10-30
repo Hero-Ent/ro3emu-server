@@ -224,6 +224,28 @@ public sealed class ServerOptions
 
     /// <summary>Boss special skills (BossSkillSets, MonsterService.BossSkills): the scheduler's inferred numbers.</summary>
     public BossSkillOptions BossSkills { get; set; } = new();
+
+    /// <summary>
+    /// TEST AIDS, not original behaviour (Ro3Emu:Testing, docs/guide/hosting.md): To-Do activities open at any hour and
+    /// rewards that never run out, so testers need not wait for a weekday or a weekly reset. All off by default; GM
+    /// "!testing" changes them in memory.
+    /// </summary>
+    public TestingOptions Testing { get; set; } = new();
+}
+
+/// <summary>
+/// Switches for test realms (Game/TestingSwitches.cs). None of them is the original game's behaviour; the server logs a
+/// warning at startup while one is on.
+/// </summary>
+public sealed class TestingOptions
+{
+    /// <summary>Every To-Do activity (DailyActivityConfig) counts as open now, any weekday and hour: its occurrence repeats
+    /// back to back with its own length, phases included. The Guild League and Territory Wars rows keep their calendars.</summary>
+    public bool AlwaysOpen { get; set; }
+
+    /// <summary>Reward allowances and attempt counters never run out: dungeon reward counts (Realm of the Gods, Phantom
+    /// Realm), MVP daily reward counts, the Commendation Vault extra awards and Dodo's Request.</summary>
+    public bool UnlimitedRewards { get; set; }
 }
 
 /// <summary>

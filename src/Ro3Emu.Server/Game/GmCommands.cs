@@ -309,6 +309,8 @@ public sealed partial class GmCommands(IOptions<ServerOptions> options, GameData
             await ReplyAsync(s, "Field EXP rates: " + FieldExpRates.Describe(rewards.FieldExpRules));
         }
         ),
+        // Ro3Emu:Testing (TEST AIDS, not original): To-Do activities open at any hour, rewards that never run out.
+        ["testing"] = ("[alwaysopen on|off | unlimited on|off | reset] (test aids, in memory until the next start)", TestingAsync),
         ["speed"] = ("<speed, 0 = normal>", async (s, a) => await ReplyAsync(s, await character.SetSpeedAsync(s, L(a[0])))),
         ["quest"] = ("[accept|finish|done <taskId> | reset]", async (s, a) => await ReplyAsync(s, a.Length == 0
             ? "Quests: " + tasks.Describe(s)

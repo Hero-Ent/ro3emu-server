@@ -70,6 +70,7 @@ public sealed partial class DungeonService
     private readonly AwardService _awards;
     private readonly ServerOptions _options;
     private readonly PraiseService _praise;
+    private readonly TestingSwitches _testing;
     private readonly Dictionary<GameSession, Preparation> _pending = new();
 
     public DungeonService(GameData data, DungeonCatalog catalog, RoleStore roles, Ownership.OwnerRegistry owners,
@@ -78,9 +79,10 @@ public sealed partial class DungeonService
         SessionRegistry sessions, RewardService rewards, AuctionService auctions, GuildStore guilds, MonsterService monsters, CombatService combat,
         SceneService scene, BuffService buffs, GameLoop loop, TimeProvider clock, ILogger<DungeonService> log, World world,
         GmCommands gm, AccountStore accounts, AwardService awards, Microsoft.Extensions.Options.IOptions<ServerOptions> options,
-        PraiseService praise, WorldInteractionService vehicles)
+        PraiseService praise, WorldInteractionService vehicles, TestingSwitches testing)
     {
         this._accounts = accounts; this._awards = awards; this._options = options.Value; this._praise = praise;
+        this._testing = testing;
         gm.Register("firstclear", "<bossId> [daysAgo] | <bossId> clear (Realm of the Gods test aid: the server's first clear "
             + "of a boss, which unlocks its hall of fame entry and Sacred Blessing)", FirstClearGmAsync);
         this._data = data; this._catalog = catalog; this._roles = roles; this._owners = owners;
