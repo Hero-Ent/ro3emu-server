@@ -373,6 +373,12 @@ Code: `TerritoryWarsService.SiegeObjects.cs`.
   defenders' 270: the point starts with the defenders and is not spawned for the attackers (its capture is unknown).
 - Who hits what: a camp 2 object (gates, guardians, barricades) by the attackers only, a camp 1 object by the
   defenders only, the camp 4 revive point and anything with `_iNoSelected` 1 (the markers) by nobody.
+- A castle object keeps its damage for the whole siege: a field monster that loses its target and stands at home again
+  heals to full, a castle object does not (`MonsterUnit.KeepsDamage`). One whose AIConfig has `_iCanInBattle` 0 (the
+  City Gate's 4900000 "GVG_S0_Gate"; the barricades, markers and revive point have no AI) never takes a target, so a
+  hit neither locks its attacker (31052) nor starts the leash (`MonsterUnit.StaysOutOfBattle`); the guardians
+  (20000009) and the crystal (4900009) have `_iCanInBattle` 1 and fight back. The client never reads `_iCanInBattle`.
+  Before this a cannon shot from 70 m engaged the gate, which dropped its attacker at once (leash 15 m) and healed.
 
 ### Siege stages
 

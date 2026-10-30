@@ -203,6 +203,53 @@ public sealed partial class SiegeTests
         Assert.True(stats.SceneStatistics.Values.Single().RoleStatistics[Session(attack).Role!.Id].ExtraData[1021001].LongValue > 0);
     }
 
+    [ClientDataFact]
+    public async Task TheCastleKeepsItsDamageAfterTheFightMovesAway()
+    {
+        var (attack, defense) = await SeededSiege("H");
+        await using var _ = attack;
+        await using var __ = defense;
+        var run = Run(attack);
+        var wars = Service<TerritoryWarsService>();
+        _clock.Set(_siege.Start + 300); // the Gate stage: the gate can be hit
+        await OnLoop(wars.ReconcileAsync);
+        var a = Session(attack);
+
+        async Task<long> HitFromBeside(MonsterUnit m)
+        {
+            await OnLoop(() => Service<SceneService>().TeleportInMapAsync(a, new MapPoint(m.X + 1.5f, m.Y, m.Z, 270)));
+            await attack.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1000001, TargetId = m.Uid });
+            Assert.Equal(0, (await Next(attack, CombatService.UseSkill, CastSkillRsp.Parser)).Result);
+            await Next(attack, CombatService.SkillHit, SkillHitInfo.Parser, h => h.Dsts.Any(d => d.DstID == m.Uid && d.Damage > 0));
+            return m.Hp;
+        }
+
+        // The gate (AIConfig 4900000, _iCanInBattle 0) takes the hit without locking its attacker.
+        var gate = run.Objects[GatePoint];
+        long gateHp = await HitFromBeside(gate);
+        Assert.True(gateHp < gate.Template.MaxHp);
+        // A Bow Guardian (20000009, _iCanInBattle 1) fights back, then loses its attacker beyond its leash.
+        var guardian = run.Objects[38];
+        long guardianHp = await HitFromBeside(guardian);
+        Assert.True(guardianHp < guardian.Template.MaxHp);
+        for (int i = 0; i < 50 && guardian.Target == null; i++) await Task.Delay(100);
+        Assert.Same(a, guardian.Target); // the hit engages a fighting object by now...
+        Assert.Null(gate.Target); // ...but never the gate, which was hit first
+        await OnLoop(() => Service<SceneService>().TeleportInMapAsync(a, new MapPoint(guardian.X + 60, guardian.Y, guardian.Z, 0)));
+        await Task.Delay(2500); // monster ticks (real time): the guardian gives up and stands at home again
+        Assert.Null(guardian.Target);
+        Assert.False(guardian.Returning);
+
+        // Neither healed back to full: the next 30115 carries the damage.
+        Assert.Equal(gateHp, gate.Hp);
+        Assert.True(guardian.Hp < guardian.Template.MaxHp);
+        await OnLoop(wars.ReconcileAsync);
+        var hp = await Next(defense, GlobalObjectNotify, GlobalObjectDataNotify.Parser,
+            n => AtPoint(n, GatePoint) is { } g && g.Hp < g.MaxHp);
+        Assert.Equal(gateHp, AtPoint(hp, GatePoint)!.Hp);
+        await Next(defense, GlobalObjectNotify, GlobalObjectDataNotify.Parser, n => AtPoint(n, 38) is { } g && g.Hp < g.MaxHp);
+    }
+
     private static long[] Walls(DungeonBaseInfoNotify info)
     {
         var walls = Assert.Single(info.Vars, v => v.VarId == 133);

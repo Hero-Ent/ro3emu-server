@@ -178,6 +178,7 @@ public sealed partial class TerritoryWarsService
         var actor = await _instances.SpawnAsync(battle.Room, SiegeCrystal, map.Grounded(point));
         if (actor == null) throw new InvalidOperationException("Configured Siege crystal 4900009 could not spawn");
         if (battle.State.CrystalHp > 0) actor.Hp = Math.Min(actor.Hp, battle.State.CrystalHp);
+        SiegeHoldsDamage(actor);
         battle.State.CrystalHp = actor.Hp;
         battle.Crystal = actor;
         battle.Objects[SiegeCrystalPoint] = actor;

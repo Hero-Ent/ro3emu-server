@@ -102,10 +102,26 @@ public sealed partial class TerritoryWarsService
                 throw new InvalidOperationException($"Siege object point {point} is absent from scene 2230101");
             if (await _instances.SpawnAsync(battle.Room, npc, map.Grounded(at)) is not { } actor) break; // the room closed
             if (battle.State.ObjectHp.TryGetValue(point, out long hp) && hp > 0) actor.Hp = Math.Min(actor.Hp, hp);
+            SiegeHoldsDamage(actor);
             battle.Objects[point] = actor;
             spawned = true;
         }
         return spawned;
+    }
+
+    /// <summary>
+    /// A castle object is no field monster: (inferred) the damage it took stays for the whole siege, also after it lost
+    /// its target and stood back at its point, where a field monster heals to full (MonsterService); and one whose
+    /// AIConfig has _iCanInBattle 0 (the City Gate's 4900000 "GVG_S0_Gate"; the barricades, markers and revive point have
+    /// no AI) never takes a target, so a hit neither locks its attacker (31052) nor starts the leash that ended in the
+    /// heal. The guardians (20000009) and the crystal (4900009) have _iCanInBattle 1 and fight back as before. The client
+    /// never reads _iCanInBattle; reading 0 as "never in battle" is inferred.
+    /// </summary>
+    private void SiegeHoldsDamage(MonsterUnit actor)
+    {
+        actor.KeepsDamage = true;
+        actor.StaysOutOfBattle = NPCConfig.Get(_data, actor.Template.NpcId) is not { } npc
+            || AIConfig.Get(_data, npc.Ai) is not { CanInBattle: 1 };
     }
 
     /// <summary>
