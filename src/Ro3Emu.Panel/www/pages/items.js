@@ -27,7 +27,8 @@ async function itemsPage() {
 }
 
 async function itemPage(id) {
-  const item = await api('GET', '/api/items/' + encodeURIComponent(id));
+  const [item, crafting] = await Promise.all([api('GET', '/api/items/' + encodeURIComponent(id)),
+    api('GET', '/api/items/' + encodeURIComponent(id) + '/crafting').catch(() => ({ from: [], into: [] }))]);
   const i = item.item;
   const several = item.variants.length > 1;
   const variantOf = id => item.variants.find(v => v.id === id);
@@ -73,7 +74,8 @@ async function itemPage(id) {
       card('Description', null, body(h('p', { class: 'desc' }, item.description || 'The game gives no description.'))),
       variants && card('Items of this name', null, variants, 'Drops and shops below are those of every item of this name.'),
       card('Dropped by', null, dropped, item.droppedBy.length ? 'Chance per kill that at least one drops; a player\'s level and class limits are not counted.' : null),
-      shops && card('Sold in shops', null, shops)),
+      shops && card('Sold in shops', null, shops),
+      recipeCards(crafting, i.id)),
     h('div', { class: 'span-4 stack' },
       picture && card(null, null, body(picture)),
       card('Item', null, body(facts([

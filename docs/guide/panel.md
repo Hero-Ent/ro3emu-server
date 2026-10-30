@@ -143,6 +143,34 @@ spawn; a merged drop says "Only from ..." when not every variant drops it. Rows 
 placeholder the row gives no value for, and level-1 monsters with 100 000 HP or more that spawn on no map (story and
 scene actors) are left out of the lists; searching for their id still finds them.
 
+## The rest of the game database
+
+The **Database** page links every public database. Besides items, monsters and maps:
+
+- **Cards**: every card of the card library with each star's effects as the client's tips write them (attributes by
+  _iNameEquip and _iTextValueDisplayType, special effects by LC_SpecialEffectHelper's rules), the copies a star costs,
+  what each level adds and costs (CardUpgradeConfig of the card's slot and quality), the revert price and who drops it.
+- **Crafting**: the Chef's formulas (LifeFormulaConfig: materials, vigor, time, life job EXP, the products and their
+  chances through the award's drop pool) and equipment crafting (EquipCraftConfig, each quality by
+  EquipCraftQualityConfig's weights, the guarantees). An item page shows the recipes it comes from and goes into.
+- **Classes & skills**: each class's line and skill trees laid out as the skill window does (SkillTreeConfig rows, 7
+  columns, the class's _kSkillReplace, Novice's row centred), and a page per skill with every level's description
+  (Language.Trans of _iDescription with _kDescData), cooldown, cast time, cost and prerequisites.
+- **Pets**: stats per level (AttriMonsterConfig times _iBaseAttr), fight and assist power, every star's step and cost,
+  what the pet gives while it fights and once collected, and its skills per star. **Mounts**: the speed each adds
+  (attribute 1131), its other stats and the items that lend it. **Shops**: every shop's goods and prices.
+- **Elements & EXP**: the element table (EleConfig) and how a kill's EXP is scaled (LvExpCorrectionConfig, the party
+  bonus). A monster page shows its Base EXP per kill (item 100 of its drop pools, also in Bonus Time and the low-level
+  bonus) and the damage it takes from each element; a map page its type, recommended levels
+  (OnHookMonsterRecommendConfig), NPCs with what they offer, portals, neighbours and dungeon floors.
+- **Event calendar**: the timed To-Do activities from now to a week ahead, as TimedTodoSchedule opens them, and the
+  season's long windows (NewActivityConfig), shown in the viewer's own time with live countdowns; it says when the
+  testing switch runs everything all day. Asked on the game loop at most once a minute.
+- **MVP timers**: every field MVP's state, last kill and next respawn from MvpService, at most every 5 seconds.
+
+The data export also writes the pictures these pages use: icons/pets (PetBaseConfig heads and illustrations),
+icons/npcs (world NPC heads), icons/mounts (the mount appearances) and icons/events (the To-Do icons).
+
 ## Pictures
 
 The item, monster, class and map pictures come from **your own game client**, the same way the game data does:
