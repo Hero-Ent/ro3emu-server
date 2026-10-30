@@ -24,6 +24,9 @@ public sealed partial class PanelBackend
     /// <summary>The game data, for the catalog (a nested class cannot see the constructor's parameter).</summary>
     private GameData Tables => data;
 
+    /// <summary>Ro3Emu:LordsManePercent, the chance MvpService gives a Lord's Mane per MVP kill.</summary>
+    private int LordsManePercent => options.Value.LordsManePercent;
+
     private readonly object _databaseGate = new();
     private Task<PanelCatalog>? _catalog;
     private Task<Dictionary<long, List<PanelSpawn>>>? _spawnIndex;
@@ -277,7 +280,7 @@ public sealed partial class PanelBackend
                 foreach (var drop in monster.Drops.Where(d => d.ItemId is not (BaseExpItem or JobExpItem)))
                 {
                     if (!_droppedBy.TryGetValue(drop.ItemId, out var list)) _droppedBy[drop.ItemId] = list = [];
-                    list.Add(new PanelItemDrop(npc.Id, name, monster.Summary.Level, monster.Summary.Rank, drop.Chance, drop.Min, drop.Max));
+                    list.Add(new PanelItemDrop(npc.Id, name, monster.Summary.Level, monster.Summary.Rank, drop.Chance, drop.Min, drop.Max, drop.Kind));
                 }
             }
             Monsters.Sort((a, b) => a.Summary.Level != b.Summary.Level ? a.Summary.Level.CompareTo(b.Summary.Level)
@@ -334,38 +337,75 @@ public sealed partial class PanelBackend
         /// </summary>
         private List<PanelMonsterDrop> Drops(NPCConfig npc)
         {
+            var drops = PoolDrops(RewardService.KillDropRows(data: _backend.Tables, npc.Row, bonus: false)
+                .SelectMany(r => RewardService.DropPools(r.Row).Select(pool => (pool, r.Maps))), "", 1);
+            foreach (var mvp in MVPConfig.All(_backend.Tables).Where(m => m.NPCId == npc.Id).Take(1))
+                drops.AddRange(MvpRewards(mvp));
+            return [.. drops.Take(DetailRows)];
+        }
+
+        /// <summary>
+        /// The rewards of a field MVP's kill as MvpService.SettleAsync hands them out, each kind rolled through its award's
+        /// pool (RewardService.AwardPool): first strike, final blow, the top 10 parties, every participant, and one rare
+        /// winner per kill at _iRareRewardProbability / 10000, who may also get a Lord's Mane (Ro3Emu:LordsManePercent).
+        /// Each kind is capped per day per player (3 first strikes, 3 final blows, 3 rankings, 5 participations).
+        /// </summary>
+        private IEnumerable<PanelMonsterDrop> MvpRewards(MVPConfig mvp)
+        {
+            var data = _backend.Tables;
+            double rare = Math.Clamp(mvp.RareRewardProbability / 10000.0, 0, 1);
+            var kinds = new (string Kind, long Award, double Chance)[]
+            {
+                ("First strike", mvp.FirstDamageAward, 1), ("Final blow", mvp.LastDamageAward, 1), ("Top 10 parties", mvp.TeamAward, 1),
+                ("Participation", mvp.PartAward, 1), ("Rare winner", mvp.RareAward, rare),
+            };
+            foreach (var (kind, award, chance) in kinds)
+                if (RewardService.AwardPool(data, award) is var pool and > 0)
+                    foreach (var drop in PoolDrops([(pool, [])], kind, chance)) yield return drop;
+            int mane = Math.Clamp(_backend.LordsManePercent, 0, 100);
+            if (mane > 0 && _items.TryGetValue(LordsMane, out var item))
+                yield return new PanelMonsterDrop(LordsMane, item.Summary.Name, item.Summary.Quality, mane / 100.0, 1, 1, [], "Rare winner");
+        }
+
+        /// <summary>Lord's Mane: MvpService gives one per kill at LordsManePercent to a member picked as the rare winner is.</summary>
+        private const long LordsMane = 1009015;
+
+        /// <summary>
+        /// Every item the pools can give, with the chance that at least one comes per roll of the whole list (each pool
+        /// slot [group, chance per million, rolls, picks], each DropGroupConfig row weighted among its group's
+        /// candidates), the whole list itself happening at <paramref name="listChance"/>.
+        /// </summary>
+        private List<PanelMonsterDrop> PoolDrops(IEnumerable<(long Pool, IReadOnlyList<long> Maps)> pools, string kind, double listChance)
+        {
             var data = _backend.Tables;
             var merged = new Dictionary<(long Item, string Maps), (double Miss, int Min, int Max, IReadOnlyList<long> Maps)>();
-            foreach (var (row, maps) in RewardService.KillDropRows(data, npc.Row, bonus: false))
+            foreach (var (poolId, maps) in pools)
             {
-                foreach (long poolId in RewardService.DropPools(row))
+                if (data.Row("DropPoolConfig", poolId) is not { } pool) continue;
+                foreach (var (group, chance, rolls, picks) in RewardService.PoolSlots(pool))
                 {
-                    if (data.Row("DropPoolConfig", poolId) is not { } pool) continue;
-                    foreach (var (group, chance, rolls, picks) in RewardService.PoolSlots(pool))
+                    var candidates = DropGroupConfig.Get(data, group).Where(r => r.Weights > 0 && r.QuestLimit == 0 && r.Activityid == 0).ToList();
+                    double total = candidates.Sum(r => (double)r.Weights);
+                    if (total <= 0) continue;
+                    double hit = Math.Clamp(chance / 1_000_000, 0, 1);
+                    foreach (var candidate in candidates)
                     {
-                        var candidates = DropGroupConfig.Get(data, group).Where(r => r.Weights > 0 && r.QuestLimit == 0 && r.Activityid == 0).ToList();
-                        double total = candidates.Sum(r => (double)r.Weights);
-                        if (total <= 0) continue;
-                        double hit = Math.Clamp(chance / 1_000_000, 0, 1);
-                        foreach (var candidate in candidates)
-                        {
-                            long item = candidate.DropItem;
-                            if (!_items.ContainsKey(item)) continue;
-                            double share = candidate.Weights / total;
-                            double missRoll = 1 - hit + hit * Math.Pow(1 - share, picks);
-                            double miss = Math.Pow(missRoll, rolls);
-                            var key = (item, string.Join(',', maps));
-                            int min = (int)Math.Max(1, candidate.MinNumber), max = (int)Math.Max(min, candidate.MaxNumber);
-                            merged[key] = merged.TryGetValue(key, out var seen)
-                                ? (seen.Miss * miss, Math.Min(seen.Min, min), Math.Max(seen.Max, max), maps)
-                                : (miss, min, max, maps);
-                        }
+                        long item = candidate.DropItem;
+                        if (!_items.ContainsKey(item)) continue;
+                        double share = candidate.Weights / total;
+                        double missRoll = 1 - hit + hit * Math.Pow(1 - share, picks);
+                        double miss = Math.Pow(missRoll, rolls);
+                        var key = (item, string.Join(',', maps));
+                        int min = (int)Math.Max(1, candidate.MinNumber), max = (int)Math.Max(min, candidate.MaxNumber);
+                        merged[key] = merged.TryGetValue(key, out var seen)
+                            ? (seen.Miss * miss, Math.Min(seen.Min, min), Math.Max(seen.Max, max), maps)
+                            : (miss, min, max, maps);
                     }
                 }
             }
             return [.. merged.Select(m => new PanelMonsterDrop(m.Key.Item, _items[m.Key.Item].Summary.Name, _items[m.Key.Item].Summary.Quality,
-                    1 - m.Value.Miss, m.Value.Min, m.Value.Max, [.. m.Value.Maps.Select(_backend.MapName)]))
-                .OrderByDescending(d => d.Chance).ThenBy(d => d.Item, StringComparer.OrdinalIgnoreCase).Take(DetailRows)];
+                    listChance * (1 - m.Value.Miss), m.Value.Min, m.Value.Max, [.. m.Value.Maps.Select(_backend.MapName)], kind))
+                .OrderByDescending(d => d.Chance).ThenBy(d => d.Item, StringComparer.OrdinalIgnoreCase)];
         }
 
         public PanelItem? Item(long id)

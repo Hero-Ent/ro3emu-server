@@ -44,13 +44,25 @@ async function monsterPage(id) {
   const detail = await api('GET', '/api/monsters/' + encodeURIComponent(id));
   const m = detail.monster;
   const stat = name => detail.stats.find(s => s.name === name)?.value ?? '-';
-  const drops = detail.drops.length
+  const loot = detail.drops.filter(d => !d.kind), rewards = detail.drops.filter(d => d.kind);
+  const drops = loot.length
     ? table([
       { label: 'Item', grow: true, value: d => [itemName(d.itemId, d.item, d.quality), d.maps.length ? h('span', { class: 'sub' }, 'Only on ' + d.maps.join(', ')) : null] },
       { label: 'Count', num: true, value: d => countRange(d.min, d.max) },
       { label: 'Chance', num: true, value: d => percent(d.chance) },
-    ], detail.drops, { short: detail.drops.length <= 12 })
-    : emptyState('box', 'It drops nothing', null);
+    ], loot, { short: loot.length <= 12 })
+    : emptyState('box', rewards.length ? 'No loot on the corpse' : 'It drops nothing', rewards.length ? 'Its kill pays out the MVP rewards above.'
+      : m.rank !== 'normal' ? 'A boss of a dungeon or story scene: its rewards come with the clear, not the kill.' : null);
+  // MvpService's kinds in the order it hands them out.
+  const kinds = ['First strike', 'Final blow', 'Top 10 parties', 'Participation', 'Rare winner'];
+  const mvpRewards = rewards.length
+    ? table([
+      { label: 'Reward', value: d => chip(d.kind === 'Rare winner' ? 'event' : 'info', d.kind) },
+      { label: 'Item', grow: true, value: d => itemName(d.itemId, d.item, d.quality) },
+      { label: 'Count', num: true, value: d => countRange(d.min, d.max) },
+      { label: 'Chance', num: true, value: d => percent(d.chance) },
+    ], [...rewards].sort((a, b) => kinds.indexOf(a.kind) - kinds.indexOf(b.kind) || b.chance - a.chance), { short: rewards.length <= 16 })
+    : null;
   const spawns = detail.spawns.length
     ? table([
       { label: 'Map', grow: true, value: s => h('span', { class: 'strong' }, s.map) },
@@ -68,7 +80,9 @@ async function monsterPage(id) {
     kpi('Defense', 'shield', stat('PDEF'), null, 'MDEF ' + stat('MDEF'))),
   h('div', { class: 'grid' },
     h('div', { class: 'span-8 stack' },
-      card('Drops', null, drops, detail.drops.length ? 'Chance per kill that at least one drops; a player\'s level and class limits are not counted.' : null),
+      mvpRewards && card('MVP rewards', null, mvpRewards,
+        'Per kill: first strike and final blow go to one player each, the top 10 parties and every participant get theirs, one rare winner is drawn. Each kind has a daily limit per player.'),
+      card('Drops', null, drops, loot.length ? 'Chance per kill that at least one drops; a player\'s level and class limits are not counted.' : null),
       card('Where it spawns', null, spawns)),
     h('div', { class: 'span-4 stack' },
       card('Stats', null, body(facts([...detail.stats.map(s => [s.name, h('span', { class: 'num' }, s.value)]),

@@ -34,6 +34,7 @@ async function itemPage(id) {
       { label: 'Monster', grow: true, value: d => monsterName(d.monsterId, d.monster, d.rank) },
       { label: 'Level', num: true, value: d => num(d.level) },
       { label: 'Rank', opt: true, value: d => rankChip(d.rank) || h('span', { class: 'muted' }, 'Normal') },
+      { label: 'How', value: d => d.kind ? chip(d.kind === 'Rare winner' ? 'event' : 'info', 'MVP: ' + d.kind) : h('span', { class: 'muted' }, 'Drop') },
       { label: 'Count', num: true, opt: true, value: d => countRange(d.min, d.max) },
       { label: 'Chance', num: true, value: d => percent(d.chance) },
     ], item.droppedBy, { onrow: d => navigate('/monsters/' + d.monsterId) })
@@ -70,3 +71,9 @@ async function itemPage(id) {
 
 routes.push([/^\/items$/, itemsPage, 'items'], [/^\/items\/(\d+)$/, itemPage, 'items']);
 titles.items = 'Items';
+
+// The items and monsters are public pages now: the admin sidebar's placeholder for them goes.
+{
+  const later = laterSections.findIndex(([label]) => label === 'Items & monsters');
+  if (later >= 0) laterSections.splice(later, 1);
+}

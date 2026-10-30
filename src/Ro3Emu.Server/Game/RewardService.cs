@@ -305,11 +305,15 @@ public sealed class RewardService
     public List<(int Entry, int Count)> RollAward(long multiverseId, GameSession player)
     {
         var drops = new List<(int, int)>();
-        if (Resolve(multiverseId) is var awardId and > 0 && _data.Row("AwardConfig", awardId) is { ValueKind: JsonValueKind.Array } rows
-            && rows.GetArrayLength() > 0 && GameData.Int(rows[0], "_iDropPool") is var pool and > 0)
-            RollPool(pool, player, drops);
+        if (AwardPool(_data, multiverseId) is var pool and > 0) RollPool(pool, player, drops);
         return drops.GroupBy(d => d.Item1).Select(g => (g.Key, g.Sum(d => d.Item2))).ToList();
     }
+
+    /// <summary>The DropPoolConfig id an award id rolls (MultiverseGroupConfig → AwardConfig[0]._iDropPool), else 0.
+    /// The web panel's monster database lists an MVP's rewards from the same pools.</summary>
+    internal static long AwardPool(GameData data, long multiverseId) =>
+        Resolve(data, multiverseId) is var awardId and > 0 && data.Row("AwardConfig", awardId) is { ValueKind: JsonValueKind.Array } rows
+            && rows.GetArrayLength() > 0 && GameData.Int(rows[0], "_iDropPool") is var pool and > 0 ? pool : 0;
 
     /// <summary>One DropPoolConfig draw for this player, each chosen DropGroupConfig._iBind retained, same goods merged.</summary>
     public List<(int Entry, int Count, int Bind)> RollPoolBound(long poolId, RoleProgress progress)

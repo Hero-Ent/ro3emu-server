@@ -306,8 +306,12 @@ public sealed class PanelTests : IAsyncLifetime
         var jellopy = await anonymous.GetJsonAsync("/api/items/3990001");
         Assert.Equal("A sticky test drop. Worth 5 Zeny.", jellopy.GetProperty("description").GetString());
         Assert.Equal("Exchange", jellopy.GetProperty("trade").GetString());
-        var drop = Assert.Single(jellopy.GetProperty("droppedBy").EnumerateArray());
+        var sources = jellopy.GetProperty("droppedBy").EnumerateArray().ToList();
+        var drop = Assert.Single(sources, d => d.GetProperty("kind").GetString() == "");
         Assert.Equal("Synthetic Poring", drop.GetProperty("monster").GetString());
+        // The field MVP's rewards are listed by kind: its first strike award and its rare award roll the same pool.
+        Assert.Equal(["First strike", "Rare winner"], sources.Where(d => d.GetProperty("monster").GetString() == "Synthetic Angeling")
+            .Select(d => d.GetProperty("kind").GetString()));
         // Slot 1 (50 %, its only row) and slot 2 (100 %, weight 3 of 4): 1 - 0.5 x 0.25 per kill.
         Assert.Equal(0.875, drop.GetProperty("chance").GetDouble(), 6);
         Assert.Equal(3, drop.GetProperty("max").GetInt32());
@@ -333,7 +337,6 @@ public sealed class PanelTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, (await anonymous.Http.GetAsync("/monsters/16320002")).StatusCode);
         var found = Assert.Single((await anonymous.GetJsonAsync("/api/monsters?q=poring&element=4&rank=mini")).GetProperty("monsters").EnumerateArray());
         Assert.Equal(16320002, found.GetProperty("id").GetInt64());
-        Assert.Equal(0, (await anonymous.GetJsonAsync("/api/monsters?rank=mvp")).GetProperty("total").GetInt32());
 
         var poring = await anonymous.GetJsonAsync("/api/monsters/16320002");
         var monster = poring.GetProperty("monster");
@@ -352,6 +355,19 @@ public sealed class PanelTests : IAsyncLifetime
         Assert.Equal(("Synthetic Field", 4, 30), (spawn.GetProperty("map").GetString(), spawn.GetProperty("count").GetInt32(),
             spawn.GetProperty("respawnSeconds").GetInt32()));
         Assert.Equal(HttpStatusCode.NotFound, (await anonymous.Http.GetAsync("/api/monsters/16320001")).StatusCode); // no name
+
+        // A field MVP pays out through MvpService's awards (MVPConfig -> MultiverseGroupConfig -> AwardConfig -> pool), by
+        // kind; the rare award comes at _iRareRewardProbability 5000 / 10000 per kill. It spawns on MVPConfig's map.
+        var mvp = await anonymous.GetJsonAsync("/api/monsters/16320003");
+        Assert.Equal("mvp", mvp.GetProperty("monster").GetProperty("rank").GetString());
+        var rewards = mvp.GetProperty("drops").EnumerateArray()
+            .ToDictionary(d => d.GetProperty("kind").GetString()!, d => (d.GetProperty("item").GetString(), d.GetProperty("chance").GetDouble()));
+        Assert.Equal(["First strike", "Rare winner"], rewards.Keys.Order());
+        Assert.Equal(("Synthetic Jellopy", 1.0), rewards["First strike"]);
+        Assert.Equal(0.5, rewards["Rare winner"].Item2, 6);
+        Assert.Equal(("Synthetic Field", 3600), (Assert.Single(mvp.GetProperty("spawns").EnumerateArray()).GetProperty("map").GetString(),
+            mvp.GetProperty("spawns")[0].GetProperty("respawnSeconds").GetInt32()));
+        Assert.Equal(1, (await anonymous.GetJsonAsync("/api/monsters?rank=mvp")).GetProperty("total").GetInt32());
     }
 
     [Fact]

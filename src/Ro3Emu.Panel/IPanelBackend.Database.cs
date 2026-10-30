@@ -47,7 +47,9 @@ public sealed record PanelItem(PanelItemSummary Item, string Description, int St
     IReadOnlyList<string> Classes, IReadOnlyList<PanelStat> Stats, IReadOnlyList<PanelItemDrop> DroppedBy, IReadOnlyList<PanelShopOffer> Shops);
 
 /// <param name="Chance">The chance per kill that at least one drops, 0 to 1.</param>
-public sealed record PanelItemDrop(long MonsterId, string Monster, int Level, string Rank, double Chance, int Min, int Max);
+/// <param name="Kind">Empty for a kill's loot; an MVP reward's kind ("First strike", "Final blow", "Top 10 parties", "Participation",
+/// "Rare winner").</param>
+public sealed record PanelItemDrop(long MonsterId, string Monster, int Level, string Rank, double Chance, int Min, int Max, string Kind);
 
 /// <param name="Count">Items per purchase.</param>
 public sealed record PanelShopOffer(string Shop, long CurrencyId, string Currency, long Price, int Count);
@@ -68,7 +70,9 @@ public sealed record PanelMonster(PanelMonsterSummary Monster, IReadOnlyList<Pan
 
 /// <param name="Chance">The chance per kill that at least one drops, 0 to 1.</param>
 /// <param name="Maps">The maps the row is limited to; empty = everywhere.</param>
-public sealed record PanelMonsterDrop(long ItemId, string Item, int Quality, double Chance, int Min, int Max, IReadOnlyList<string> Maps);
+/// <param name="Kind">Empty for a kill's loot; an MVP reward's kind, as on <see cref="PanelItemDrop"/>.</param>
+public sealed record PanelMonsterDrop(long ItemId, string Item, int Quality, double Chance, int Min, int Max, IReadOnlyList<string> Maps,
+    string Kind);
 
 /// <param name="Count">How many the map keeps alive at most.</param>
 /// <param name="RespawnSeconds">Seconds from a corpse's removal to the next spawn.</param>
