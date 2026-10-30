@@ -3,7 +3,9 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Ro3Emu.Bot;
 using Ro3Emu.Server;
+using Ro3Emu.Server.Accounts;
 using Ro3Emu.Server.Game;
+using Ro3Emu.Server.Maps;
 
 namespace Ro3Emu.Tests;
 
@@ -65,6 +67,45 @@ public sealed class FieldExpGmTests : IAsyncLifetime
 
         await Gm("!fieldexp reset");
         Assert.Equal(150, Assert.Single(Rules).Percent);
+    }
+
+    // A field monster of the killer's own level (the Fabre-class NPC 5000021, level 30), the same drop rolls twice: the kill pays
+    // the rule's percent of what it pays without one, the Job EXP that equals it too, and the story dungeon's monster is not scaled.
+    [ClientDataFact]
+    public async Task AKillPaysTheRateOfTheKillersLevelOnlyForAFieldMonster()
+    {
+        const int FieldMonster = 5000021, StoryMonster = 5300036;
+        var bot = new BotClient(_http, File.ReadAllText(Path.Combine(_directory, "gate_rsa_public.pem")));
+        await bot.LoginAsync("fieldexp", "pw"); await bot.EnterGateAsync();
+        await bot.EnterWorldAsync((await bot.CreateRoleAsync("FieldKill")).RoleBaseInfo.Id);
+        await bot.Inbox.WaitAsync(e => e.IsGame(ShopService.ShopSync), TimeSpan.FromSeconds(10));
+        await Gm("!lvl 30");
+
+        var rewards = _app.Services.GetRequiredService<RewardService>();
+        var monsters = _app.Services.GetRequiredService<MonsterService>();
+        var session = _app.Services.GetRequiredService<SessionRegistry>().All().Single(s => s.Account == "fieldexp" && s.Role != null);
+        Assert.Equal(30, session.Progress!.Level);
+        MonsterUnit Unit(int npc) => new()
+        {
+            Uid = 77, SceneEntry = session.SceneEntry, RuntimeMap = session.RuntimeMap, Template = monsters.Template(npc)!,
+            Group = new SpawnGroup(-1, false, 1, 0, [], []), Home = new SpawnPoint(-1, 0, 0, 0, 0, npc), Hp = 0
+        };
+        Task<long> JobExp(int npc, int seed) => _app.Services.GetRequiredService<GameLoop>().InvokeAsync(() =>
+        {
+            rewards.SeedRollsForTest(seed);
+            return Task.FromResult(rewards.ResolveKill(session, Unit(npc), bonus: false).JobExp);
+        });
+
+        rewards.SetFieldExpRules([]);
+        long field = await JobExp(FieldMonster, 1), story = await JobExp(StoryMonster, 1);
+        Assert.True(field > 0, "the field monster pays EXP at its own level");
+
+        rewards.SetFieldExpRules([new FieldExpRule { MinLevel = 20, MaxLevel = 40, Percent = 300 }]);
+        Assert.Equal(field * 3, await JobExp(FieldMonster, 1));
+        Assert.Equal(story, await JobExp(StoryMonster, 1));
+
+        rewards.SetFieldExpRules([new FieldExpRule { MinLevel = 41, MaxLevel = 50, Percent = 300 }]); // the killer is not in the range
+        Assert.Equal(field, await JobExp(FieldMonster, 1));
     }
 
     private static string RepoRoot()

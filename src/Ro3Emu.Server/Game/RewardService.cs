@@ -24,7 +24,7 @@ public sealed class RewardService
     private readonly TeamService _teams;
     private readonly GameData _data;
     private readonly ILogger<RewardService> _log;
-    private readonly Random _random = new();
+    private Random _random = new();
     private Dictionary<int, long>? _expCorrection;
     private readonly DropAttenuation _attenuation;
     private readonly FieldExpRule[] _configuredFieldExp; // Ro3Emu:FieldExpRates (inferred), empty unless an operator set it
@@ -142,7 +142,7 @@ public sealed class RewardService
         }
     }
 
-    private (List<(int Entry, int Count)> Items, long BaseExp, long JobExp) ResolveKill(GameSession player, MonsterUnit monster, bool bonus)
+    internal (List<(int Entry, int Count)> Items, long BaseExp, long JobExp) ResolveKill(GameSession player, MonsterUnit monster, bool bonus)
     {
         if (ResolveKillForTest != null) return ResolveKillForTest(player, monster);
         // Team-boss personal awards have their own durable dungeon obligation; ordinary loot stays empty.
@@ -188,6 +188,9 @@ public sealed class RewardService
         var rules = _fieldExp;
         return rules.Length > 0 && NPCConfig.Get(_data, npcId)?.WildMonsters == 1 ? FieldExpRates.Scale(rules, level, exp) : exp;
     }
+
+    /// <summary>Tests: the drop rolls follow this seed, so two kills of one monster roll the same.</summary>
+    internal void SeedRollsForTest(int seed) => _random = new Random(seed);
 
     /// <summary>The field EXP rules in force.</summary>
     public IReadOnlyList<FieldExpRule> FieldExpRules => _fieldExp;
