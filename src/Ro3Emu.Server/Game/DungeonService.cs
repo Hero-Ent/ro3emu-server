@@ -172,6 +172,8 @@ public sealed partial class DungeonService
         public JsonElement? Blessing { get; set; }
         /// <summary>The scripted scene actors shown now (also tracked by the room for cleanup).</summary>
         internal List<SceneActorUnit> SceneActors { get; } = new();
+        /// <summary>Scene actors an earlier step took away: a late auto interaction on one is answered without an error.</summary>
+        internal HashSet<long> RetiredActors { get; } = [];
         /// <summary>The scripted step's allied companions standing now (DungeonService.Companions; room props too).</summary>
         internal List<CompanionUnit> Companions { get; } = [];
         /// <summary>The companions (NPC, point) that fell in this run: they do not come back.</summary>
