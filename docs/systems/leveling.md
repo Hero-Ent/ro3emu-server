@@ -12,7 +12,8 @@ Growth Manual chapters the panel shows (not the quest list):
 - `10104100` waits for chapter 1 (`701990`). Its talent child `701020` asks for 40 talent levels: tree 10101 holds exactly
   40 (8 nodes to level 3, 4 to level 4, `SeasonTalentEffectConfig` groups 110101-110104 at 10 Talent Remnants and 100 Minted
   Coins a level), so 400 Remnants. The content before it pays exactly 400: 250 from `10103160`, `10104010`, `10104050`,
-  `10104080` and 150 from the chapter's own `701030`, `701040`, `701050`. No slack, nothing missing.
+  `10104080` and 150 from the chapter's own `701030`, `701040`, `701050`. No slack, nothing missing
+  (`LevelingTests.GrowthChapterOneTalentsArePaidByTheStoryBeforeIt` plays it).
 - `10105030` waits for chapter 2 (`702990`): 60 talent levels (20 more in tree 10102, 200 Remnants; the story pays 450
   more before it) and 180 stat points spent (Lv 32).
 
@@ -53,5 +54,5 @@ are rolled as their claim would have paid them, kept in `DailyState.Compensation
 ## Tests
 
 ```powershell
-dotnet test tests/Ro3Emu.Tests --filter "FullyQualifiedName~DailyTests"
+dotnet test tests/Ro3Emu.Tests --filter "FullyQualifiedName~LevelingTests|FullyQualifiedName~DailyTests"
 ```
