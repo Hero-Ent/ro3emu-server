@@ -180,6 +180,8 @@ internal static class Flows
                 Ui.Info($"Windows may ask whether Ro3Emu.Server may use the network: allow it.");
                 Ui.Info($"For players outside your network, forward TCP ports {ServerProcess.PortList(local.Ports)} on your router");
                 Ui.Info("to this PC and start with --public <your public IP>.");
+                if (local.Ports.Panel > 0)
+                    Ui.Info($"Web panel for players and admins: http://{local.PublicHost}:{local.Ports.Panel} (docs/guide/panel.md).");
             }
             if (server != null) Program.OnClose = () => server.Stop(TimeSpan.FromSeconds(4));
             return await PlayAndWaitAsync(client, server, options.NoLaunch);
@@ -235,7 +237,7 @@ internal static class Flows
         {
             if (ServerProcess.BusyPort(ports) is { } busy)
                 throw new SetupException($"Port {busy} is already used by another program, so the server cannot start.",
-                    "Close the other program (or another RO3Emu window), or start with other ports, for example --http-port 5381 --micro-port 20001 --game-port 33101.");
+                    "Close the other program (or another RO3Emu window), or start with other ports, for example --http-port 5390 --micro-port 20001 --game-port 33102 --panel-port 5391 (or --no-panel).");
             server = ServerProcess.Start(serverExe, SetupHome.DataDir, ports, args, env);
             var watch = Stopwatch.StartNew();
             bool ready = await server.WaitReadyAsync(TimeSpan.FromMinutes(5),

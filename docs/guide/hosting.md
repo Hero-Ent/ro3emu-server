@@ -20,7 +20,8 @@ Open TCP `5380`, `20000` and `33100`, and the voice port if you turn voice on wi
   only to the accounts you name with `--gm` ([GM access](gm-access.md)).
 - **Web panel:** a website for your players (account, characters, who's online, rankings) and for you (accounts,
   bans, server numbers) on port `5381`. Open that port too, or put it behind https ([web panel](panel.md)). Admins are
-  the accounts you name with `--gm`.
+  the accounts you name with `--gm`. `--panel-port <n>` moves it, `--no-panel` turns it off (RO3Emu.exe and
+  `server.sh`).
 - **Bug reports from players:** the Feedback button in the game menu or `/bug <text>` in chat ([feedback](feedback.md)), optionally posted to a Discord channel.
 - **Monsters that attack on sight as in RO1** (on by default, as a trial): set `Ro3Emu__Ro1AggressiveMonsters=false` (or
   `"Ro1AggressiveMonsters": false` under `Ro3Emu` in `appsettings.json`) to turn it off. The field monsters whose Ragnarok Online 1
