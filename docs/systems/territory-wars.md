@@ -154,7 +154,10 @@ with `buildCannonInfo` {Building, the GVGCannonConfig id, the end time}, to the 
 
 The cannon is the row's `_iNPCID` (NPCConfig type 2, sub type 102), a unit of the siege room, so it ends with the siege.
 Its entity names the builder as `owner` and carries the builder's camp, which interaction 4900005 checks (`CheckBuilder`
-reads the head info Owner, `CheckCamp` the EntityCamp), and wears the NPC's `_kBornEventBuff`. The builder's slot shows
+reads the head info Owner, `CheckCamp` the EntityCamp), and wears the NPC's `_kBornEventBuff`. Its `name` is the
+builder's name: `LC_Unit_NPC.GetUnitName` titles a GVGCANNON (sub type 102) with a name as UIWords 61000 "${1}'s ${2}"
+(that name, then the NPC's `_kName`), as the client's own blueprint does with the local player
+(`LC_GVGBuildCannon`). Vehicles keep their NPC name. The builder's slot shows
 it as `roleUsingToolId` in 32284/32286 and in the builder's 32285. A member with a standing cannon who builds another
 loses the first (UIWords 61001, "Building another will destroy the current one").
 

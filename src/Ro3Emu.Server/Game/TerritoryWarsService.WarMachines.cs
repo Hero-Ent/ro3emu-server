@@ -48,6 +48,9 @@ public sealed partial class TerritoryWarsService
         public required int NpcId { get; init; }
         public required long Builder { get; init; }
         public required long Camp { get; init; }
+        /// <summary>The builder's name: the client titles a GVGCANNON (NPCConfig _iNPCSubType 102) with a name
+        /// "${1}'s ${2}" (LC_Unit_NPC.GetUnitName, UIWords 61000: this name, then the NPC's _kName), as its own
+        /// blueprint does with the local player's (LC_GVGBuildCannon).</summary>
         public required string Name { get; init; }
         /// <summary>Its GVGCannonConfig row.</summary>
         public required long ConfigId { get; init; }
@@ -125,7 +128,7 @@ public sealed partial class TerritoryWarsService
             {
                 Uid = CannonUidBase | Interlocked.Increment(ref owner._cannonSerial), SceneEntry = builder.SceneEntry,
                 InstanceId = battle.Room.Id, X = at.X, Y = at.Y, Z = at.Z, Face = face, NpcId = npcId, Builder = role.Id,
-                Camp = camp, CampOverride = (int)camp, Name = new NPCConfig(npc).Name is [var nameId, ..] ? owner._data.Text(nameId) : "",
+                Camp = camp, CampOverride = (int)camp, Name = role.Name,
                 Template = template, Group = group, Home = home, Hp = template.MaxHp, BornTimeMs = MonsterService.NowMs,
                 ConfigId = new GVGCannonConfig(cannon).Id, Bullets = new GVGCannonConfig(cannon).BulletNumLimit,
             };

@@ -114,6 +114,7 @@ public sealed partial class SiegeTests
             v => v.Bases.Any(b => b.EntityTemplateID == 4900013));
         var cannon = view.Bases.Single(b => b.EntityTemplateID == 4900013);
         Assert.Equal((2, builder, 1L), (cannon.EntityType, cannon.Owner, cannon.EntityCamp));
+        Assert.Equal(me.Role.Name, cannon.Name); // the nameplate reads "<builder>'s <cannon>" (UIWords 61000)
         Assert.Contains(cannon.BuffData.AddBuffs, b => b.ConfigId == 4909901);
         await Next(attack, WorldInteractionService.Change, InteractChangeNtf.Parser,
             n => n.Uid == builder && n.DataInfo.EType == InteractInfo.Types.EState.Idle);
