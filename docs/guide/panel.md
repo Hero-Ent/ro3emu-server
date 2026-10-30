@@ -8,7 +8,7 @@ the player at once, and the panel never writes the database behind the server's 
 |---|---|
 | everyone | Home (status, version, players online, uptime, accounts and characters; latest news, who's online, top 5 by level) · Who's online · Rankings · News |
 | a player, logged in with the game account | My account (created, last played, characters with class, level, map and guild) · password change |
-| an admin | Dashboard (the server's own metrics) · Accounts (search, detail, ban and unban) · Audit log |
+| an admin | Dashboard (the server's own metrics) · Accounts (search, detail, ban and unban) · Audit log · Mail & rewards · Gift codes · GM console · News editor · Broadcasts |
 
 Players log in with the same account name and password as in the game. An account the game created logs in here,
 and an account made on the panel's sign-up page logs in to the game: both paths write the same record
@@ -59,6 +59,30 @@ A ban from the Accounts page (reason, and 1 day to 30 days or no end):
 - refuses every later login of the account, in the game and on the panel, until it ends or is lifted.
 
 Lifting a ban deletes the row and is audited the same way.
+
+## Admin tools
+
+Each tool is a page of the admin area's sidebar; each change is written to the audit log, with the admin's name.
+
+- **Mail & rewards.** In-game mail from the server (sender name, title, text) with up to 10 items and Zeny (item 1)
+  attached, to one character, all characters of an account, or everyone (optionally only those in the game, or from a
+  base level up). It goes through `MailService.SendRawAsync`, as `!mail` does: stored first, then announced, so a
+  player in the game sees it at once and the others when they log in. Item ids are checked against the item table.
+  A mail to more than one character is sent only after the admin confirms the recipient count the page showed.
+- **Gift codes.** The list of codes with their rewards, uses (counted from `gift_code_redemption`), limits, expiry and
+  state, and the switch to disable or enable one. New codes are typed (up to 500, letters, digits, `-` and `_`) or
+  generated (up to 500 random codes with an optional prefix, without the look-alike characters 0, O, 1, I, L), with
+  rewards, max uses, uses per account and optional start and expiry. All the codes of one request are created or none.
+  The server writes `gift_code` through its writer ([gift codes](../systems/gift-codes.md)).
+- **GM console.** Any `!` chat command ([GM access](gm-access.md)) run as the admin's own character, or for any
+  character in the game, with the replies the command sends shown on the page; arrow up and down recall earlier
+  lines. It runs on the game loop like `POST /ro3emu/gm`. The admin is the authority: the chosen character's account
+  needs no GM rights. The page lists the admin's past commands (from the audit log).
+- **News editor.** Create, edit, delete and pin news (category news, event, maintenance or patch, and a publish time;
+  a time in the future keeps an item hidden until then). The public News and Home pages show pinned items first.
+- **Broadcasts.** A one-line notice on the screen of everyone in the game: the GM marquee (`BROADCAST_NOTIFY` 83270,
+  the message GM replies use). It can repeat every few minutes, up to 100 more times; repeats are kept in the
+  server's memory (a restart ends them) and can be cancelled.
 
 ## Behind nginx with https
 
@@ -124,7 +148,7 @@ proxy's.
 | Table | What |
 |---|---|
 | `admin_audit` | one row per admin action |
-| `panel_news` | the news the public pages show; empty until an admin writes some (the editor comes later) |
+| `panel_news` | the news the public pages show, written with the news editor; `pinned` keeps an item on top |
 
 Both are created by the server at startup like its other tables and are part of every backup.
 

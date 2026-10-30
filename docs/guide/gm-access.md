@@ -20,7 +20,8 @@ At startup the server logs who has GM. With an empty list it warns loudly in bot
 - GM open to everyone on a public address (`PublicHost` not loopback): `!!! Ro3Emu:GmAccounts is empty and GM is open: EVERY account can use GM commands in game ...`
 
 The [web panel](panel.md)'s admin area uses the same list, with one difference: an empty list means nobody is an
-admin there, whatever `GmOpenWhenEmpty` says.
+admin there, whatever `GmOpenWhenEmpty` says. Its GM console runs a command for any character in the game: the
+admin's rights count there, not those of the character's account.
 
 ## Configuration
 
