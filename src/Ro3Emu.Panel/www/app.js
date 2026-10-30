@@ -674,8 +674,9 @@ async function adminAudit() {
 
 // ---------------------------------------------------------------- start
 
-// After every deferred script, so the admin pages in www/pages/ have registered their routes.
-document.addEventListener('DOMContentLoaded', async () => {
+// The pages in their own files (pages/*.js, deferred after this one) add their routes, titles and admin sections
+// first: the first route waits for them.
+addEventListener('DOMContentLoaded', async () => {
   try { await loadSession(); } catch { /* the pages show the error */ }
   await route();
 });

@@ -105,17 +105,28 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         return t;
     }
 
+    /// <summary>
+    /// A monster's attributes by AttributeConfig id (101 HP, 103 PATK, ...): its AttriMonsterConfig row (_iAttribute,
+    /// else _iAttributeVariated * 1000 + level), each value scaled by the NPC's _kAttriScale per 10000. The web panel's
+    /// monster database shows the same numbers.
+    /// </summary>
+    internal static Dictionary<long, double> TemplateAttributes(GameData data, JsonElement npc, int level)
+    {
+        long attrId = GameData.Int(npc, "_iAttribute");
+        if (attrId == 0) attrId = GameData.Int(npc, "_iAttributeVariated") * 1000 + level;
+        var attr = new Dictionary<long, double>();
+        if (data.Row("AttriMonsterConfig", attrId) is { } am)
+            foreach (var (id, v) in GameData.Pairs(am, "_kAttri")) attr[id] = v;
+        foreach (var (id, scale) in GameData.Pairs(npc, "_kAttriScale"))
+            if (attr.ContainsKey(id)) attr[id] = attr[id] * scale / 10000;
+        return attr;
+    }
+
     private MonsterTemplate? Build(int npcId, bool machine)
     {
         if (_data.Row("NPCConfig", npcId) is not { } npc || !machine && GameData.Int(npc, "_iNPCType") != 1) return null;
         int level = (int)GameData.Int(npc, "_iLevel");
-        long attrId = GameData.Int(npc, "_iAttribute");
-        if (attrId == 0) attrId = GameData.Int(npc, "_iAttributeVariated") * 1000 + level;
-        var attr = new Dictionary<long, double>();
-        if (_data.Row("AttriMonsterConfig", attrId) is { } am)
-            foreach (var (id, v) in GameData.Pairs(am, "_kAttri")) attr[id] = v;
-        foreach (var (id, scale) in GameData.Pairs(npc, "_kAttriScale"))
-            if (attr.ContainsKey(id)) attr[id] = attr[id] * scale / 10000;
+        var attr = TemplateAttributes(_data, npc, level);
         long A(long id) => (long)Math.Round(attr.GetValueOrDefault(id));
 
         int ai = (int)GameData.Int(npc, "_iAI");

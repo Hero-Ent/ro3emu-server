@@ -1,0 +1,56 @@
+/* The item and monster databases and the economy log: only the few pieces app.css has no token for, built from its
+   tokens. The quality colours are the game's (White, Green, Blue, Purple, Orange, Red), darkened to read on white. */
+
+:root{
+  --q1:#6b6a8a; --q1-bg:#eeeef5;
+  --q2:var(--green-ink); --q2-bg:var(--green-bg);
+  --q3:var(--blue-ink); --q3-bg:var(--blue-bg);
+  --q4:#7337b8; --q4-bg:#f1e9fb;
+  --q5:#a55400; --q5-bg:#fff0d4;
+  --q6:var(--red-ink); --q6-bg:var(--red-bg);
+}
+
+/* a neat placeholder instead of game art: the name's initial on its quality's tint */
+.glyph{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:var(--r1);flex:none;
+  background:var(--grey-bg);color:var(--muted);font:700 var(--t-xs)/1 var(--body);text-transform:uppercase}
+.glyph.lg{width:40px;height:40px;border-radius:var(--r2);font-size:var(--t-lg)}
+.named{display:inline-flex;align-items:center;gap:var(--s2);min-width:0;font-weight:700}
+.named span{overflow:hidden;text-overflow:ellipsis}
+a.named:hover span{text-decoration:underline}
+.q1{color:var(--q1)} .glyph.q1{background:var(--q1-bg)}
+.q2{color:var(--q2)} .glyph.q2{background:var(--q2-bg)}
+.q3{color:var(--q3)} .glyph.q3{background:var(--q3-bg)}
+.q4{color:var(--q4)} .glyph.q4{background:var(--q4-bg)}
+.q5{color:var(--q5)} .glyph.q5{background:var(--q5-bg)}
+.q6{color:var(--q6)} .glyph.q6{background:var(--q6-bg)}
+.chip.q1{background:var(--q1-bg);color:var(--q1)} .chip.q2{background:var(--q2-bg);color:var(--q2)}
+.chip.q3{background:var(--q3-bg);color:var(--q3)} .chip.q4{background:var(--q4-bg);color:var(--q4)}
+.chip.q5{background:var(--q5-bg);color:var(--q5)} .chip.q6{background:var(--q6-bg);color:var(--q6)}
+
+/* monster ranks */
+.glyph.mvp,.chip.mvp{background:var(--amber-bg);color:var(--amber-ink)}
+.glyph.boss,.chip.boss{background:var(--red-bg);color:var(--red-ink)}
+.glyph.mini,.chip.mini{background:var(--blue-bg);color:var(--blue-ink)}
+
+/* the filter row of a list page */
+.filters{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s2);width:100%;padding:var(--s1) 0}
+.filters .input{height:32px;font-size:var(--t-sm)}
+.filters select.input{width:auto;min-width:136px}
+.filters .lv{display:inline-flex;align-items:center;gap:var(--s1);font-size:var(--t-sm);color:var(--muted)}
+.filters .lv .input{width:72px;padding:0 var(--s2)}
+.filters input[type="date"].input{width:auto}
+.filters .search{flex:1 1 220px}
+.filters > input.input{width:auto;flex:1 1 150px;min-width:0}
+.kpis+.card{margin-top:var(--gutter)}
+
+/* ledger deltas */
+.pos{color:var(--green-ink)} .neg{color:var(--red-ink)}
+.sub{display:block;font-size:var(--t-xs);color:var(--muted);font-weight:500}
+.desc{white-space:pre-line;color:var(--ink-2);max-width:72ch}
+
+@media (max-width:600px){
+  .filters select.input{flex:1 1 40%;min-width:0}
+  .filters .lv{flex:1 1 100%}
+  .filters .lv .input{flex:1}
+  .filters .btn{flex:1}
+}
