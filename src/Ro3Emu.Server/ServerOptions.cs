@@ -187,6 +187,14 @@ public sealed class ServerOptions
     public List<SpawnLimitRule> SpawnLimits { get; set; } = [];
 
     /// <summary>
+    /// More (or less) EXP from the monsters of the open field, by the killer's base level (Ro3Emu:FieldExpRates). Empty by
+    /// default: a kill pays what the client's drop tables say (docs/systems/monster-ai.md). The first rule whose level range
+    /// holds the killer's level scales that kill's Base EXP, and the Job EXP that equals it, by its percent. (inferred: the
+    /// original had no such knob.)
+    /// </summary>
+    public List<FieldExpRule> FieldExpRates { get; set; } = [];
+
+    /// <summary>
     /// (inferred) Star Cores drop for roles with the Astral Level open (ParagonService.StarCoreDrops). The client data gives
     /// them no source; false turns the reconstructed drop off.
     /// </summary>
@@ -454,4 +462,13 @@ public sealed class SpawnLimitRule
     public long Scene { get; set; }
     public int Npc { get; set; }
     public int Max { get; set; }
+}
+
+/// <summary>One <see cref="ServerOptions.FieldExpRates"/> rule: killers of base level <see cref="MinLevel"/> to
+/// <see cref="MaxLevel"/> get <see cref="Percent"/> percent of the EXP a field monster pays (100 leaves it as it is).</summary>
+public sealed class FieldExpRule
+{
+    public int MinLevel { get; set; }
+    public int MaxLevel { get; set; }
+    public int Percent { get; set; } = 100;
 }
