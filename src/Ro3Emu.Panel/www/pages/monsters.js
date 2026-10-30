@@ -1,0 +1,81 @@
+// The monster database: every monster of the game's data, searchable, and a page per monster with its stats (the
+// server's own HP formula), drops and spawn maps (/api/monsters).
+'use strict';
+
+const rankOptions = [{ id: 'normal', name: 'Normal' }, { id: 'mini', name: 'Mini boss' }, { id: 'boss', name: 'Boss' }, { id: 'mvp', name: 'MVP' }];
+
+async function monstersPage() {
+  const query = queryOf();
+  const page = Number(query.page) || 1;
+  const result = await api('GET', '/api/monsters' + listHref('', { ...query, page }));
+  const filters = filterForm('/monsters', query, [
+    optionSelect('element', 'Element', result.elements, query.element, 'Every element'),
+    optionSelect('race', 'Race', result.races, query.race, 'Every race'),
+    optionSelect('size', 'Size', result.sizes, query.size, 'Every size'),
+    optionSelect('rank', 'Rank', rankOptions, query.rank, 'Every rank'),
+    levelRange(query),
+  ], 'Name or ID');
+  const rows = result.monsters.length
+    ? table([
+      { label: 'Monster', grow: true, value: m => monsterName(m.id, m.name, m.rank) },
+      { label: 'ID', num: true, opt: true, value: m => mono(String(m.id)) },
+      { label: 'Level', num: true, value: m => num(m.level) },
+      { label: 'HP', num: true, value: m => num(m.hp) },
+      { label: 'Element', opt: true, value: m => m.elementName || '-' },
+      { label: 'Race', opt: true, value: m => m.race || '-' },
+      { label: 'Size', opt: true, value: m => m.size || '-' },
+      { label: 'Rank', opt: true, value: m => rankChip(m.rank) || h('span', { class: 'muted' }, 'Normal') },
+    ], result.monsters, { onrow: m => navigate('/monsters/' + m.id) })
+    : emptyState('search', 'No monster matches', 'Try part of the name, or fewer filters.');
+  return [pageHead({ crumbs: [{ href: '/', label: 'Home' }, { label: 'Monsters' }], title: 'Monsters',
+    subtitle: 'Every monster in the game, with the HP and drops the server uses.', actions: densityToggle() }),
+  h('section', { class: 'card' }, h('div', { class: 'card-head' }, filters), rows,
+    h('div', { class: 'card-foot' }, listPager(result, p => listHref('/monsters', { ...query, page: p }), 'monster')))];
+}
+
+function respawn(seconds) {
+  if (!seconds) return '-';
+  if (seconds < 120) return `${seconds} s`;
+  if (seconds < 7200) return `${Math.round(seconds / 60)} min`;
+  return `${(seconds / 3600).toFixed(1).replace(/\.0$/, '')} h`;
+}
+
+async function monsterPage(id) {
+  const detail = await api('GET', '/api/monsters/' + encodeURIComponent(id));
+  const m = detail.monster;
+  const stat = name => detail.stats.find(s => s.name === name)?.value ?? '-';
+  const drops = detail.drops.length
+    ? table([
+      { label: 'Item', grow: true, value: d => [itemName(d.itemId, d.item, d.quality), d.maps.length ? h('span', { class: 'sub' }, 'Only on ' + d.maps.join(', ')) : null] },
+      { label: 'Count', num: true, value: d => countRange(d.min, d.max) },
+      { label: 'Chance', num: true, value: d => percent(d.chance) },
+    ], detail.drops, { short: detail.drops.length <= 12 })
+    : emptyState('box', 'It drops nothing', null);
+  const spawns = detail.spawns.length
+    ? table([
+      { label: 'Map', grow: true, value: s => h('span', { class: 'strong' }, s.map) },
+      { label: 'Alive at most', num: true, value: s => num(s.count) },
+      { label: 'Respawn', num: true, value: s => respawn(s.respawnSeconds) },
+    ], detail.spawns, { short: true })
+    : emptyState('home', 'No field spawn', 'It appears in dungeons, events or story scenes.');
+  return [pageHead({ crumbs: [{ href: '/', label: 'Home' }, { href: '/monsters', label: 'Monsters' }, { label: m.name }],
+    title: m.name, after: [rankChip(m.rank), m.elementName && chip('plain', m.elementName)],
+    meta: [['ID', mono(String(m.id))], ['Race', m.race || '-'], ['Size', m.size || '-']] }),
+  h('section', { class: 'kpis', 'aria-label': 'Key figures' },
+    kpi('Level', 'trophy', num(m.level), null, rankNames[m.rank]),
+    kpi('HP', 'pulse', num(m.hp), null, 'as the server computes it'),
+    kpi('Attack', 'sparkle', stat('PATK'), null, 'MATK ' + stat('MATK')),
+    kpi('Defense', 'shield', stat('PDEF'), null, 'MDEF ' + stat('MDEF'))),
+  h('div', { class: 'grid' },
+    h('div', { class: 'span-8 stack' },
+      card('Drops', null, drops, detail.drops.length ? 'Chance per kill that at least one drops; a player\'s level and class limits are not counted.' : null),
+      card('Where it spawns', null, spawns)),
+    h('div', { class: 'span-4 stack' },
+      card('Stats', null, body(facts([...detail.stats.map(s => [s.name, h('span', { class: 'num' }, s.value)]),
+        ['Move speed', h('span', { class: 'num' }, num(detail.speed))]]))),
+      card('Monster', null, body(facts([['Element', m.elementName || '-'], ['Race', m.race || '-'], ['Size', m.size || '-'],
+        ['Rank', rankNames[m.rank]]])))))];
+}
+
+routes.push([/^\/monsters$/, monstersPage, 'monsters'], [/^\/monsters\/(\d+)$/, monsterPage, 'monsters']);
+titles.monsters = 'Monsters';

@@ -663,7 +663,9 @@ async function adminAudit() {
 
 // ---------------------------------------------------------------- start
 
-(async () => {
+// The pages in their own files (pages/*.js, deferred after this one) add their routes, titles and admin sections
+// first: the first route waits for them.
+addEventListener('DOMContentLoaded', async () => {
   try { await loadSession(); } catch { /* the pages show the error */ }
   await route();
-})();
+});

@@ -6,9 +6,9 @@ the player at once, and the panel never writes the database behind the server's 
 
 | Who | Pages |
 |---|---|
-| everyone | Home (status, version, players online, uptime, accounts and characters; latest news, who's online, top 5 by level) · Who's online · Rankings · News |
+| everyone | Home (status, version, players online, uptime, accounts and characters; latest news, who's online, top 5 by level) · Who's online · Rankings · News · Items · Monsters |
 | a player, logged in with the game account | My account (created, last played, characters with class, level, map and guild) · password change |
-| an admin | Dashboard (the server's own metrics) · Accounts (search, detail, ban and unban) · Audit log |
+| an admin | Dashboard (the server's own metrics) · Accounts (search, detail, ban and unban) · Audit log · Economy log |
 
 Players log in with the same account name and password as in the game. An account the game created logs in here,
 and an account made on the panel's sign-up page logs in to the game: both paths write the same record
@@ -59,6 +59,19 @@ A ban from the Accounts page (reason, and 1 day to 30 days or no end):
 - refuses every later login of the account, in the game and on the panel, until it ends or is lifted.
 
 Lifting a ban deletes the row and is audited the same way.
+
+## Items, monsters and the economy log
+
+**Items** and **Monsters** are public databases built from the server's own game data and English texts the first
+time someone opens them, then kept in memory. An item shows its quality, type, level, trade rule, stats (equipment
+and cards), the monsters that drop it and the shops that sell it. A monster shows the HP and stats the server gives it
+(AttriMonsterConfig scaled by the NPC's `_kAttriScale`, as `MonsterService` does), its drops with the chance per kill
+that at least one drops (from the pools `RewardService` rolls, outside bonus time and without a player's level and
+class limits), and the maps whose scene editor spawns it, with how many stay alive and the respawn.
+
+The admin's **Economy log** reads the server's ledger (`economy_entry` with its `operation_receipt`) on the read
+pool, newest first: filter by account, character, item (an id, or part of a name) and a range of UTC days. The totals
+add up everything the filter matches; they only mean something for one item or currency.
 
 ## Behind nginx with https
 
