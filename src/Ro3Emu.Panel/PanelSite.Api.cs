@@ -43,7 +43,7 @@ public sealed partial class PanelSite
         admin = account != null && _backend.IsAdmin(account),
         csrf,
         registration = _options.Registration,
-        server = new { name = _backend.Info.Name, area = _backend.Info.Area },
+        server = BrandBody(),
     };
 
     /// <summary>Who is signed in, and the CSRF token for the next POST (a visitor cookie is set before a login).</summary>
@@ -143,7 +143,7 @@ public sealed partial class PanelSite
         var counts = await _backend.CountsAsync();
         return Reply.Ok(new
         {
-            name = info.Name, area = info.Area, version = info.Version, players = _backend.PlayersOnline(),
+            name = ServerName, tagline = Trimmed(Brand.Tagline, 160), area = info.Area, version = info.Version, players = _backend.PlayersOnline(),
             accounts = counts.Accounts, characters = counts.Characters,
             startedUtc = info.StartedUtc, uptimeSeconds = (long)Math.Max(0, (_clock.GetUtcNow() - info.StartedUtc).TotalSeconds),
         });
@@ -162,7 +162,11 @@ public sealed partial class PanelSite
         var roles = await _backend.OnlineAsync();
         return Reply.Ok(new
         {
-            players = roles.Select(r => new { name = r.Name, @class = r.Class, level = r.Level, map = r.Map, account = call.Admin ? r.Account : null }),
+            players = roles.Select(r => new
+            {
+                name = r.Name, @class = r.Class, classIcon = r.ClassIcon, level = r.Level, map = r.Map, mapId = r.MapId,
+                account = call.Admin ? r.Account : null,
+            }),
         });
     }
 

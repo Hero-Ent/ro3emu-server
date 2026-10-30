@@ -10,10 +10,10 @@ using Ro3Emu.Server.Maps;
 namespace Ro3Emu.Server.Http;
 
 /// <summary>
-/// The panel's item and monster databases: built once from the game data on first use (off the request thread) and kept
-/// in memory; the spawn index, which reads every map's scene editor, is built on its own the first time a monster page
-/// asks. Numbers come from the server's own rules: a monster's HP from MonsterService.TemplateAttributes, its drops
-/// from RewardService.KillDropRows and the pools they roll.
+/// The panel's item, monster and map databases: built once from the game data on first use (off the request thread)
+/// and kept in memory (PanelBackend.Catalog.cs); the spawn index, which reads every map's scene editor, is built on its
+/// own the first time a monster or map page asks. Numbers come from the server's own rules: a monster's HP from
+/// MonsterService.TemplateAttributes, its drops from RewardService.KillDropRows and the pools they roll.
 /// </summary>
 public sealed partial class PanelBackend
 {
@@ -31,40 +31,47 @@ public sealed partial class PanelBackend
     private Task<PanelCatalog>? _catalog;
     private Task<Dictionary<long, List<PanelSpawn>>>? _spawnIndex;
 
-    public async Task<PanelItemPage> FindItemsAsync(PanelItemQuery query)
+    public async Task<IReadOnlyList<PanelMapSummary>> MapsAsync()
     {
-        var catalog = await CatalogAsync();
-        long id = long.TryParse(query.Text, NumberStyles.None, CultureInfo.InvariantCulture, out long n) ? n : -1;
-        var found = catalog.Items.Where(i =>
-                (query.Text.Length == 0 || i.Id == id || i.Name.Contains(query.Text, StringComparison.OrdinalIgnoreCase))
-                && (query.Type == 0 || i.Type == query.Type) && (query.Quality == 0 || i.Quality == query.Quality)
-                && (query.MinLevel == 0 || i.Level >= query.MinLevel) && (query.MaxLevel == 0 || i.Level <= query.MaxLevel))
-            .ToList();
-        return new PanelItemPage(Page(found, query.Page, query.PageSize), found.Count, query.Page, query.PageSize, catalog.Types, catalog.Qualities);
+        var (spawns, online) = (await MapSpawnsAsync(), await OnlineRowsAsync());
+        var players = online.GroupBy(r => r.Scene).ToDictionary(g => g.Key, g => g.Count());
+        return [.. MapConfig.All(data).Select(map => (map, name: data.MapName(map.Id))).Where(m => m.name.Length > 0)
+            .Select(m => MapSummary(m.map.Id, m.name, spawns.GetValueOrDefault(m.map.Id) ?? [], players.GetValueOrDefault(m.map.Id)))
+            .OrderBy(m => m.Monsters == 0).ThenBy(m => m.MinLevel).ThenBy(m => m.Name, StringComparer.OrdinalIgnoreCase)];
     }
 
-    public async Task<PanelItem?> ItemAsync(long id) => (await CatalogAsync()).Item(id);
-
-    public async Task<PanelMonsterPage> FindMonstersAsync(PanelMonsterQuery query)
+    public async Task<PanelMapDetail?> MapAsync(long id)
     {
-        var catalog = await CatalogAsync();
-        long id = long.TryParse(query.Text, NumberStyles.None, CultureInfo.InvariantCulture, out long n) ? n : -1;
-        var found = catalog.Monsters.Where(m =>
-                (query.Text.Length == 0 || m.Summary.Id == id || m.Summary.Name.Contains(query.Text, StringComparison.OrdinalIgnoreCase))
-                && (query.Element == 0 || m.Summary.Element == query.Element) && (query.Race == 0 || m.RaceId == query.Race)
-                && (query.Size == 0 || m.SizeId == query.Size) && (query.Rank.Length == 0 || m.Summary.Rank == query.Rank)
-                && (query.MinLevel == 0 || m.Summary.Level >= query.MinLevel) && (query.MaxLevel == 0 || m.Summary.Level <= query.MaxLevel))
-            .Select(m => m.Summary).ToList();
-        return new PanelMonsterPage(Page(found, query.Page, query.PageSize), found.Count, query.Page, query.PageSize,
-            catalog.Elements, catalog.Races, catalog.Sizes);
+        string name = data.MapName(id);
+        if (MapConfig.Get(data, id) == null || name.Length == 0) return null;
+        var monsters = (await MapSpawnsAsync()).GetValueOrDefault(id) ?? [];
+        var players = (await OnlineRowsAsync()).Where(r => r.Scene == id).OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(r => new PanelMapPlayer(r.Name, ClassName(r.Career), ClassIcon(r.Career), r.Level)).ToList();
+        return new PanelMapDetail(MapSummary(id, name, monsters, players.Count), monsters, players);
     }
 
-    public async Task<PanelMonster?> MonsterAsync(long id)
+    private PanelMapSummary MapSummary(long id, string name, List<PanelMapMonster> monsters, int players) =>
+        new(id, name, MapImage(id), monsters.Count > 0 ? monsters.Min(m => m.Monster.Level) : 0, monsters.Count > 0 ? monsters.Max(m => m.Monster.Level) : 0,
+            monsters.Count, players);
+
+    /// <summary>The monsters of each map from the spawn index, a monster's variants as one (the database's entry).</summary>
+    private async Task<Dictionary<long, List<PanelMapMonster>>> MapSpawnsAsync()
     {
-        var catalog = await CatalogAsync();
-        if (!catalog.MonstersById.TryGetValue(id, out var monster)) return null;
-        var spawns = (await SpawnIndexAsync()).GetValueOrDefault(id) ?? [];
-        return new PanelMonster(monster.Summary, monster.Stats, monster.Speed, monster.Drops, spawns);
+        var (catalog, index) = (await CatalogAsync(), await SpawnIndexAsync());
+        var byMap = new Dictionary<long, Dictionary<long, (PanelMonsterSummary Monster, int Count, int Respawn)>>();
+        foreach (var (npc, spawns) in index)
+        {
+            if (!catalog.MonstersById.TryGetValue(npc, out var group) || PanelCatalog.Hidden(group.Rep.Summary.Name)) continue;
+            foreach (var spawn in spawns)
+            {
+                if (!byMap.TryGetValue(spawn.MapId, out var monsters)) byMap[spawn.MapId] = monsters = [];
+                var summary = group.Rep.Summary;
+                monsters[summary.Id] = monsters.TryGetValue(summary.Id, out var seen)
+                    ? (summary, seen.Count + spawn.Count, Math.Min(seen.Respawn, spawn.RespawnSeconds)) : (summary, spawn.Count, spawn.RespawnSeconds);
+            }
+        }
+        return byMap.ToDictionary(m => m.Key, m => m.Value.Values.Select(v => new PanelMapMonster(v.Monster, v.Count, v.Respawn))
+            .OrderBy(v => v.Monster.Level).ThenBy(v => v.Monster.Name, StringComparer.OrdinalIgnoreCase).ToList());
     }
 
     private static List<T> Page<T>(List<T> rows, int page, int size) => [.. rows.Skip((page - 1) * size).Take(size)];
@@ -117,7 +124,7 @@ public sealed partial class PanelBackend
         foreach (var mvp in MVPConfig.All(data).Where(m => m.NPCId > 0 && m.MapId > 0))
             found.Add((mvp.NPCId, mvp.MapId, 1, (int)mvp.RefreshTime));
         return found.GroupBy(f => f.Npc).ToDictionary(g => g.Key, g => g.GroupBy(f => f.Map)
-            .Select(m => new PanelSpawn(m.Key, MapName(m.Key), m.Sum(f => f.Count), m.Min(f => f.Respawn)))
+            .Select(m => new PanelSpawn(m.Key, MapName(m.Key), m.Sum(f => f.Count), m.Min(f => f.Respawn), MapImage(m.Key)))
             .OrderByDescending(s => s.Count).ThenBy(s => s.Map, StringComparer.OrdinalIgnoreCase).ToList());
     }
 
@@ -221,224 +228,4 @@ public sealed partial class PanelBackend
     private string AttributeName(long attribute) =>
         AttributeConfig.Get(data, attribute) is { } row && Name(row.Name) is { Length: > 0 } name ? name
         : AttributeFallback.GetValueOrDefault(attribute) ?? "Attribute " + attribute.ToString(CultureInfo.InvariantCulture);
-
-    // ---------------------------------------------------------------- the catalog
-
-    private sealed record MonsterEntry(PanelMonsterSummary Summary, long RaceId, long SizeId, IReadOnlyList<PanelStat> Stats, long Speed,
-        IReadOnlyList<PanelMonsterDrop> Drops);
-
-    private sealed record ItemEntry(PanelItemSummary Summary, ItemConfig Row);
-
-    /// <summary>Everything the two databases show, from the game data, in memory.</summary>
-    private sealed class PanelCatalog
-    {
-        private readonly PanelBackend _backend;
-        private readonly Dictionary<long, ItemEntry> _items = [];
-        private readonly Dictionary<long, List<PanelItemDrop>> _droppedBy = [];
-        private readonly Dictionary<long, List<PanelShopOffer>> _shops = [];
-        private readonly Dictionary<long, JsonElement> _cards = [];
-
-        public List<PanelItemSummary> Items { get; }
-        public List<MonsterEntry> Monsters { get; } = [];
-        public Dictionary<long, MonsterEntry> MonstersById { get; } = [];
-        public IReadOnlyList<PanelOption> Types { get; }
-        public IReadOnlyList<PanelOption> Qualities { get; }
-        public IReadOnlyList<PanelOption> Elements { get; }
-        public IReadOnlyList<PanelOption> Races { get; }
-        public IReadOnlyList<PanelOption> Sizes { get; }
-
-        public PanelCatalog(PanelBackend backend)
-        {
-            _backend = backend;
-            var data = backend.Tables;
-            foreach (var row in ItemConfig.All(data))
-            {
-                string name = backend.Name(row.Name);
-                if (name.Length == 0) continue; // a row without a name is not shown in the game either
-                _items[row.Id] = new ItemEntry(new PanelItemSummary(row.Id, name, (int)row.Type, backend.TypeName(row.Type),
-                    backend.SubTypeName(row.Type, row.SubType), (int)row.Quality, backend.QualityName(row.Quality), (int)row.LevelNeed), row);
-            }
-            Items = [.. _items.Values.Select(i => i.Summary).OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ThenBy(i => i.Id)];
-            Types = [.. _items.Values.Select(i => (long)i.Summary.Type).Distinct().Order().Select(t => new PanelOption(t, backend.TypeName(t)))];
-            Qualities = [.. Enumerable.Range(1, QualityNames.Length).Select(q => new PanelOption(q, backend.QualityName(q)))];
-            Elements = [.. Enumerable.Range(1, ElementNames.Length).Select(e => new PanelOption(e, backend.ElementName(e)))];
-            Races = [.. Enumerable.Range(1, RaceNames.Length).Select(r => new PanelOption(r, backend.RaceName(r)))];
-            Sizes = [.. Enumerable.Range(1, SizeNames.Length).Select(s => new PanelOption(s, backend.SizeName(s)))];
-
-            foreach (var card in CardConfig.All(data).OrderBy(c => c.Level))
-                _cards.TryAdd(card.CardId, card.Row);
-            ReadShops(data);
-
-            var mvps = MVPConfig.All(data).Select(m => m.NPCId).ToHashSet();
-            foreach (var npc in NPCConfig.All(data).Where(n => n.NPCType == 1))
-            {
-                string name = backend.Name(npc.Name);
-                if (name.Length == 0 || npc.Level <= 0 || DeveloperRow().IsMatch(name)) continue;
-                var monster = Monster(npc, name, mvps.Contains(npc.Id));
-                Monsters.Add(monster);
-                MonstersById[npc.Id] = monster;
-                foreach (var drop in monster.Drops.Where(d => d.ItemId is not (BaseExpItem or JobExpItem)))
-                {
-                    if (!_droppedBy.TryGetValue(drop.ItemId, out var list)) _droppedBy[drop.ItemId] = list = [];
-                    list.Add(new PanelItemDrop(npc.Id, name, monster.Summary.Level, monster.Summary.Rank, drop.Chance, drop.Min, drop.Max, drop.Kind));
-                }
-            }
-            Monsters.Sort((a, b) => a.Summary.Level != b.Summary.Level ? a.Summary.Level.CompareTo(b.Summary.Level)
-                : string.Compare(a.Summary.Name, b.Summary.Name, StringComparison.OrdinalIgnoreCase));
-        }
-
-        /// <summary>Shop goods from ShopCommodityConfig and the shop of their _iClassID, except Survivor Battle's match-only
-        /// shops (type 8); a fashion row without an item is a look, not an item.</summary>
-        private void ReadShops(GameData data)
-        {
-            var shops = ShopConfig.All(data).GroupBy(s => s.ClassId).ToDictionary(g => g.Key, g => g.First());
-            foreach (var goods in ShopCommodityConfig.All(data).Where(c => c.ItemId > 0))
-            {
-                if (!shops.TryGetValue(goods.ClassId, out var shop) || shop.ShopType == 8) continue;
-                long currency = goods.ItemPerPrice.Length > 0 ? goods.ItemPerPrice[0] : 0, price = goods.ItemPerPrice.Length > 1 ? goods.ItemPerPrice[1] : 0;
-                if (!_shops.TryGetValue(goods.ItemId, out var list)) _shops[goods.ItemId] = list = [];
-                var offer = new PanelShopOffer(_backend.Name(shop.ShopName) is { Length: > 0 } n ? n : "Shop " + shop.ClassId.ToString(CultureInfo.InvariantCulture),
-                    currency, currency > 0 ? data.ItemName(currency) : "", price, (int)Math.Max(1, goods.ItemPerMount));
-                if (!list.Contains(offer)) list.Add(offer);
-            }
-        }
-
-        private MonsterEntry Monster(NPCConfig npc, string name, bool mvp)
-        {
-            var data = _backend.Tables;
-            int level = (int)npc.Level;
-            var attr = MonsterService.TemplateAttributes(data, npc.Row, level);
-            long A(long id) => (long)Math.Round(attr.GetValueOrDefault(id));
-            long speed = attr.ContainsKey(113) ? A(113) : npc.Speed;
-            var summary = new PanelMonsterSummary(npc.Id, name, level, Math.Max(1, A(101)), (int)npc.Element, _backend.ElementName(npc.Element),
-                _backend.RaceName(npc.Race), _backend.SizeName(npc.Size), Rank(npc.NPCSubType, mvp));
-            // HIT and FLEE default to level + 1 and level as MonsterService.Build reads them.
-            var stats = new List<PanelStat>();
-            foreach (long id in new long[] { 101, 102, 103, 104, 105, 106, 109, 110, 111 })
-            {
-                double value = id switch
-                {
-                    109 when !attr.ContainsKey(109) => level + 1,
-                    110 when !attr.ContainsKey(110) => level,
-                    101 => Math.Max(1, A(101)),
-                    _ => attr.GetValueOrDefault(id),
-                };
-                if (id is 101 or 103 or 104 or 105 or 106 or 109 or 110 || value != 0)
-                    stats.Add(new PanelStat(_backend.AttributeName(id), _backend.AttributeValue(id, value)));
-            }
-            return new MonsterEntry(summary, npc.Race, npc.Size, stats, speed, Drops(npc));
-        }
-
-        /// <summary>
-        /// A kill's loot as RewardService rolls it (bonus time off): every pool slot [group, chance per million, rolls,
-        /// picks] of each drop row, each DropGroupConfig row weighted among its group's candidates. The chance shown is
-        /// that at least one drops per kill; the player's level and class limits of a group row are not applied
-        /// (inferred: the page has no player).
-        /// </summary>
-        private List<PanelMonsterDrop> Drops(NPCConfig npc)
-        {
-            var drops = PoolDrops(RewardService.KillDropRows(data: _backend.Tables, npc.Row, bonus: false)
-                .SelectMany(r => RewardService.DropPools(r.Row).Select(pool => (pool, r.Maps))), "", 1);
-            foreach (var mvp in MVPConfig.All(_backend.Tables).Where(m => m.NPCId == npc.Id).Take(1))
-                drops.AddRange(MvpRewards(mvp));
-            return [.. drops.Take(DetailRows)];
-        }
-
-        /// <summary>
-        /// The rewards of a field MVP's kill as MvpService.SettleAsync hands them out, each kind rolled through its award's
-        /// pool (RewardService.AwardPool): first strike, final blow, the top 10 parties, every participant, and one rare
-        /// winner per kill at _iRareRewardProbability / 10000, who may also get a Lord's Mane (Ro3Emu:LordsManePercent).
-        /// Each kind is capped per day per player (3 first strikes, 3 final blows, 3 rankings, 5 participations).
-        /// </summary>
-        private IEnumerable<PanelMonsterDrop> MvpRewards(MVPConfig mvp)
-        {
-            var data = _backend.Tables;
-            double rare = Math.Clamp(mvp.RareRewardProbability / 10000.0, 0, 1);
-            var kinds = new (string Kind, long Award, double Chance)[]
-            {
-                ("First strike", mvp.FirstDamageAward, 1), ("Final blow", mvp.LastDamageAward, 1), ("Top 10 parties", mvp.TeamAward, 1),
-                ("Participation", mvp.PartAward, 1), ("Rare winner", mvp.RareAward, rare),
-            };
-            foreach (var (kind, award, chance) in kinds)
-                if (RewardService.AwardPool(data, award) is var pool and > 0)
-                    foreach (var drop in PoolDrops([(pool, [])], kind, chance)) yield return drop;
-            int mane = Math.Clamp(_backend.LordsManePercent, 0, 100);
-            if (mane > 0 && _items.TryGetValue(LordsMane, out var item))
-                yield return new PanelMonsterDrop(LordsMane, item.Summary.Name, item.Summary.Quality, mane / 100.0, 1, 1, [], "Rare winner");
-        }
-
-        /// <summary>Lord's Mane: MvpService gives one per kill at LordsManePercent to a member picked as the rare winner is.</summary>
-        private const long LordsMane = 1009015;
-
-        /// <summary>
-        /// Every item the pools can give, with the chance that at least one comes per roll of the whole list (each pool
-        /// slot [group, chance per million, rolls, picks], each DropGroupConfig row weighted among its group's
-        /// candidates), the whole list itself happening at <paramref name="listChance"/>.
-        /// </summary>
-        private List<PanelMonsterDrop> PoolDrops(IEnumerable<(long Pool, IReadOnlyList<long> Maps)> pools, string kind, double listChance)
-        {
-            var data = _backend.Tables;
-            var merged = new Dictionary<(long Item, string Maps), (double Miss, int Min, int Max, IReadOnlyList<long> Maps)>();
-            foreach (var (poolId, maps) in pools)
-            {
-                if (data.Row("DropPoolConfig", poolId) is not { } pool) continue;
-                foreach (var (group, chance, rolls, picks) in RewardService.PoolSlots(pool))
-                {
-                    var candidates = DropGroupConfig.Get(data, group).Where(r => r.Weights > 0 && r.QuestLimit == 0 && r.Activityid == 0).ToList();
-                    double total = candidates.Sum(r => (double)r.Weights);
-                    if (total <= 0) continue;
-                    double hit = Math.Clamp(chance / 1_000_000, 0, 1);
-                    foreach (var candidate in candidates)
-                    {
-                        long item = candidate.DropItem;
-                        if (!_items.ContainsKey(item)) continue;
-                        double share = candidate.Weights / total;
-                        double missRoll = 1 - hit + hit * Math.Pow(1 - share, picks);
-                        double miss = Math.Pow(missRoll, rolls);
-                        var key = (item, string.Join(',', maps));
-                        int min = (int)Math.Max(1, candidate.MinNumber), max = (int)Math.Max(min, candidate.MaxNumber);
-                        merged[key] = merged.TryGetValue(key, out var seen)
-                            ? (seen.Miss * miss, Math.Min(seen.Min, min), Math.Max(seen.Max, max), maps)
-                            : (miss, min, max, maps);
-                    }
-                }
-            }
-            return [.. merged.Select(m => new PanelMonsterDrop(m.Key.Item, _items[m.Key.Item].Summary.Name, _items[m.Key.Item].Summary.Quality,
-                    listChance * (1 - m.Value.Miss), m.Value.Min, m.Value.Max, [.. m.Value.Maps.Select(_backend.MapName)], kind))
-                .OrderByDescending(d => d.Chance).ThenBy(d => d.Item, StringComparer.OrdinalIgnoreCase)];
-        }
-
-        public PanelItem? Item(long id)
-        {
-            if (!_items.TryGetValue(id, out var entry)) return null;
-            var row = entry.Row;
-            var data = _backend.Tables;
-            string description = ColourMark().Replace(data.TextOf(row.Description), "").Trim();
-            var classes = row.JobNeed.Where(j => j > 0).Select(j => _backend.ClassName(j)).ToList();
-            string trade = row.Trade switch { 1 => "Exchange", 2 => "Stalls", _ => "Not tradeable" };
-            var dropped = (_droppedBy.GetValueOrDefault(id) ?? []).OrderByDescending(d => d.Chance).ThenBy(d => d.Level).Take(DetailRows).ToList();
-            return new PanelItem(entry.Summary, description, (int)row.StackLimit, trade, row.IsUse == 1, classes, Stats(row), dropped,
-                _shops.GetValueOrDefault(id) ?? []);
-        }
-
-        /// <summary>Equipment: EquipConfig _kBasicAttribute [attribute, min, max]; a card: the lowest level's
-        /// CardConfig _kBasicAttribute [attribute, value].</summary>
-        private List<PanelStat> Stats(ItemConfig item)
-        {
-            var data = _backend.Tables;
-            var stats = new List<PanelStat>();
-            if (item.EquipId > 0 && EquipConfig.Get(data, item.EquipId) is { } equip)
-            {
-                foreach (var a in equip.BasicAttribute.Where(a => a.Length >= 2))
-                {
-                    string low = _backend.AttributeValue(a[0], a[1]), high = a.Length > 2 && a[2] != a[1] ? _backend.AttributeValue(a[0], a[2]) : "";
-                    stats.Add(new PanelStat(_backend.AttributeName(a[0]), "+" + low + (high.Length > 0 ? "-" + high : "")));
-                }
-            }
-            if (_cards.TryGetValue(item.Id, out var cardRow))
-                foreach (var a in new CardConfig(cardRow).BasicAttribute.Where(a => a.Length >= 2))
-                    stats.Add(new PanelStat(_backend.AttributeName(a[0]), "+" + _backend.AttributeValue(a[0], a[1])));
-            return stats;
-        }
-    }
 }

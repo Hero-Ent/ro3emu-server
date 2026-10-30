@@ -25,4 +25,32 @@ public sealed class PanelOptions
 
     /// <summary>Accounts can be created on the panel's sign-up page. Off: only the game's first login creates them.</summary>
     public bool Registration { get; set; } = true;
+
+    /// <summary>
+    /// The folder of the pictures the pages show (item, monster, class and map images), decoded from the operator's own
+    /// client by the data export. Empty: icons/ in the game data folder. Without it the pages draw letters instead.
+    /// </summary>
+    public string? ImageDir { get; set; }
+
+    /// <summary>White-label branding: the server's own name, tagline, logo, footer and colour on every page.</summary>
+    public PanelBranding Branding { get; set; } = new();
+}
+
+/// <summary>Ro3Emu:Panel:Branding. Every field is optional; an empty one keeps RO3Emu's own.</summary>
+public sealed class PanelBranding
+{
+    /// <summary>The name in the header, the title bar and the home page (at most 64 characters). Empty: Ro3Emu:ClusterName.</summary>
+    public string? ServerName { get; set; }
+
+    /// <summary>A line under the name on the home page (at most 160 characters).</summary>
+    public string? Tagline { get; set; }
+
+    /// <summary>A PNG, JPG or WebP file in the server's data folder (a path relative to it), shown instead of the star.</summary>
+    public string? LogoPath { get; set; }
+
+    /// <summary>The footer's text instead of RO3Emu's (at most 300 characters).</summary>
+    public string? FooterText { get; set; }
+
+    /// <summary>The colour of links, focus rings and highlights, as #rrggbb.</summary>
+    public string? AccentColor { get; set; }
 }

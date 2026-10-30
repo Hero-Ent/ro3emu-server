@@ -43,7 +43,7 @@ function rewardEditor(initial = []) {
   const query = h('input', { class: 'input', type: 'search', placeholder: 'Item name or id', 'aria-label': 'Find an item', spellcheck: 'false' });
   let timer = 0;
   const draw = () => list.replaceChildren(...(rows.length ? rows.map((row, i) => h('div', { class: 'reward-row' },
-    mono(String(row.item)), h('span', { class: 'reward-name' }, row.name || 'Item ' + row.item),
+    thumb(row.icon, row.name || String(row.item), 'q1'), mono(String(row.item)), h('span', { class: 'reward-name' }, row.name || 'Item ' + row.item),
     h('input', { class: 'input', type: 'number', min: '1', value: String(row.count), 'aria-label': 'Count of ' + (row.name || row.item),
       oninput: e => { row.count = Number(e.target.value); } }),
     h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Remove', onclick: () => { rows.splice(i, 1); draw(); } }, icon('x'))))
@@ -53,8 +53,8 @@ function rewardEditor(initial = []) {
     if (!q) { results.replaceChildren(); return; }
     const { items } = await api('GET', '/api/admin/items?q=' + encodeURIComponent(q));
     results.replaceChildren(...(items.length ? items.map(item => h('button', { type: 'button', class: 'reward-hit', role: 'option',
-      onclick: () => { if (!rows.some(r => r.item === item.id)) rows.push({ item: item.id, name: item.name, count: 1 }); query.value = ''; results.replaceChildren(); draw(); } },
-    mono(String(item.id)), ' ', item.name || 'Item ' + item.id)) : [h('span', { class: 'hint' }, 'No item matches.')]));
+      onclick: () => { if (!rows.some(r => r.item === item.id)) rows.push({ item: item.id, name: item.name, icon: item.icon, count: 1 }); query.value = ''; results.replaceChildren(); draw(); } },
+    thumb(item.icon, item.name || String(item.id), 'q1'), mono(String(item.id)), ' ', item.name || 'Item ' + item.id)) : [h('span', { class: 'hint' }, 'No item matches.')]));
   };
   query.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => search().catch(e => toast(e.message)), 250); });
   query.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });

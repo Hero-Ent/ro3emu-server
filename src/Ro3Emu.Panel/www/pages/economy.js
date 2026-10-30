@@ -49,7 +49,7 @@ async function adminEconomy() {
 
 adminSections.push(['economy', '/admin/economy', 'Economy log', 'coins']);
 {
-  const later = laterSections.findIndex(([label]) => label === 'Economy log');
+  const later = laterSections.findIndex(([, label]) => label === 'Economy log');
   if (later >= 0) laterSections.splice(later, 1);
 }
 routes.push([/^\/admin\/economy$/, adminEconomy, 'admin']);

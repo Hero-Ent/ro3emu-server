@@ -6,9 +6,9 @@ the player at once, and the panel never writes the database behind the server's 
 
 | Who | Pages |
 |---|---|
-| everyone | Home (status, version, players online, uptime, accounts and characters; latest news, who's online, top 5 by level) · Who's online · Rankings · News · Items · Monsters |
-| a player, logged in with the game account | My account (created, last played, characters with class, level, map and guild) · password change |
-| an admin | Dashboard (the server's own metrics) · Accounts (search, detail, ban and unban) · Audit log · Mail & rewards · Gift codes · GM console · News editor · Broadcasts · Economy log |
+| everyone | Home (status, version, players online, uptime, accounts and characters; latest news, who's online, top 5 by level) · Who's online · Rankings · News · Items · Monsters · Maps |
+| a player, logged in with the game account | My account (created, last played, characters with class, level, map and guild) · the sheet of each own character · password change |
+| an admin | Dashboard (the server's own metrics) · Accounts (search, detail, ban and unban) · every character's sheet and mailbox · Audit log · Mail & rewards · Gift codes · GM console · News editor · Broadcasts · Economy log |
 
 Players log in with the same account name and password as in the game. An account the game created logs in here,
 and an account made on the panel's sign-up page logs in to the game: both paths write the same record
@@ -26,6 +26,8 @@ It is on by default, on port **5381**, next to the server's HTTP port 5380:
 | `Ro3Emu:Panel:TrustedProxies` | none | proxy addresses whose `X-Forwarded-For` and `X-Forwarded-Proto` are believed (see below) |
 | `Ro3Emu:Panel:SessionHours` | `12` | hours a login stays valid without use |
 | `Ro3Emu:Panel:Registration` | `true` | `false` hides the sign-up page; accounts are then created only by a first login in the game |
+| `Ro3Emu:Panel:ImageDir` | `icons/` of the game data | the pictures the pages show (see [Pictures](#pictures)) |
+| `Ro3Emu:Panel:Branding:*` | RO3Emu's | your server's name, tagline, logo, footer and colour (see [Branding](#branding)) |
 
 Set them in `appsettings.json` under `Ro3Emu`, as environment variables (`Ro3Emu__Panel__Port=8081`) or as
 arguments (`--Ro3Emu:Panel:Port=8081`). The startup log says `Web panel on http://...`.
@@ -84,14 +86,86 @@ Each tool is a page of the admin area's sidebar; each change is written to the a
   the message GM replies use). It can repeat every few minutes, up to 100 more times; repeats are kept in the
   server's memory (a restart ends them) and can be cancelled.
 
-## Items, monsters and the economy log
+## Branding
 
-**Items** and **Monsters** are public databases built from the server's own game data and English texts the first
-time someone opens them, then kept in memory. An item shows its quality, type, level, trade rule, stats (equipment
+The panel can carry your server's name and look instead of RO3Emu's. Every field is optional:
+
+| Option | What |
+|---|---|
+| `Ro3Emu:Panel:Branding:ServerName` | the name in the header, the browser's title and the home page (at most 64 characters); empty: `Ro3Emu:ClusterName` |
+| `Ro3Emu:Panel:Branding:Tagline` | a line under the name on the home page |
+| `Ro3Emu:Panel:Branding:LogoPath` | a PNG, JPG or WebP file in the data folder, as a path relative to it (`brand/logo.png`); shown instead of the star, about 28 pixels high |
+| `Ro3Emu:Panel:Branding:FooterText` | the footer's text |
+| `Ro3Emu:Panel:Branding:AccentColor` | the colour of links, focus rings and highlights, as `#rrggbb` |
+
+```json
+{ "Ro3Emu": { "Panel": { "Branding": {
+  "ServerName": "Midgard Classic", "Tagline": "A friendly realm, rates 5x",
+  "LogoPath": "brand/logo.png", "FooterText": "Midgard Classic, a fan server.", "AccentColor": "#c2410c" } } } }
+```
+
+The values reach the pages as text. A colour that is not `#rrggbb` is ignored, and so is a logo path that leaves the
+data folder. The logo is served at `/brand/logo` and cached by the browser until the file changes.
+
+## Characters and mailboxes
+
+A character's **sheet** shows what the server keeps for it, read only: class, base, job and Astral level with the
+EXP into the level, sex, map and position, created and last login, the six base stats and the points left to spend,
+every currency, the equipment by slot with the slot's strengthen and refine levels and the item's enchantments, the
+bags tab by tab (the cart included), and the learned skills. A character in the game is read from its session on
+the game loop, so the sheet shows what the player has now; any other from the database. A player opens the sheets of
+the characters of their own account from *My account*; an admin opens every sheet from an account's page (the
+characters link to it). Another account's character is "not found" to a player.
+
+An admin also sees a character's **mailbox** (`/characters/<id>/mail`), read only and newest first, 10 letters a page:
+title and text (a template letter's from MailConfig), sender, sent and expiry times, read and claimed, and the
+attachments with their icons. It is the role's mailbox as `MailService` stores it.
+
+## Items, monsters, maps and the economy log
+
+**Items**, **Monsters** and **Maps** are public databases built from the server's own game data and English texts the
+first time someone opens them, then kept in memory. An item shows its quality, type, level, trade rule, stats (equipment
 and cards), the monsters that drop it and the shops that sell it. A monster shows the HP and stats the server gives it
 (AttriMonsterConfig scaled by the NPC's `_kAttriScale`, as `MonsterService` does), its drops with the chance per kill
 that at least one drops (from the pools `RewardService` rolls, outside bonus time and without a player's level and
-class limits), and the maps whose scene editor spawns it, with how many stay alive and the respawn.
+class limits), and the maps whose scene editor spawns it, with how many stay alive and the respawn. A map shows its
+picture, the monsters that spawn there with their levels, and the characters on it now.
+
+The client's tables hold many rows of one thing: an item copied under another id with only its sort order changed, a
+monster copied for another map, quest or scene. Rows a player cannot tell apart are one *variant*: items with the
+same name, type, quality, level, description, stats, trade rule, stack and classes; monsters with the same name,
+level, HP, stats, speed, element, race, size and rank. The lists then show **one row per name**: the row stands for
+the variants of that name the filters match, with the picture and numbers of the one the game repeats most (an item)
+or spawns most in the field (a monster), the level (and HP) range of all of them, and a "4 variants" chip. A page
+lists the variants of its name in a table (id, level, HP, size and where each spawns for a monster; id, quality, type
+and level for an item), shows the ids of its own variant in a small line, and merges what the variants drop, sell and
+spawn; a merged drop says "Only from ..." when not every variant drops it. Rows still named `TBD`, rows with a `@{n}`
+placeholder the row gives no value for, and level-1 monsters with 100 000 HP or more that spawn on no map (story and
+scene actors) are left out of the lists; searching for their id still finds them.
+
+## Pictures
+
+The item, monster, class and map pictures come from **your own game client**, the same way the game data does:
+RO3Emu ships none. The data export (`RO3Emu.exe` on first start, `RO3Emu.exe export <game> <data>`, `server.sh`)
+decodes them from the client's Unity bundles into `icons/` of the data folder:
+
+| Folder | From | What |
+|---|---|---|
+| `icons/items/` | ItemConfig `_kIcon`, `_kPic` | bag icons (128 px) and card pictures (halved to at most 400 px) |
+| `icons/monsters/` | NPCConfig `_kHeadIcon` of the monster rows | portraits (128 px) |
+| `icons/classes/` | JobConfig `_kIcon`, `_kBigIcon` | class emblems |
+| `icons/maps/` | MapConfig `_kBgImage[0]` | the map window's outline (halved to 512 px) |
+| `icons/skills/` | SkillConfig `_kIcon` | skill icons for the character sheet |
+
+About 2 500 PNG files, 120 MB, in about 20 seconds; a later export decodes only what a client update changed
+(`icons/index.json` records the client file each picture came from) and removes what the client dropped.
+`--no-icons` skips them. A server host that downloads only what it needs (`RO3Emu.exe update --server-files`) also
+gets the bundles the pictures come from, about 550 MB.
+
+The panel serves them under `/img/<folder>/<file>`, only the export's own folders and file names. The pages ask for
+`/img/...?v=<hash of the client file>`, so a picture can be cached for a year and a client update still shows the
+new one. Without the folder (an export with `--no-icons`, or one made before RO3Emu had pictures) every page still
+works and draws the first letter of the name instead; the next `RO3Emu.exe start` without `--no-icons` adds them.
 
 The admin's **Economy log** reads the server's ledger (`economy_entry` with its `operation_receipt`) on the read
 pool, newest first: filter by account, character, item (an id, or part of a name) and a range of UTC days. The totals
@@ -166,6 +240,12 @@ proxy's.
 Both are created by the server at startup like its other tables and are part of every backup.
 
 ## For developers
+
+The pictures are decoded in `src/Ro3Emu.DataExport` (`IconExport`, `UnityImages`, `Png`): the VFS index maps a
+sprite's file name to its bundle; the image is a texture of that name, a sprite over a texture of its bundle, or a
+sprite packed into a sprite atlas (`<tag>.spriteatlasv2`, whose render data names the atlas texture and the
+rectangle). Bundles are read with AssetsTools.NET and BC1/BC3/BC7 textures decoded with AssetRipper.TextureDecoder
+(both MIT); the server itself only serves the files.
 
 `src/Ro3Emu.Panel` holds the website: the static files (`www/`, embedded in the assembly; the fonts are the
 launcher's; the colours, spacing scale, type scale and components are the tokens at the top of `app.css`), the JSON API under `/api/` (`PanelSite`), sessions and CSRF. It knows nothing of the game: everything

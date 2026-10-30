@@ -32,6 +32,8 @@ internal static class Program
         options:
           --client <folder>  the game folder (the one with ro3.exe); remembered for next time
           --reexport         export the game data again
+          --no-icons         no pictures for the web panel (item, monster, class, map and skill images from
+                             the game; about 20 seconds and 120 MB): the panel shows letters instead
           --no-launch        do not start the game (server only)
           --yes              no questions: take the defaults
           --http-port <n> --micro-port <n> --game-port <n>   server ports (default 5380, 20000, 33100)
@@ -153,6 +155,7 @@ internal sealed class Options
     public string? Only { get; private set; }
     public bool ListInputs { get; private set; }
     public bool ServerFiles { get; private set; }
+    public bool NoIcons { get; private set; }
     public ServerProcess.Ports Ports { get; private set; } = new();
 
     private static readonly HashSet<string> Commands = ["start", "host", "join", "restore", "check", "export", "install", "update", "diag", "help"];
@@ -188,6 +191,7 @@ internal sealed class Options
                 case "--only": o.Only = Value("--only"); break;
                 case "--list-inputs": o.ListInputs = true; break;
                 case "--server-files": o.ServerFiles = true; break;
+                case "--no-icons": o.NoIcons = true; break;
                 case "--http-port": o.Ports = o.Ports with { Http = Port("--http-port") }; break;
                 case "--micro-port": o.Ports = o.Ports with { MicroGate = Port("--micro-port") }; break;
                 case "--game-port": o.Ports = o.Ports with { GameGate = Port("--game-port") }; break;

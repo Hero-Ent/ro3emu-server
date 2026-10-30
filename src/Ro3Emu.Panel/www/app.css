@@ -110,6 +110,8 @@ svg.i{width:1em;height:1em;flex:none}
 .top .wrap{display:flex;align-items:center;gap:var(--s5);height:100%}
 .brand{display:flex;align-items:center;gap:var(--s2);font:400 var(--t-xl)/1 var(--display);white-space:nowrap;min-width:0}
 .brand svg{font-size:18px}
+.brand-logo{display:block;height:28px;width:auto;max-width:96px;object-fit:contain}
+.brand-logo[hidden]{display:none}
 .brand span{overflow:hidden;text-overflow:ellipsis}
 .nav{display:flex;align-items:center;gap:var(--s1);flex:1;min-width:0}
 .nav-links{display:flex;gap:var(--s1)}
@@ -141,6 +143,7 @@ svg.i{width:1em;height:1em;flex:none}
 .actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s2)}
 .meta{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s5);margin-top:var(--s3);font-size:var(--t-sm);color:var(--muted)}
 .meta div{display:flex;gap:var(--s2);align-items:baseline}
+.meta div:has(.named){align-items:center}
 .meta dt{font-weight:700}
 .meta dd{color:var(--ink)}
 
@@ -330,7 +333,12 @@ select.input{padding-right:var(--s6)}
   .view{padding-top:var(--s4)}
   .kpi .value b{font-size:24px;line-height:28px}
   .data .opt{display:none}
-  .data th,.data td{padding:0 var(--s3)}
+  .data th,.data td{padding:0 var(--s2)}
+  .data th:first-child,.data td:first-child{padding-left:var(--s3)}
+  .data th:last-child,.data td:last-child{padding-right:var(--s3)}
+  /* the growing column takes what is left and cuts its text, so a list fits a phone without scrolling sideways */
+  .data td.grow{max-width:0;overflow:hidden;text-overflow:ellipsis}
+  .data td.grow.wrap-text{min-width:0}
   .page-head{align-items:flex-start}
   .auth-card{margin-top:var(--s4)}
 }
