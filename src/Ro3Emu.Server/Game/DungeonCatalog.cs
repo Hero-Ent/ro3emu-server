@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 using Ro3Emu.Server.Maps;
 using Romsg;
 
@@ -345,8 +346,7 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
             // A ride needs its route, an actor that walks (a UnitConfig speed) and an actor interaction that completes the step.
             if (step.RideAfter != 0 && (!map.GuidePaths.ContainsKey(step.RideAfter)
                 || !step.Complete.Any(t => t.Kind is ReconstructedDungeons.TriggerKind.Interaction or ReconstructedDungeons.TriggerKind.Message)
-                || !step.Actors.Any(a => data.Row("NPCConfig", a.NpcId) is { } n && data.Row("UnitConfig", GameData.Int(n, "_iUnitID")) is { } u
-                    && u.TryGetProperty("_fSpeed", out var v) && GameData.Number(v) > 0))) return [];
+                || !step.Actors.Any(a => NPCConfig.Get(data, a.NpcId) is { } n && UnitConfig.Get(data, n.UnitId) is { Speed: > 0 }))) return [];
             foreach (var t in step.Complete.Concat(step.Ignore))
             {
                 bool known = t.Kind switch

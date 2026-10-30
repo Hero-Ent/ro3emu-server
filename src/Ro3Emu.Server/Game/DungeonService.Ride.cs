@@ -1,6 +1,7 @@
 using Romsg;
 using Kind = Ro3Emu.Server.Game.ReconstructedDungeons.TriggerKind;
 using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 using Ro3Emu.Server.Maps;
 
 namespace Ro3Emu.Server.Game;
@@ -44,8 +45,7 @@ public sealed partial class DungeonService
 
     /// <summary>The carrier's walking speed in metres per second: UnitConfig._fSpeed (cm/s) of its NPC's _iUnitID, 0 if none.</summary>
     private float RideSpeed(SceneActorUnit carrier) =>
-        _data.Row("NPCConfig", carrier.NpcId) is { } npc && _data.Row("UnitConfig", GameData.Int(npc, "_iUnitID")) is { } unit
-        && unit.TryGetProperty("_fSpeed", out var speed) ? (float)(GameData.Number(speed) ?? 0) / 100f : 0f;
+        NPCConfig.Get(_data, carrier.NpcId) is { } npc && UnitConfig.Get(_data, npc.UnitId) is { } unit ? (float)unit.Speed / 100f : 0f;
 
     /// <summary>The horizontal length of a route in metres, as the monsters' walks count distance.</summary>
     internal static float RideLength(IReadOnlyList<(float X, float Y, float Z)> path)

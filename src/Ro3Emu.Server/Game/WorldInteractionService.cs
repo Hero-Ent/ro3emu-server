@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Romsg;
 using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 using Ro3Emu.Server.Maps;
 
 namespace Ro3Emu.Server.Game;
@@ -238,9 +239,8 @@ public sealed class WorldInteractionService
     }
 
     /// <summary>Whether the interaction puts its user in a vehicle seat: NPCInteractConfig._iStatusID names a GameplayStatusConfig of type 3.</summary>
-    public bool IsRide(long interactionId) => _data.Row("NPCInteractConfig", interactionId) is { } interaction
-        && Id(interaction, "_iStatusID") is > 0 and var statusId
-        && _data.Row("GameplayStatusConfig", statusId) is { } status && Id(status, "_iStatusType") == 3;
+    public bool IsRide(long interactionId) => NPCInteractConfig.Get(_data, interactionId) is { StatusId: > 0 } interaction
+        && GameplayStatusConfig.Get(_data, interaction.StatusId) is { StatusType: 3 };
 
     /// <summary>
     /// Seats a player on a scripted dungeon's scene actor (a Deniro that carries riders), by the interaction's own
@@ -251,8 +251,8 @@ public sealed class WorldInteractionService
     public async Task<long> SeatOnSceneActorAsync(GameSession s, long actorUid, int npcId, int interactionId)
     {
         if (!InWorld(s) || _active.ContainsKey(s) || !IsRide(interactionId)
-            || _data.Row("NPCInteractConfig", interactionId) is not { } interaction) return 0;
-        int statusId = Id(interaction, "_iStatusID"), seat = Id(interaction, "_iStatusLocation") - 1;
+            || NPCInteractConfig.Get(_data, interactionId) is not { } interaction) return 0;
+        int statusId = (int)interaction.StatusId, seat = (int)interaction.StatusLocation - 1;
         var state = new Active(new Anchor(actorUid, s.SceneEntry, npcId), interactionId, statusId, 3, seat, Scripted: true, Token: ++_seatToken);
         int[] seats = VehicleSeats(state);
         if (seat < 0 || seat >= seats.Length || _data.Row("VehicleSeatConfig", seats[seat]) == null || !SeatFree(s, actorUid, seat)) return 0;
