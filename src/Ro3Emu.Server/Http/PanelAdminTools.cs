@@ -22,12 +22,12 @@ public sealed partial class PanelAdminTools(AccountStore accounts, RoleStore rol
     private Task<bool> AuditAsync(string admin, string action, string target, string detail) =>
         accounts.WriteAsync<bool>(new AdminAuditWritePlan(Now, admin, action, target, detail));
 
-    public IReadOnlyList<PanelItem> FindItems(string query, int limit)
+    public IReadOnlyList<PanelItemChoice> FindItems(string query, int limit)
     {
         if (query.Length == 0) return [];
         if (long.TryParse(query, NumberStyles.None, CultureInfo.InvariantCulture, out long id))
-            return ItemConfig.Get(data, id) == null ? [] : [new PanelItem(id, data.ItemName(id))];
-        return [.. data.FindItems(query).Take(limit).Select(i => new PanelItem(i.Id, i.Name))];
+            return ItemConfig.Get(data, id) == null ? [] : [new PanelItemChoice(id, data.ItemName(id))];
+        return [.. data.FindItems(query).Take(limit).Select(i => new PanelItemChoice(i.Id, i.Name))];
     }
 
     /// <summary>The rewards as "2x Name" text, refusing ids the item table does not have.</summary>

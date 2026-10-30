@@ -8,7 +8,7 @@ namespace Ro3Emu.Panel;
 public interface IPanelAdminTools
 {
     /// <summary>Items whose id or English name matches <paramref name="query"/>, best first (mail and gift code rewards).</summary>
-    IReadOnlyList<PanelItem> FindItems(string query, int limit);
+    IReadOnlyList<PanelItemChoice> FindItems(string query, int limit);
 
     /// <summary>The recipients a mail to <paramref name="target"/> would reach, and a few of their names.</summary>
     Task<PanelMailRecipients> MailRecipientsAsync(PanelMailTarget target);
@@ -52,7 +52,7 @@ public interface IPanelAdminTools
 /// the panel answers 400 with its message.</summary>
 public sealed class PanelRefusalException(string message) : Exception(message);
 
-public sealed record PanelItem(long Id, string Name);
+public sealed record PanelItemChoice(long Id, string Name);
 
 /// <param name="Kind">character (one, by name), account (all of an account's characters) or everyone.</param>
 /// <param name="MinLevel">Everyone: only characters at this base level or above.</param>
