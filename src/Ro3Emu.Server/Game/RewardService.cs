@@ -2,6 +2,7 @@ using System.Text.Json;
 using Romsg;
 using Ro3Emu.Server.Accounts;
 using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 using Ro3Emu.Server.Maps;
 
 namespace Ro3Emu.Server.Game;
@@ -26,6 +27,7 @@ public sealed class RewardService
     private readonly Random _random = new();
     private Dictionary<int, long>? _expCorrection;
     private readonly DropAttenuation _attenuation;
+    private readonly FieldExpRule[] _fieldExp; // FieldExpRates (inferred), empty unless an operator set it
 
     /// <summary>Field AFK selects the enhanced _iDrop table only for qualified ordinary field kills.
     /// Other kills use environment 0, preserving ordinary rewards (localization 10960000077; mapping inferred).</summary>
@@ -38,8 +40,10 @@ public sealed class RewardService
     /// <summary>Monster Hunt: its kill counters join the kill's own transaction, after the AFK child (MonsterHuntService).</summary>
     internal Action<GameSession, MonsterUnit, RewardSettlement>? StageHuntKill { get; set; }
 
-    public RewardService(CombatService combat, CharacterService character, TeamService teams, GameData data, ILogger<RewardService> log)
+    public RewardService(CombatService combat, CharacterService character, TeamService teams, GameData data, ILogger<RewardService> log,
+        Microsoft.Extensions.Options.IOptions<ServerOptions>? options = null)
     {
+        _fieldExp = FieldExpRates.Valid(options?.Value);
         this._character = character;
         this._teams = teams;
         this._data = data;
@@ -171,10 +175,15 @@ public sealed class RewardService
             long gap = player.Progress!.Level - monster.Template.Level;
             baseExp = baseExp * Correction((int)Math.Clamp(gap, -200, 200)) / 10000;
             baseExp = Math.Max(1, baseExp * _teams.ExpBonus(player) / 10000);
+            baseExp = ScaleFieldExp(monster.Template.NpcId, player.Progress!.Level, baseExp);
         }
         // BaseExpAddConfig catch-up below the server level raises Base EXP only (CharacterService.LevelRules).
         return (items, _character.WithPursueBonus(player.Progress!.Level, baseExp), baseExp);
     }
+
+    /// <summary>FieldExpRates (inferred): an open-field monster (NPCConfig._iWildMonsters 1) pays the rate of the killer's level.</summary>
+    internal long ScaleFieldExp(int npcId, long level, long exp) =>
+        _fieldExp.Length > 0 && NPCConfig.Get(_data, npcId)?.WildMonsters == 1 ? FieldExpRates.Scale(_fieldExp, level, exp) : exp;
 
     private async Task KilledAsync(GameSession player, MonsterUnit monster)
     {
