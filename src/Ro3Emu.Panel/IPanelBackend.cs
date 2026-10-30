@@ -7,7 +7,7 @@ namespace Ro3Emu.Panel;
 /// change the panel makes goes through the running server: a ban kicks the player at once, and nothing is written
 /// into the database behind the server's back. The panel itself holds no game state.
 /// </summary>
-public interface IPanelBackend
+public partial interface IPanelBackend
 {
     /// <summary>The server's name and version, and when it started.</summary>
     PanelServerInfo Info { get; }

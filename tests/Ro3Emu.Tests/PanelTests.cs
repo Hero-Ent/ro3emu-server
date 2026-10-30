@@ -287,6 +287,155 @@ public sealed class PanelTests : IAsyncLifetime
         Assert.True(character.GetProperty("level").GetInt32() >= 1);
     }
 
+    [Fact]
+    public async Task TheItemDatabaseFindsItemsAndShowsTheirStatsDropsAndShops()
+    {
+        using var anonymous = new PanelBrowser(_panel);
+        Assert.Equal(HttpStatusCode.OK, (await anonymous.Http.GetAsync("/items/3990001")).StatusCode);
+        var found = await anonymous.GetJsonAsync("/api/items?q=synthetic");
+        Assert.Equal(["Synthetic Blade", "Synthetic Jellopy"], found.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("name").GetString()));
+        Assert.Contains(found.GetProperty("qualities").EnumerateArray(), q => q.GetProperty("name").GetString() == "Purple");
+        // Unnamed rows of the fixture are not listed; filters narrow by type, quality and level; an id finds its item.
+        Assert.Equal(2, (await anonymous.GetJsonAsync("/api/items")).GetProperty("total").GetInt32());
+        Assert.Equal("Synthetic Blade", Assert.Single((await anonymous.GetJsonAsync("/api/items?type=5&quality=4&min=20")).GetProperty("items")
+            .EnumerateArray()).GetProperty("name").GetString());
+        Assert.Equal(0, (await anonymous.GetJsonAsync("/api/items?q=synthetic&max=10&type=5")).GetProperty("total").GetInt32());
+        Assert.Equal(3990001, Assert.Single((await anonymous.GetJsonAsync("/api/items?q=3990001")).GetProperty("items").EnumerateArray())
+            .GetProperty("id").GetInt64());
+
+        var jellopy = await anonymous.GetJsonAsync("/api/items/3990001");
+        Assert.Equal("A sticky test drop. Worth 5 Zeny.", jellopy.GetProperty("description").GetString());
+        Assert.Equal("Exchange", jellopy.GetProperty("trade").GetString());
+        var drop = Assert.Single(jellopy.GetProperty("droppedBy").EnumerateArray());
+        Assert.Equal("Synthetic Poring", drop.GetProperty("monster").GetString());
+        // Slot 1 (50 %, its only row) and slot 2 (100 %, weight 3 of 4): 1 - 0.5 x 0.25 per kill.
+        Assert.Equal(0.875, drop.GetProperty("chance").GetDouble(), 6);
+        Assert.Equal(3, drop.GetProperty("max").GetInt32());
+        var shop = Assert.Single(jellopy.GetProperty("shops").EnumerateArray());
+        Assert.Equal("Test Shop", shop.GetProperty("shop").GetString());
+        Assert.Equal(25, shop.GetProperty("price").GetInt64());
+
+        var blade = await anonymous.GetJsonAsync("/api/items/3990002");
+        Assert.Equal("Purple", blade.GetProperty("item").GetProperty("qualityName").GetString());
+        Assert.Equal("One-Handed Sword", blade.GetProperty("item").GetProperty("subType").GetString());
+        Assert.Equal("Not tradeable", blade.GetProperty("trade").GetString());
+        var stat = Assert.Single(blade.GetProperty("stats").EnumerateArray());
+        Assert.Equal(("PATK", "+420-570"), (stat.GetProperty("name").GetString(), stat.GetProperty("value").GetString()));
+        Assert.Equal(0.25, Assert.Single(blade.GetProperty("droppedBy").EnumerateArray()).GetProperty("chance").GetDouble(), 6);
+        Assert.Equal(HttpStatusCode.NotFound, (await anonymous.Http.GetAsync("/api/items/1000000")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await anonymous.Http.GetAsync("/api/items/x")).StatusCode);
+    }
+
+    [Fact]
+    public async Task TheMonsterDatabaseShowsTheServersHpDropsAndSpawns()
+    {
+        using var anonymous = new PanelBrowser(_panel);
+        Assert.Equal(HttpStatusCode.OK, (await anonymous.Http.GetAsync("/monsters/16320002")).StatusCode);
+        var found = Assert.Single((await anonymous.GetJsonAsync("/api/monsters?q=poring&element=4&rank=mini")).GetProperty("monsters").EnumerateArray());
+        Assert.Equal(16320002, found.GetProperty("id").GetInt64());
+        Assert.Equal(0, (await anonymous.GetJsonAsync("/api/monsters?rank=mvp")).GetProperty("total").GetInt32());
+
+        var poring = await anonymous.GetJsonAsync("/api/monsters/16320002");
+        var monster = poring.GetProperty("monster");
+        // MonsterService's own numbers: AttriMonsterConfig 900002 HP 2000 x _kAttriScale 15000 / 10000.
+        Assert.Equal(3000, monster.GetProperty("hp").GetInt64());
+        Assert.Equal(12, monster.GetProperty("level").GetInt32());
+        Assert.Equal(("Fire", "Brute", "Medium", "mini"), (monster.GetProperty("elementName").GetString(), monster.GetProperty("race").GetString(),
+            monster.GetProperty("size").GetString(), monster.GetProperty("rank").GetString()));
+        var stats = poring.GetProperty("stats").EnumerateArray().ToDictionary(s => s.GetProperty("name").GetString()!, s => s.GetProperty("value").GetString());
+        Assert.Equal("150", stats["PATK"]);
+        Assert.Equal("13", stats["HIT"]); // level + 1 without an attribute of its own
+        var drops = poring.GetProperty("drops").EnumerateArray().ToList();
+        Assert.Equal(["Synthetic Jellopy", "Synthetic Blade"], drops.Select(d => d.GetProperty("item").GetString()));
+        Assert.Equal(0.875, drops[0].GetProperty("chance").GetDouble(), 6);
+        var spawn = Assert.Single(poring.GetProperty("spawns").EnumerateArray());
+        Assert.Equal(("Synthetic Field", 4, 30), (spawn.GetProperty("map").GetString(), spawn.GetProperty("count").GetInt32(),
+            spawn.GetProperty("respawnSeconds").GetInt32()));
+        Assert.Equal(HttpStatusCode.NotFound, (await anonymous.Http.GetAsync("/api/monsters/16320001")).StatusCode); // no name
+    }
+
+    [Fact]
+    public async Task TheEconomyLogIsForAdminsAndFiltersByAccountCharacterItemAndDay()
+    {
+        Assert.Equal(0, await SdkLoginAsync(_host, Admin, "pw-admin"));
+        await using (var bot = await _host.InWorldAsync("Trader")) { }
+        using var admin = new PanelBrowser(_panel);
+        Assert.Equal(HttpStatusCode.OK, (await admin.LoginAsync(Admin, "pw-admin")).StatusCode);
+        // Entering the world may itself record a starter kit; the rows below come on top.
+        int accountBefore = (await admin.GetJsonAsync("/api/admin/economy?account=trader")).GetProperty("total").GetInt32();
+        var zenyBefore = await admin.GetJsonAsync("/api/admin/economy?asset=1");
+        long role;
+        var connection = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+        { DataSource = Path.Combine(_host.DataDir, "ro3emu.db"), Pooling = false, DefaultTimeout = 10 };
+        using (var db = new Microsoft.Data.Sqlite.SqliteConnection(connection.ToString()))
+        {
+            db.Open();
+            using (var read = db.CreateCommand())
+            {
+                read.CommandText = "SELECT id FROM role WHERE name='Trader'";
+                role = (long)read.ExecuteScalar()!;
+            }
+            // Two receipts of the trader's account, one a day earlier; the second pays 25 Zeny (item 1) for 1 Jellopy.
+            long day = DateTimeOffset.Parse("2026-10-20T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture).ToUnixTimeMilliseconds();
+            var legs = new (string Op, long At, long Asset, long Delta, int Reason)[]
+            {
+                ("panel-op-1", day, 3990001, 3, 2), ("panel-op-2", day + 86_400_000, 1, -25, 10), ("panel-op-2", day + 86_400_000, 3990001, 1, 9),
+            };
+            int seq = 1_000_000;
+            foreach (var op in legs.Select(l => (l.Op, l.At)).Distinct())
+            {
+                using var insert = db.CreateCommand();
+                insert.CommandText = "INSERT INTO operation_receipt(operation_id,realm_id,commit_seq,actor_account,actor_role,command_kind," +
+                    "request_fingerprint,intent_hash,intent_payload,source_key,recorded_utc_ms,effective_utc_ms,outcome,child_receipts," +
+                    "before_revisions,after_revisions,leg_count) VALUES($op,'test',$seq,'trader',$role,'npc-shop-buy','','',X'',$op,$at,$at,X'',X'','','',2)";
+                insert.Parameters.AddWithValue("$op", op.Op);
+                insert.Parameters.AddWithValue("$seq", ++seq);
+                insert.Parameters.AddWithValue("$role", role);
+                insert.Parameters.AddWithValue("$at", op.At);
+                insert.ExecuteNonQuery();
+            }
+            int leg = 0;
+            foreach (var l in legs)
+            {
+                using var insert = db.CreateCommand();
+                insert.CommandText = "INSERT INTO economy_entry(commit_seq,operation_id,leg_no,recorded_utc_ms,effective_utc_ms,owner_kind,owner_id," +
+                    "compartment_kind,compartment_key,instance_key,asset_kind,asset_id,asset_epoch,delta,reason_code,leg_kind,edge_no,source_key) " +
+                    "VALUES(0,$op,$leg,$at,$at,1,$owner,1,'bag','',$kind,$asset,'',$delta,$reason,1,0,$op)";
+                insert.Parameters.AddWithValue("$op", l.Op);
+                insert.Parameters.AddWithValue("$leg", ++leg);
+                insert.Parameters.AddWithValue("$at", l.At);
+                insert.Parameters.AddWithValue("$owner", role.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                insert.Parameters.AddWithValue("$kind", l.Asset == 1 ? 2 : 1);
+                insert.Parameters.AddWithValue("$asset", l.Asset);
+                insert.Parameters.AddWithValue("$delta", l.Delta);
+                insert.Parameters.AddWithValue("$reason", l.Reason);
+                insert.ExecuteNonQuery();
+            }
+        }
+
+        using var player = new PanelBrowser(_panel);
+        Assert.Equal(HttpStatusCode.OK, (await player.LoginAsync("trader", "pw")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await player.Http.GetAsync("/api/admin/economy")).StatusCode);
+        using var anonymous = new PanelBrowser(_panel);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.Http.GetAsync("/api/admin/economy")).StatusCode);
+
+        var mine = await admin.GetJsonAsync("/api/admin/economy?account=TRADER");
+        Assert.Equal(accountBefore + 3, mine.GetProperty("total").GetInt32());
+        var newest = mine.GetProperty("entries")[0];
+        Assert.Equal(("Trader", "NPC shop goods", "Synthetic Jellopy", 1L), (newest.GetProperty("owner").GetString(),
+            newest.GetProperty("reason").GetString(), newest.GetProperty("asset").GetString(), newest.GetProperty("delta").GetInt64()));
+
+        var jellopy = await admin.GetJsonAsync("/api/admin/economy?character=trader&asset=jellopy");
+        Assert.Equal((2, 4L, 0L), (jellopy.GetProperty("total").GetInt32(), jellopy.GetProperty("in").GetInt64(), jellopy.GetProperty("out").GetInt64()));
+        var zeny = await admin.GetJsonAsync("/api/admin/economy?asset=1");
+        Assert.Equal((zenyBefore.GetProperty("total").GetInt32() + 1, zenyBefore.GetProperty("out").GetInt64() - 25),
+            (zeny.GetProperty("total").GetInt32(), zeny.GetProperty("out").GetInt64()));
+        var firstDay = await admin.GetJsonAsync("/api/admin/economy?account=trader&from=2026-10-20&to=2026-10-20");
+        Assert.Equal("Monster drop", Assert.Single(firstDay.GetProperty("entries").EnumerateArray()).GetProperty("reason").GetString());
+        Assert.Equal(0, (await admin.GetJsonAsync("/api/admin/economy?account=nobody")).GetProperty("total").GetInt32());
+        Assert.Equal(0, (await admin.GetJsonAsync("/api/admin/economy?asset=no-such-item")).GetProperty("total").GetInt32());
+    }
+
     private static async Task<int> SdkLoginAsync(SyntheticHost host, string identity, string credential)
     {
         using var client = new HttpClient();
