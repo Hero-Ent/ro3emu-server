@@ -10,11 +10,29 @@
   --q6:var(--red-ink); --q6-bg:var(--red-bg);
 }
 
-/* a neat placeholder instead of game art: the name's initial on its quality's tint */
+/* pictures from the operator's own client (/img/), and the placeholder without one: the name's initial on a tint */
 .glyph{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:var(--r1);flex:none;
   background:var(--grey-bg);color:var(--muted);font:700 var(--t-xs)/1 var(--body);text-transform:uppercase}
 .glyph.lg{width:40px;height:40px;border-radius:var(--r2);font-size:var(--t-lg)}
-.named{display:inline-flex;align-items:center;gap:var(--s2);min-width:0;font-weight:700}
+.glyph.xl{width:56px;height:56px;border-radius:var(--r2);font-size:var(--t-xl)}
+.glyph.xxl{width:128px;height:128px;border-radius:var(--r3);font-size:48px}
+.thumb{display:inline-block;width:28px;height:28px;margin:-2px 0;flex:none;object-fit:contain;border-radius:var(--r1)}
+.thumb.lg{width:40px;height:40px}
+.thumb.xl{width:56px;height:56px;margin:0;border-radius:var(--r2)}
+.thumb.xxl{width:128px;height:128px;margin:0;border-radius:var(--r3)}
+.thumb.cls{width:22px;height:22px;margin:0}
+.glyph.cls{width:22px;height:22px;border-radius:50%}
+.thumb.map{width:28px;height:28px;background:var(--surface-sub)}
+.thumb.fill{width:100%;height:100%;margin:0;border-radius:0}
+.glyph.fill{width:56px;height:56px}
+.picture{display:block;max-width:100%;height:auto;margin:0 auto;border-radius:var(--r2)}
+.portrait{display:flex;justify-content:center;padding-bottom:var(--s3);margin-bottom:var(--s3);border-bottom:1px solid var(--line-soft)}
+.variants{display:block;font-size:var(--t-xs);color:var(--muted);overflow-wrap:anywhere}
+.set-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:var(--s1) var(--s3);
+  padding:var(--s3) var(--s4) var(--s2);font-size:var(--t-sm)}
+.set-head .mono{font-size:var(--t-xs);color:var(--muted)}
+.named{display:inline-flex;align-items:center;gap:var(--s2);min-width:0;max-width:100%;font-weight:700}
+.named.plain{font-weight:inherit}
 .named span{overflow:hidden;text-overflow:ellipsis}
 a.named:hover span{text-decoration:underline}
 .q1{color:var(--q1)} .glyph.q1{background:var(--q1-bg)}
@@ -43,12 +61,23 @@ a.named:hover span{text-decoration:underline}
 .filters > input.input{width:auto;flex:1 1 150px;min-width:0}
 .kpis+.card{margin-top:var(--gutter)}
 
+/* the map tiles */
+.map-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(176px,1fr));gap:var(--s3);margin:0;padding:0;list-style:none}
+.map-tile{display:flex;flex-direction:column;gap:var(--s1);height:100%;padding:var(--s2);border:1px solid var(--line-soft);border-radius:var(--r2);
+  color:inherit;text-decoration:none}
+.map-tile:hover,.map-tile:focus-visible{border-color:var(--line);background:var(--hover)}
+.map-tile b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.map-art{display:grid;place-items:center;aspect-ratio:1;border-radius:var(--r1);background:var(--surface-sub);overflow:hidden}
+.picture.map{background:var(--surface-sub);padding:var(--s2)}
+
 /* ledger deltas */
 .pos{color:var(--green-ink)} .neg{color:var(--red-ink)}
 .sub{display:block;font-size:var(--t-xs);color:var(--muted);font-weight:500}
 .desc{white-space:pre-line;color:var(--ink-2);max-width:72ch}
 
 @media (max-width:600px){
+  .map-tiles{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s2)}
+  .filters .search{flex-basis:100%;min-width:0}
   .filters select.input{flex:1 1 40%;min-width:0}
   .filters .lv{flex:1 1 100%}
   .filters .lv .input{flex:1}

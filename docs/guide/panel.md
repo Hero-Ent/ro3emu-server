@@ -6,7 +6,7 @@ the player at once, and the panel never writes the database behind the server's 
 
 | Who | Pages |
 |---|---|
-| everyone | Home (status, version, players online, uptime, accounts and characters; latest news, who's online, top 5 by level) · Who's online · Rankings · News · Items · Monsters |
+| everyone | Home (status, version, players online, uptime, accounts and characters; latest news, who's online, top 5 by level) · Who's online · Rankings · News · Items · Monsters · Maps |
 | a player, logged in with the game account | My account (created, last played, characters with class, level, map and guild) · password change |
 | an admin | Dashboard (the server's own metrics) · Accounts (search, detail, ban and unban) · Audit log · Mail & rewards · Gift codes · GM console · News editor · Broadcasts · Economy log |
 
@@ -26,6 +26,7 @@ It is on by default, on port **5381**, next to the server's HTTP port 5380:
 | `Ro3Emu:Panel:TrustedProxies` | none | proxy addresses whose `X-Forwarded-For` and `X-Forwarded-Proto` are believed (see below) |
 | `Ro3Emu:Panel:SessionHours` | `12` | hours a login stays valid without use |
 | `Ro3Emu:Panel:Registration` | `true` | `false` hides the sign-up page; accounts are then created only by a first login in the game |
+| `Ro3Emu:Panel:ImageDir` | `icons/` of the game data | the pictures the pages show (see [Pictures](#pictures)) |
 
 Set them in `appsettings.json` under `Ro3Emu`, as environment variables (`Ro3Emu__Panel__Port=8081`) or as
 arguments (`--Ro3Emu:Panel:Port=8081`). The startup log says `Web panel on http://...`.
@@ -84,14 +85,46 @@ Each tool is a page of the admin area's sidebar; each change is written to the a
   the message GM replies use). It can repeat every few minutes, up to 100 more times; repeats are kept in the
   server's memory (a restart ends them) and can be cancelled.
 
-## Items, monsters and the economy log
+## Items, monsters, maps and the economy log
 
-**Items** and **Monsters** are public databases built from the server's own game data and English texts the first
-time someone opens them, then kept in memory. An item shows its quality, type, level, trade rule, stats (equipment
+**Items**, **Monsters** and **Maps** are public databases built from the server's own game data and English texts the
+first time someone opens them, then kept in memory. An item shows its quality, type, level, trade rule, stats (equipment
 and cards), the monsters that drop it and the shops that sell it. A monster shows the HP and stats the server gives it
 (AttriMonsterConfig scaled by the NPC's `_kAttriScale`, as `MonsterService` does), its drops with the chance per kill
 that at least one drops (from the pools `RewardService` rolls, outside bonus time and without a player's level and
-class limits), and the maps whose scene editor spawns it, with how many stay alive and the respawn.
+class limits), and the maps whose scene editor spawns it, with how many stay alive and the respawn. A map shows its
+picture, the monsters that spawn there with their levels, and the characters on it now.
+
+The client's tables hold many rows of one thing: an item copied under another id with only its sort order changed, a
+monster copied for another map, quest or scene. Rows a player cannot tell apart are one entry: items with the same
+name, type, quality, level, description, stats, trade rule, stack and classes; monsters with the same name, level,
+HP, stats, speed, element, race, size and rank. The list shows the first id; the page lists every id in a small line
+and merges what the rows drop, sell and spawn. When the rows of a monster drop differently, the page shows one drop
+list per set, each saying where its rows spawn. Rows still named `TBD`, or with a `@{n}` placeholder the row gives no
+value for, are left out of the lists; searching for their id still finds them.
+
+## Pictures
+
+The item, monster, class and map pictures come from **your own game client**, the same way the game data does:
+RO3Emu ships none. The data export (`RO3Emu.exe` on first start, `RO3Emu.exe export <game> <data>`, `server.sh`)
+decodes them from the client's Unity bundles into `icons/` of the data folder:
+
+| Folder | From | What |
+|---|---|---|
+| `icons/items/` | ItemConfig `_kIcon`, `_kPic` | bag icons (128 px) and card pictures (halved to at most 400 px) |
+| `icons/monsters/` | NPCConfig `_kHeadIcon` of the monster rows | portraits (128 px) |
+| `icons/classes/` | JobConfig `_kIcon`, `_kBigIcon` | class emblems |
+| `icons/maps/` | MapConfig `_kBgImage[0]` | the map window's outline (halved to 512 px) |
+
+About 1 800 PNG files, 110 MB, in about 20 seconds; a later export decodes only what a client update changed
+(`icons/index.json` records the client file each picture came from) and removes what the client dropped.
+`--no-icons` skips them. A server host that downloads only what it needs (`RO3Emu.exe update --server-files`) also
+gets the bundles the pictures come from, about 540 MB.
+
+The panel serves them under `/img/<folder>/<file>`, only the export's own folders and file names. The pages ask for
+`/img/...?v=<hash of the client file>`, so a picture can be cached for a year and a client update still shows the
+new one. Without the folder (an export with `--no-icons`, or one made before RO3Emu had pictures) every page still
+works and draws the first letter of the name instead; the next `RO3Emu.exe start` without `--no-icons` adds them.
 
 The admin's **Economy log** reads the server's ledger (`economy_entry` with its `operation_receipt`) on the read
 pool, newest first: filter by account, character, item (an id, or part of a name) and a range of UTC days. The totals
@@ -166,6 +199,12 @@ proxy's.
 Both are created by the server at startup like its other tables and are part of every backup.
 
 ## For developers
+
+The pictures are decoded in `src/Ro3Emu.DataExport` (`IconExport`, `UnityImages`, `Png`): the VFS index maps a
+sprite's file name to its bundle; the image is a texture of that name, a sprite over a texture of its bundle, or a
+sprite packed into a sprite atlas (`<tag>.spriteatlasv2`, whose render data names the atlas texture and the
+rectangle). Bundles are read with AssetsTools.NET and BC1/BC3/BC7 textures decoded with AssetRipper.TextureDecoder
+(both MIT); the server itself only serves the files.
 
 `src/Ro3Emu.Panel` holds the website: the static files (`www/`, embedded in the assembly; the fonts are the
 launcher's; the colours, spacing scale, type scale and components are the tokens at the top of `app.css`), the JSON API under `/api/` (`PanelSite`), sessions and CSRF. It knows nothing of the game: everything

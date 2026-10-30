@@ -52,7 +52,7 @@ public interface IPanelAdminTools
 /// the panel answers 400 with its message.</summary>
 public sealed class PanelRefusalException(string message) : Exception(message);
 
-public sealed record PanelItemChoice(long Id, string Name);
+public sealed record PanelItemChoice(long Id, string Name, string Icon = "");
 
 /// <param name="Kind">character (one, by name), account (all of an account's characters) or everyone.</param>
 /// <param name="MinLevel">Everyone: only characters at this base level or above.</param>

@@ -295,8 +295,13 @@ public sealed class PanelTests : IAsyncLifetime
         var found = await anonymous.GetJsonAsync("/api/items?q=synthetic");
         Assert.Equal(["Synthetic Blade", "Synthetic Jellopy"], found.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("name").GetString()));
         Assert.Contains(found.GetProperty("qualities").EnumerateArray(), q => q.GetProperty("name").GetString() == "Purple");
-        // Unnamed rows of the fixture are not listed; filters narrow by type, quality and level; an id finds its item.
+        // Unnamed rows of the fixture are not listed, nor a copy of an item under another id (3990003 is 3990001 but for its
+        // sort order) nor a "TBD" row; filters narrow by type, quality and level; an id finds its item.
         Assert.Equal(2, (await anonymous.GetJsonAsync("/api/items")).GetProperty("total").GetInt32());
+        Assert.Equal("TBD", Assert.Single((await anonymous.GetJsonAsync("/api/items?q=3990004")).GetProperty("items").EnumerateArray())
+            .GetProperty("name").GetString());
+        Assert.Equal([3990001L, 3990003L], (await anonymous.GetJsonAsync("/api/items/3990003")).GetProperty("variants").EnumerateArray()
+            .Select(v => v.GetInt64()));
         Assert.Equal("Synthetic Blade", Assert.Single((await anonymous.GetJsonAsync("/api/items?type=5&quality=4&min=20")).GetProperty("items")
             .EnumerateArray()).GetProperty("name").GetString());
         Assert.Equal(0, (await anonymous.GetJsonAsync("/api/items?q=synthetic&max=10&type=5")).GetProperty("total").GetInt32());
@@ -305,6 +310,9 @@ public sealed class PanelTests : IAsyncLifetime
 
         var jellopy = await anonymous.GetJsonAsync("/api/items/3990001");
         Assert.Equal("A sticky test drop. Worth 5 Zeny.", jellopy.GetProperty("description").GetString());
+        // Without the export's pictures the pages get no address and draw a letter.
+        Assert.Equal("", jellopy.GetProperty("item").GetProperty("icon").GetString());
+        Assert.Equal(HttpStatusCode.NotFound, (await anonymous.Http.GetAsync("/img/items/item_3990001.png")).StatusCode);
         Assert.Equal("Exchange", jellopy.GetProperty("trade").GetString());
         var sources = jellopy.GetProperty("droppedBy").EnumerateArray().ToList();
         var drop = Assert.Single(sources, d => d.GetProperty("kind").GetString() == "");
@@ -335,6 +343,7 @@ public sealed class PanelTests : IAsyncLifetime
     {
         using var anonymous = new PanelBrowser(_panel);
         Assert.Equal(HttpStatusCode.OK, (await anonymous.Http.GetAsync("/monsters/16320002")).StatusCode);
+        // 16320004 is the same monster for a player (a copy without the drop row): one entry, its first id.
         var found = Assert.Single((await anonymous.GetJsonAsync("/api/monsters?q=poring&element=4&rank=mini")).GetProperty("monsters").EnumerateArray());
         Assert.Equal(16320002, found.GetProperty("id").GetInt64());
 
@@ -354,6 +363,14 @@ public sealed class PanelTests : IAsyncLifetime
         var spawn = Assert.Single(poring.GetProperty("spawns").EnumerateArray());
         Assert.Equal(("Synthetic Field", 4, 30), (spawn.GetProperty("map").GetString(), spawn.GetProperty("count").GetInt32(),
             spawn.GetProperty("respawnSeconds").GetInt32()));
+        // The copies drop differently: one drop list per set, each with where its rows spawn.
+        Assert.Equal([16320002L, 16320004L], poring.GetProperty("variants").EnumerateArray().Select(v => v.GetInt64()));
+        var sets = poring.GetProperty("dropSets").EnumerateArray().ToList();
+        Assert.Equal(2, sets.Count);
+        Assert.Equal(("Synthetic Field", 2), (Assert.Single(sets[0].GetProperty("maps").EnumerateArray()).GetString(), sets[0].GetProperty("drops").GetArrayLength()));
+        Assert.Equal((16320004L, 0, 0), (Assert.Single(sets[1].GetProperty("ids").EnumerateArray()).GetInt64(), sets[1].GetProperty("maps").GetArrayLength(),
+            sets[1].GetProperty("drops").GetArrayLength()));
+        Assert.Equal(16320004, (await anonymous.GetJsonAsync("/api/monsters/16320004")).GetProperty("monster").GetProperty("id").GetInt64());
         Assert.Equal(HttpStatusCode.NotFound, (await anonymous.Http.GetAsync("/api/monsters/16320001")).StatusCode); // no name
 
         // A field MVP pays out through MvpService's awards (MVPConfig -> MultiverseGroupConfig -> AwardConfig -> pool), by
@@ -368,6 +385,63 @@ public sealed class PanelTests : IAsyncLifetime
         Assert.Equal(("Synthetic Field", 3600), (Assert.Single(mvp.GetProperty("spawns").EnumerateArray()).GetProperty("map").GetString(),
             mvp.GetProperty("spawns")[0].GetProperty("respawnSeconds").GetInt32()));
         Assert.Equal(1, (await anonymous.GetJsonAsync("/api/monsters?rank=mvp")).GetProperty("total").GetInt32());
+    }
+
+    [Fact]
+    public async Task TheMapsListTheirMonstersOnceAndTheirLevels()
+    {
+        using var anonymous = new PanelBrowser(_panel);
+        Assert.Equal(HttpStatusCode.OK, (await anonymous.Http.GetAsync("/maps/10112")).StatusCode);
+        // 10111 has no name: not a map the panel lists.
+        var map = Assert.Single((await anonymous.GetJsonAsync("/api/maps")).GetProperty("maps").EnumerateArray());
+        Assert.Equal(("Synthetic Field", 12, 35, 2, ""), (map.GetProperty("name").GetString(), map.GetProperty("minLevel").GetInt32(),
+            map.GetProperty("maxLevel").GetInt32(), map.GetProperty("monsters").GetInt32(), map.GetProperty("image").GetString()));
+        var detail = await anonymous.GetJsonAsync("/api/maps/10112");
+        Assert.Equal(["Synthetic Poring", "Synthetic Angeling"], detail.GetProperty("monsters").EnumerateArray()
+            .Select(m => m.GetProperty("monster").GetProperty("name").GetString()));
+        Assert.Equal(0, detail.GetProperty("players").GetArrayLength());
+        Assert.Equal(HttpStatusCode.NotFound, (await anonymous.Http.GetAsync("/api/maps/10111")).StatusCode);
+    }
+
+    /// <summary>
+    /// The export's pictures (Ro3Emu:Panel:ImageDir, here a folder of invented files): an address with the source's hash for
+    /// the ones index.json lists, served as PNG for a year; nothing outside the export's own folders and names.
+    /// </summary>
+    [Fact]
+    public async Task PicturesOfTheExportAreServedWithTheirVersionAndMissingOnesAreNot()
+    {
+        var images = Directory.CreateTempSubdirectory("ro3emu-panel-img-");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(images.FullName, "items"));
+            Directory.CreateDirectory(Path.Combine(images.FullName, "monsters"));
+            byte[] png = [0x89, (byte)'P', (byte)'N', (byte)'G', 1, 2, 3];
+            File.WriteAllBytes(Path.Combine(images.FullName, "items", "item_3990001.png"), png);
+            File.WriteAllBytes(Path.Combine(images.FullName, "monsters", "headicon_monster_synthetic.png"), png);
+            File.WriteAllText(Path.Combine(images.FullName, "secret.txt"), "no");
+            File.WriteAllText(Path.Combine(images.FullName, "index.json"),
+                """{"items/item_3990001.png":{"Hash":"1234abcd5678"},"monsters/headicon_monster_synthetic.png":{"Hash":"99","Atlas":"x.spriteatlasv2","AtlasHash":"777777"}}""");
+            var (host, panel) = await StartAsync(o => o.Panel.ImageDir = images.FullName);
+            await using var _ = host;
+            using var anonymous = new PanelBrowser(panel);
+
+            var jellopy = (await anonymous.GetJsonAsync("/api/items/3990001")).GetProperty("item");
+            Assert.Equal("/img/items/item_3990001.png?v=1234abcd", jellopy.GetProperty("icon").GetString());
+            Assert.Equal("", (await anonymous.GetJsonAsync("/api/items/3990002")).GetProperty("item").GetProperty("icon").GetString());
+            Assert.Equal("/img/monsters/headicon_monster_synthetic.png?v=997777",
+                (await anonymous.GetJsonAsync("/api/monsters/16320002")).GetProperty("monster").GetProperty("icon").GetString());
+
+            var image = await anonymous.Http.GetAsync(jellopy.GetProperty("icon").GetString());
+            Assert.Equal(HttpStatusCode.OK, image.StatusCode);
+            Assert.Equal("image/png", image.Content.Headers.ContentType?.MediaType);
+            Assert.Equal(png, await image.Content.ReadAsByteArrayAsync());
+            Assert.Contains("immutable", image.Headers.CacheControl?.ToString());
+            Assert.Equal("nosniff", image.Headers.GetValues("X-Content-Type-Options").Single());
+            foreach (string path in new[] { "/img/items/item_3990002.png", "/img/secret.txt", "/img/items/../secret.txt", "/img/items/%2e%2e%2fsecret.txt",
+                "/img/other/item_3990001.png", "/img/items/item_3990001.PNG" })
+                Assert.Equal(HttpStatusCode.NotFound, (await anonymous.Http.GetAsync(path)).StatusCode);
+        }
+        finally { images.Delete(recursive: true); }
     }
 
     [Fact]

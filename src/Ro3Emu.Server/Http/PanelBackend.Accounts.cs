@@ -36,7 +36,7 @@ public sealed partial class PanelBackend
         var ban = await accounts.ReadAsync<AccountBanRow?>(new AccountBanRowRead(row.Name, now));
         return new PanelAccount(row.Name, Created(row.CreatedUtc), Unix(row.LastLogin),
             [.. roles.Select(r => new PanelCharacter(r.Id, r.Name, ClassName(r.Career), r.Level, r.JobLevel, MapName(r.SceneEntry), r.Guild,
-                DateTimeOffset.FromUnixTimeSeconds(r.CreateTime), Unix(r.LastLoginTime), online.Contains(r.Id)))],
+                DateTimeOffset.FromUnixTimeSeconds(r.CreateTime), Unix(r.LastLoginTime), online.Contains(r.Id), ClassIcon(r.Career)))],
             ban == null ? null : new PanelBan(ban.Reason, DateTimeOffset.FromUnixTimeSeconds(ban.BannedUtc), Unix(ban.UntilUtc), ban.BannedBy));
     }
 

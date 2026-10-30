@@ -1,16 +1,25 @@
-// Shared pieces of the item and monster databases and the economy log (pages/items.js, monsters.js, economy.js),
-// built on app.js's helpers. No game art: an item or monster is drawn as the initial of its name on a tint.
+// Shared pieces of the item, monster and map databases and the economy log (pages/items.js, monsters.js, maps.js,
+// economy.js), built on app.js's helpers. Pictures come from the operator's own client (the data export's icons/
+// folder, served under /img/); RO3Emu ships none. Without one, an item or monster is the initial of its name on a tint.
 'use strict';
 
-/** The initial of a name on a tint: an item's quality (q1-q6) or a monster's rank. */
-function glyph(name, kind, large) {
+/** The initial of a name on a tint: an item's quality (q1-q6) or a monster's rank; size '', 'lg' or 'xl'. */
+function glyph(name, kind, size) {
   const letter = (String(name).match(/[\p{L}\p{N}]/u) || ['?'])[0];
-  return h('span', { class: 'glyph ' + (kind || '') + (large ? ' lg' : ''), 'aria-hidden': 'true' }, letter);
+  return h('span', { class: 'glyph ' + (kind || '') + (size ? ' ' + size : ''), 'aria-hidden': 'true' }, letter);
 }
 
-/** An item's name in its quality's colour, with its glyph; a link to its page unless plain. */
-function itemName(id, name, quality, plain) {
-  const content = [glyph(name, 'q' + quality), h('span', null, name)];
+/** The picture at src (an /img/ address from the server), or the glyph when there is none or it does not load. */
+function thumb(src, name, kind, size) {
+  if (!src) return glyph(name, kind, size);
+  const img = h('img', { class: 'thumb ' + (kind || '') + (size ? ' ' + size : ''), src, alt: '', loading: 'lazy', decoding: 'async' });
+  img.addEventListener('error', () => img.replaceWith(glyph(name, kind, size)), { once: true });
+  return img;
+}
+
+/** An item's name in its quality's colour, with its icon; a link to its page unless plain. */
+function itemName(id, name, quality, plain, iconSrc) {
+  const content = [thumb(iconSrc, name, 'q' + quality), h('span', null, name)];
   return plain ? h('span', { class: 'named q' + quality }, content)
     : link('/items/' + id, { class: 'named q' + quality }, content);
 }
@@ -18,8 +27,18 @@ function itemName(id, name, quality, plain) {
 const rankNames = { normal: 'Normal', mini: 'Mini boss', boss: 'Boss', mvp: 'MVP' };
 const rankChip = rank => rank && rank !== 'normal' ? chip(rank, rankNames[rank]) : null;
 
-function monsterName(id, name, rank) {
-  return link('/monsters/' + id, { class: 'named' }, glyph(name, rank !== 'normal' ? rank : ''), h('span', null, name));
+function monsterName(id, name, rank, iconSrc) {
+  return link('/monsters/' + id, { class: 'named' }, thumb(iconSrc, name, rank !== 'normal' ? rank : ''), h('span', null, name));
+}
+
+/** A map's name with its outline picture, linking to its page. */
+function mapName(id, name, image) {
+  return id ? link('/maps/' + id, { class: 'named' }, thumb(image, name, 'map'), h('span', null, name)) : h('span', null, name);
+}
+
+/** The game's other ids for the same entry, in one small line: "IDs 3084401 · 3084402". */
+function variantLine(ids) {
+  return ids && ids.length > 1 ? h('span', { class: 'variants mono' }, 'IDs ' + ids.join(' · ')) : null;
 }
 
 /** A chance per kill, 0 to 1, as a percentage with as many decimals as a rare drop needs. */

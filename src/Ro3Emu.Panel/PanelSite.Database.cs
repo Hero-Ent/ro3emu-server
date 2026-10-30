@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Http;
 namespace Ro3Emu.Panel;
 
 /// <summary>
-/// The public item and monster databases and the admin's economy log. Every number comes from the server
+/// The public item, monster and map databases and the admin's economy log. Every number comes from the server
 /// (<see cref="IPanelBackend"/>); the query string is clamped here before it reaches it.
 /// </summary>
 public sealed partial class PanelSite
@@ -17,6 +17,8 @@ public sealed partial class PanelSite
         Get("/api/items/{}", Access.Public, ItemAsync),
         Get("/api/monsters", Access.Public, FindMonstersAsync),
         Get("/api/monsters/{}", Access.Public, MonsterAsync),
+        Get("/api/maps", Access.Public, async _ => Reply.Ok(new { maps = await _backend.MapsAsync() })),
+        Get("/api/maps/{}", Access.Public, MapAsync),
         Get("/api/admin/economy", Access.Admin, EconomyAsync),
     ];
 
@@ -44,6 +46,10 @@ public sealed partial class PanelSite
     private async Task<Reply> MonsterAsync(Call call) =>
         long.TryParse(call.Args[0], NumberStyles.None, CultureInfo.InvariantCulture, out long id) && await _backend.MonsterAsync(id) is { } monster
             ? Reply.Ok(monster) : Reply.Error(StatusCodes.Status404NotFound, "There is no such monster.");
+
+    private async Task<Reply> MapAsync(Call call) =>
+        long.TryParse(call.Args[0], NumberStyles.None, CultureInfo.InvariantCulture, out long id) && await _backend.MapAsync(id) is { } map
+            ? Reply.Ok(map) : Reply.Error(StatusCodes.Status404NotFound, "There is no such map.");
 
     /// <summary>The ledger: account, character, item (an id or a name), and a range of days (UTC, both ends included).</summary>
     private async Task<Reply> EconomyAsync(Call call)

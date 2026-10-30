@@ -137,14 +137,14 @@ function densityToggle() {
 }
 try { document.body.dataset.density = localStorage.getItem('ro3p-density') || 'compact'; } catch { document.body.dataset.density = 'compact'; }
 
-/** Breadcrumb, page title and the actions row: the top of every page. */
-function pageHead({ crumbs, title, big, after, subtitle, meta, actions }) {
+/** Breadcrumb, page title (after a picture, art) and the actions row: the top of every page. */
+function pageHead({ crumbs, title, big, art, after, subtitle, meta, actions }) {
   return h('header', { class: 'page-head' },
     h('div', { class: 'titles' },
       crumbs && h('nav', { class: 'crumbs', 'aria-label': 'Breadcrumb' }, crumbs.map((c, i) => [
         i > 0 && h('span', { class: 'sep', 'aria-hidden': 'true' }, '/'),
         c.href ? link(c.href, null, c.label) : h('span', { 'aria-current': 'page' }, c.label)])),
-      h('div', { class: 'title-row' }, h('h1', { class: 'title' + (big ? ' big' : '') }, title), after),
+      h('div', { class: 'title-row' }, art, h('h1', { class: 'title' + (big ? ' big' : '') }, title), after),
       subtitle && h('p', { class: 'subtitle' }, subtitle),
       meta && h('dl', { class: 'meta' }, meta.map(([k, v]) => h('div', null, h('dt', null, k), h('dd', null, v))))),
     actions && h('div', { class: 'actions' }, actions));
@@ -306,7 +306,8 @@ function failure(error) {
 
 // ---------------------------------------------------------------- shared tables
 
-const classCol = { label: 'Class', opt: true, value: r => r.class };
+/** A character's class with its emblem (pages/database.js thumb: a letter when the server has no picture). */
+const classCol = { label: 'Class', opt: true, value: r => r.class ? h('span', { class: 'named plain' }, thumb(r.classIcon, r.class, 'cls'), h('span', null, r.class)) : '' };
 const levelCol = { label: 'Level', num: true, value: r => num(r.level) };
 
 function onlineTable(players, admin, limit) {
@@ -314,7 +315,7 @@ function onlineTable(players, admin, limit) {
   return table([
     { label: 'Name', grow: true, value: p => h('span', { class: 'strong' }, p.name) },
     classCol, levelCol,
-    { label: 'Map', opt: !limit, value: p => p.map },
+    { label: 'Map', opt: !limit, value: p => p.mapId ? link('/maps/' + p.mapId, { class: 'text-link' }, p.map) : p.map },
     admin && !limit && { label: 'Account', opt: true, value: p => link('/admin/accounts/' + encodeURIComponent(p.account), { class: 'text-link mono' }, p.account) },
   ].filter(Boolean), rows, { short: !!limit });
 }

@@ -162,7 +162,11 @@ public sealed partial class PanelSite
         var roles = await _backend.OnlineAsync();
         return Reply.Ok(new
         {
-            players = roles.Select(r => new { name = r.Name, @class = r.Class, level = r.Level, map = r.Map, account = call.Admin ? r.Account : null }),
+            players = roles.Select(r => new
+            {
+                name = r.Name, @class = r.Class, classIcon = r.ClassIcon, level = r.Level, map = r.Map, mapId = r.MapId,
+                account = call.Admin ? r.Account : null,
+            }),
         });
     }
 

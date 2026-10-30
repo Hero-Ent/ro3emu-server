@@ -25,4 +25,10 @@ public sealed class PanelOptions
 
     /// <summary>Accounts can be created on the panel's sign-up page. Off: only the game's first login creates them.</summary>
     public bool Registration { get; set; } = true;
+
+    /// <summary>
+    /// The folder of the pictures the pages show (item, monster, class and map images), decoded from the operator's own
+    /// client by the data export. Empty: icons/ in the game data folder. Without it the pages draw letters instead.
+    /// </summary>
+    public string? ImageDir { get; set; }
 }

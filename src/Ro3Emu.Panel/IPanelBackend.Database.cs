@@ -1,8 +1,9 @@
 namespace Ro3Emu.Panel;
 
 /// <summary>
-/// The public item and monster databases (from the server's game data, built once and kept in memory) and the admin's
-/// economy log (the server's economy_entry ledger, read on the read pool).
+/// The public item, monster and map databases (from the server's game data, built once and kept in memory) and the
+/// admin's economy log (the server's economy_entry ledger, read on the read pool). Picture fields hold an /img/ address,
+/// empty when the server has no picture for it (the page then draws a letter).
 /// </summary>
 public partial interface IPanelBackend
 {
@@ -17,6 +18,12 @@ public partial interface IPanelBackend
 
     /// <summary>One monster with its stats, drops and spawns; null when unknown.</summary>
     Task<PanelMonster?> MonsterAsync(long id);
+
+    /// <summary>Every map with a name, with the levels of the monsters that spawn there and the players on it now.</summary>
+    Task<IReadOnlyList<PanelMapSummary>> MapsAsync();
+
+    /// <summary>One map with its monsters and players; null when unknown.</summary>
+    Task<PanelMapDetail?> MapAsync(long id);
 
     /// <summary>A page of the economy ledger, newest first, with the totals of everything the filter matches.</summary>
     Task<PanelEconomyPage> EconomyAsync(PanelEconomyQuery query);
@@ -33,7 +40,9 @@ public sealed record PanelOption(long Id, string Name);
 public sealed record PanelItemQuery(string Text, int Type, int Quality, int MinLevel, int MaxLevel, int Page, int PageSize);
 
 /// <param name="Quality">1 (white) to 6 (red), as the game colours an item's name.</param>
-public sealed record PanelItemSummary(long Id, string Name, int Type, string TypeName, string SubType, int Quality, string QualityName, int Level);
+/// <param name="Icon">The bag icon (ItemConfig _kIcon).</param>
+public sealed record PanelItemSummary(long Id, string Name, int Type, string TypeName, string SubType, int Quality, string QualityName, int Level,
+    string Icon = "");
 
 public sealed record PanelItemPage(IReadOnlyList<PanelItemSummary> Items, int Total, int Page, int PageSize,
     IReadOnlyList<PanelOption> Types, IReadOnlyList<PanelOption> Qualities);
@@ -43,13 +52,18 @@ public sealed record PanelStat(string Name, string Value);
 
 /// <param name="Trade">How it changes hands: "Exchange", "Stalls" or "Not tradeable".</param>
 /// <param name="Classes">The classes that may use it; empty = every class.</param>
+/// <param name="Variants">Every item id the game has for this same item (rows that differ only in id and sort order);
+/// its drops and shops are theirs together.</param>
+/// <param name="Picture">The large picture (a card's art, ItemConfig _kPic); empty when it has none.</param>
 public sealed record PanelItem(PanelItemSummary Item, string Description, int StackLimit, string Trade, bool Usable,
-    IReadOnlyList<string> Classes, IReadOnlyList<PanelStat> Stats, IReadOnlyList<PanelItemDrop> DroppedBy, IReadOnlyList<PanelShopOffer> Shops);
+    IReadOnlyList<string> Classes, IReadOnlyList<PanelStat> Stats, IReadOnlyList<PanelItemDrop> DroppedBy, IReadOnlyList<PanelShopOffer> Shops,
+    IReadOnlyList<long> Variants, string Picture = "");
 
 /// <param name="Chance">The chance per kill that at least one drops, 0 to 1.</param>
 /// <param name="Kind">Empty for a kill's loot; an MVP reward's kind ("First strike", "Final blow", "Top 10 parties", "Participation",
 /// "Rare winner").</param>
-public sealed record PanelItemDrop(long MonsterId, string Monster, int Level, string Rank, double Chance, int Min, int Max, string Kind);
+/// <param name="Icon">The monster's portrait.</param>
+public sealed record PanelItemDrop(long MonsterId, string Monster, int Level, string Rank, double Chance, int Min, int Max, string Kind, string Icon = "");
 
 /// <param name="Count">Items per purchase.</param>
 public sealed record PanelShopOffer(string Shop, long CurrencyId, string Currency, long Price, int Count);
@@ -58,25 +72,47 @@ public sealed record PanelShopOffer(string Shop, long CurrencyId, string Currenc
 public sealed record PanelMonsterQuery(string Text, int Element, int Race, int Size, string Rank, int MinLevel, int MaxLevel, int Page, int PageSize);
 
 /// <param name="Rank">"normal", "mini", "boss" or "mvp".</param>
+/// <param name="Icon">The portrait (NPCConfig _kHeadIcon).</param>
 public sealed record PanelMonsterSummary(long Id, string Name, int Level, long Hp, int Element, string ElementName, string Race,
-    string Size, string Rank);
+    string Size, string Rank, string Icon = "");
 
 public sealed record PanelMonsterPage(IReadOnlyList<PanelMonsterSummary> Monsters, int Total, int Page, int PageSize,
     IReadOnlyList<PanelOption> Elements, IReadOnlyList<PanelOption> Races, IReadOnlyList<PanelOption> Sizes);
 
 /// <param name="Speed">Move speed (attribute 113, else NPCConfig _iSpeed).</param>
+/// <param name="Drops">The drops of the first set of <paramref name="DropSets"/> (all of them when the variants agree).</param>
+/// <param name="Variants">Every NPCConfig id the game has for this same monster (rows of other maps, quests or scenes with
+/// the same name, level and numbers); its spawns are theirs together.</param>
+/// <param name="DropSets">The variants grouped by what they drop: one set when they all drop the same.</param>
 public sealed record PanelMonster(PanelMonsterSummary Monster, IReadOnlyList<PanelStat> Stats, long Speed,
-    IReadOnlyList<PanelMonsterDrop> Drops, IReadOnlyList<PanelSpawn> Spawns);
+    IReadOnlyList<PanelMonsterDrop> Drops, IReadOnlyList<PanelSpawn> Spawns, IReadOnlyList<long> Variants, IReadOnlyList<PanelDropSet> DropSets);
+
+/// <param name="Ids">The variants that drop this.</param>
+/// <param name="Maps">Where those variants spawn; empty when none of them has a field spawn.</param>
+public sealed record PanelDropSet(IReadOnlyList<long> Ids, IReadOnlyList<string> Maps, IReadOnlyList<PanelMonsterDrop> Drops);
 
 /// <param name="Chance">The chance per kill that at least one drops, 0 to 1.</param>
 /// <param name="Maps">The maps the row is limited to; empty = everywhere.</param>
 /// <param name="Kind">Empty for a kill's loot; an MVP reward's kind, as on <see cref="PanelItemDrop"/>.</param>
 public sealed record PanelMonsterDrop(long ItemId, string Item, int Quality, double Chance, int Min, int Max, IReadOnlyList<string> Maps,
-    string Kind);
+    string Kind, string Icon = "");
 
 /// <param name="Count">How many the map keeps alive at most.</param>
 /// <param name="RespawnSeconds">Seconds from a corpse's removal to the next spawn.</param>
-public sealed record PanelSpawn(long MapId, string Map, int Count, int RespawnSeconds);
+/// <param name="Image">The map's outline picture (MapConfig _kBgImage[0]).</param>
+public sealed record PanelSpawn(long MapId, string Map, int Count, int RespawnSeconds, string Image = "");
+
+/// <param name="MinLevel">The lowest level of the monsters that spawn there; 0 when none does.</param>
+/// <param name="Monsters">How many kinds of monster spawn there.</param>
+/// <param name="Players">Characters on the map now.</param>
+public sealed record PanelMapSummary(long Id, string Name, string Image, int MinLevel, int MaxLevel, int Monsters, int Players);
+
+/// <param name="Count">How many the map keeps alive at most.</param>
+public sealed record PanelMapMonster(PanelMonsterSummary Monster, int Count, int RespawnSeconds);
+
+public sealed record PanelMapPlayer(string Name, string Class, string ClassIcon, int Level);
+
+public sealed record PanelMapDetail(PanelMapSummary Map, IReadOnlyList<PanelMapMonster> Monsters, IReadOnlyList<PanelMapPlayer> Players);
 
 /// <param name="Asset">An item or currency id; 0 = any.</param>
 /// <param name="AssetText">An item or currency name instead of an id (any letter case); empty = none.</param>

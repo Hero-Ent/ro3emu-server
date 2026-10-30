@@ -330,7 +330,11 @@ select.input{padding-right:var(--s6)}
   .view{padding-top:var(--s4)}
   .kpi .value b{font-size:24px;line-height:28px}
   .data .opt{display:none}
-  .data th,.data td{padding:0 var(--s3)}
+  .data th,.data td{padding:0 var(--s2)}
+  .data th:first-child,.data td:first-child{padding-left:var(--s3)}
+  .data th:last-child,.data td:last-child{padding-right:var(--s3)}
+  /* the growing column takes what is left and cuts its text, so a list fits a phone without scrolling sideways */
+  .data td.grow{max-width:0;overflow:hidden;text-overflow:ellipsis}
   .page-head{align-items:flex-start}
   .auth-card{margin-top:var(--s4)}
 }

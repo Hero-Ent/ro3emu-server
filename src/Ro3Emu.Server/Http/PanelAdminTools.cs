@@ -15,7 +15,7 @@ namespace Ro3Emu.Server.Http;
 /// with their audit row in the same transaction, GM commands and broadcasts on the game loop to live sessions.
 /// </summary>
 public sealed partial class PanelAdminTools(AccountStore accounts, RoleStore roles, MailService mail, GameData data, GameLoop loop,
-    SessionRegistry sessions, GmCommands gm, Deadlines deadlines, TimeProvider clock, ILogger<PanelAdminTools> log) : IPanelAdminTools
+    SessionRegistry sessions, GmCommands gm, Deadlines deadlines, PanelBackend panel, TimeProvider clock, ILogger<PanelAdminTools> log) : IPanelAdminTools
 {
     private long Now => clock.GetUtcNow().ToUnixTimeSeconds();
 
@@ -26,8 +26,8 @@ public sealed partial class PanelAdminTools(AccountStore accounts, RoleStore rol
     {
         if (query.Length == 0) return [];
         if (long.TryParse(query, NumberStyles.None, CultureInfo.InvariantCulture, out long id))
-            return ItemConfig.Get(data, id) == null ? [] : [new PanelItemChoice(id, data.ItemName(id))];
-        return [.. data.FindItems(query).Take(limit).Select(i => new PanelItemChoice(i.Id, i.Name))];
+            return ItemConfig.Get(data, id) == null ? [] : [new PanelItemChoice(id, data.ItemName(id), panel.ItemIconOf(id))];
+        return [.. data.FindItems(query).Take(limit).Select(i => new PanelItemChoice(i.Id, i.Name, panel.ItemIconOf(i.Id)))];
     }
 
     /// <summary>The rewards as "2x Name" text, refusing ids the item table does not have.</summary>

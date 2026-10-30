@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,7 +22,7 @@ public sealed partial class PanelSite
     private const int MaxBody = 16 * 1024;
     /// <summary>The site's own pages: the first path segment of every route app.js draws.</summary>
     private static readonly HashSet<string> Pages = new(StringComparer.Ordinal)
-    { "", "online", "rankings", "news", "login", "register", "account", "admin", "items", "monsters" };
+    { "", "online", "rankings", "news", "login", "register", "account", "admin", "items", "monsters", "maps" };
 
     /// <summary>
     /// No inline script or style anywhere, so the policy allows only the site's own files. frame-ancestors and the
@@ -75,6 +77,11 @@ public sealed partial class PanelSite
             context.Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
             return;
         }
+        if (path.StartsWith(ImagePrefix, StringComparison.Ordinal))
+        {
+            await SendImageAsync(context, path);
+            return;
+        }
         var asset = path == "/index.html" ? null : _assets.Find(path);
         int status = StatusCodes.Status200OK;
         if (asset == null)
@@ -112,6 +119,43 @@ public sealed partial class PanelSite
         response.ContentType = asset.ContentType;
         response.ContentLength = asset.Body.Length;
         if (!HttpMethods.IsHead(context.Request.Method)) await response.Body.WriteAsync(asset.Body, context.RequestAborted);
+    }
+
+    // ---------------------------------------------------------------- pictures
+
+    private const string ImagePrefix = "/img/";
+
+    /// <summary>The picture folders the data export writes (DataExport IconExport) and the names it gives the files.</summary>
+    [GeneratedRegex(@"^/img/(items|monsters|classes|maps)/[A-Za-z0-9_\-]+\.png$")]
+    private static partial Regex ImagePath();
+
+    /// <summary>
+    /// A picture from the image folder: only the export's own folders and file names, so no request reaches another
+    /// file. The pages ask with ?v=&lt;the source's hash&gt;, so a picture never changes under its address and may be kept
+    /// for a year. A missing one is a plain 404; the page then draws its letter.
+    /// </summary>
+    private async Task SendImageAsync(HttpContext context, string path)
+    {
+        var response = context.Response;
+        string? file = ImagePath().IsMatch(path) && _backend.ImageDir is { } dir ? Path.Combine(dir, path[ImagePrefix.Length..]) : null;
+        if (file == null || !File.Exists(file))
+        {
+            response.StatusCode = StatusCodes.Status404NotFound;
+            response.Headers.CacheControl = "no-cache";
+            return;
+        }
+        var info = new FileInfo(file);
+        string etag = "\"" + info.Length.ToString("x", CultureInfo.InvariantCulture) + "-" + info.LastWriteTimeUtc.Ticks.ToString("x", CultureInfo.InvariantCulture) + "\"";
+        response.Headers.CacheControl = context.Request.Query.ContainsKey("v") ? "public, max-age=31536000, immutable" : "public, max-age=86400";
+        response.Headers.ETag = etag;
+        if (context.Request.Headers.IfNoneMatch == etag)
+        {
+            response.StatusCode = StatusCodes.Status304NotModified;
+            return;
+        }
+        response.ContentType = "image/png";
+        response.ContentLength = info.Length;
+        if (!HttpMethods.IsHead(context.Request.Method)) await response.SendFileAsync(file, context.RequestAborted);
     }
 
     // ---------------------------------------------------------------- the API

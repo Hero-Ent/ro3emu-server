@@ -19,7 +19,7 @@ public sealed partial class PanelBackend
         else if (query.AssetText.Length > 0)
         {
             var catalog = await CatalogAsync();
-            assets.AddRange(catalog.Items.Where(i => i.Name.Contains(query.AssetText, StringComparison.OrdinalIgnoreCase))
+            assets.AddRange(catalog.AllItems.Where(i => i.Name.Contains(query.AssetText, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(i => !string.Equals(i.Name, query.AssetText, StringComparison.OrdinalIgnoreCase)).ThenBy(i => i.Name.Length)
                 .Take(AssetMatches).Select(i => new PanelOption(i.Id, i.Name)));
             // A name nothing carries matches nothing, not everything.

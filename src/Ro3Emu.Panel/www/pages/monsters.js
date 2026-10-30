@@ -1,5 +1,6 @@
 // The monster database: every monster of the game's data, searchable, and a page per monster with its stats (the
-// server's own HP formula), drops and spawn maps (/api/monsters).
+// server's own HP formula), drops and spawn maps (/api/monsters). Rows the game repeats per map, quest or scene with
+// the same numbers are one entry; when they drop differently, each drop list says where its rows spawn.
 'use strict';
 
 const rankOptions = [{ id: 'normal', name: 'Normal' }, { id: 'mini', name: 'Mini boss' }, { id: 'boss', name: 'Boss' }, { id: 'mvp', name: 'MVP' }];
@@ -17,7 +18,7 @@ async function monstersPage() {
   ], 'Name or ID');
   const rows = result.monsters.length
     ? table([
-      { label: 'Monster', grow: true, value: m => monsterName(m.id, m.name, m.rank) },
+      { label: 'Monster', grow: true, value: m => monsterName(m.id, m.name, m.rank, m.icon) },
       { label: 'ID', num: true, opt: true, value: m => mono(String(m.id)) },
       { label: 'Level', num: true, value: m => num(m.level) },
       { label: 'HP', num: true, value: m => num(m.hp) },
@@ -40,38 +41,60 @@ function respawn(seconds) {
   return `${(seconds / 3600).toFixed(1).replace(/\.0$/, '')} h`;
 }
 
-async function monsterPage(id) {
-  const detail = await api('GET', '/api/monsters/' + encodeURIComponent(id));
-  const m = detail.monster;
-  const stat = name => detail.stats.find(s => s.name === name)?.value ?? '-';
-  const loot = detail.drops.filter(d => !d.kind), rewards = detail.drops.filter(d => d.kind);
-  const drops = loot.length
+/** A kill's loot as a table, or the reason there is none. */
+function lootTable(loot, m, rewards) {
+  return loot.length
     ? table([
-      { label: 'Item', grow: true, value: d => [itemName(d.itemId, d.item, d.quality), d.maps.length ? h('span', { class: 'sub' }, 'Only on ' + d.maps.join(', ')) : null] },
+      { label: 'Item', grow: true, value: d => [itemName(d.itemId, d.item, d.quality, false, d.icon), d.maps.length ? h('span', { class: 'sub' }, 'Only on ' + d.maps.join(', ')) : null] },
       { label: 'Count', num: true, value: d => countRange(d.min, d.max) },
       { label: 'Chance', num: true, value: d => percent(d.chance) },
     ], loot, { short: loot.length <= 12 })
     : emptyState('box', rewards.length ? 'No loot on the corpse' : 'It drops nothing', rewards.length ? 'Its kill pays out the MVP rewards above.'
       : m.rank !== 'normal' ? 'A boss of a dungeon or story scene: its rewards come with the clear, not the kill.' : null);
+}
+
+/** The drops card: one list, or one per drop set when the game's rows of this monster drop differently. */
+function dropsCards(detail, m, rewards) {
+  const note = 'Chance per kill that at least one drops; a player\'s level and class limits are not counted.';
+  const sets = detail.dropSets || [];
+  if (sets.length <= 1) {
+    const loot = detail.drops.filter(d => !d.kind);
+    return card('Drops', null, lootTable(loot, m, rewards), loot.length ? note : null);
+  }
+  return sets.map((set, n) => {
+    const loot = set.drops.filter(d => !d.kind);
+    const where = set.maps.length ? 'On ' + set.maps.join(', ') : 'Where it has no field spawn';
+    return card(n === 0 ? 'Drops' : null, null, [h('div', { class: 'set-head' }, h('b', null, where), mono((set.ids.length > 1 ? 'IDs ' : 'ID ') + set.ids.join(' · '))),
+      lootTable(loot, m, rewards)], n === sets.length - 1 ? note : null);
+  });
+}
+
+async function monsterPage(id) {
+  const detail = await api('GET', '/api/monsters/' + encodeURIComponent(id));
+  const m = detail.monster;
+  const stat = name => detail.stats.find(s => s.name === name)?.value ?? '-';
+  const rewards = detail.drops.filter(d => d.kind);
   // MvpService's kinds in the order it hands them out.
   const kinds = ['First strike', 'Final blow', 'Top 10 parties', 'Participation', 'Rare winner'];
   const mvpRewards = rewards.length
     ? table([
       { label: 'Reward', value: d => chip(d.kind === 'Rare winner' ? 'event' : 'info', d.kind) },
-      { label: 'Item', grow: true, value: d => itemName(d.itemId, d.item, d.quality) },
+      { label: 'Item', grow: true, value: d => itemName(d.itemId, d.item, d.quality, false, d.icon) },
       { label: 'Count', num: true, value: d => countRange(d.min, d.max) },
       { label: 'Chance', num: true, value: d => percent(d.chance) },
     ], [...rewards].sort((a, b) => kinds.indexOf(a.kind) - kinds.indexOf(b.kind) || b.chance - a.chance), { short: rewards.length <= 16 })
     : null;
   const spawns = detail.spawns.length
     ? table([
-      { label: 'Map', grow: true, value: s => h('span', { class: 'strong' }, s.map) },
+      { label: 'Map', grow: true, value: s => mapName(s.mapId, s.map, s.image) },
       { label: 'Alive at most', num: true, value: s => num(s.count) },
       { label: 'Respawn', num: true, value: s => respawn(s.respawnSeconds) },
-    ], detail.spawns, { short: true })
+    ], detail.spawns, { short: true, onrow: s => navigate('/maps/' + s.mapId) })
     : emptyState('home', 'No field spawn', 'It appears in dungeons, events or story scenes.');
+  const portrait = m.icon ? h('div', { class: 'portrait' }, thumb(m.icon, m.name, m.rank !== 'normal' ? m.rank : '', 'xxl')) : null;
   return [pageHead({ crumbs: [{ href: '/', label: 'Home' }, { href: '/monsters', label: 'Monsters' }, { label: m.name }],
-    title: m.name, after: [rankChip(m.rank), m.elementName && chip('plain', m.elementName)],
+    title: m.name, art: thumb(m.icon, m.name, m.rank !== 'normal' ? m.rank : '', 'xl'),
+    after: [rankChip(m.rank), m.elementName && chip('plain', m.elementName)], subtitle: variantLine(detail.variants),
     meta: [['ID', mono(String(m.id))], ['Race', m.race || '-'], ['Size', m.size || '-']] }),
   h('section', { class: 'kpis', 'aria-label': 'Key figures' },
     kpi('Level', 'trophy', num(m.level), null, rankNames[m.rank]),
@@ -82,13 +105,13 @@ async function monsterPage(id) {
     h('div', { class: 'span-8 stack' },
       mvpRewards && card('MVP rewards', null, mvpRewards,
         'Per kill: first strike and final blow go to one player each, the top 10 parties and every participant get theirs, one rare winner is drawn. Each kind has a daily limit per player.'),
-      card('Drops', null, drops, loot.length ? 'Chance per kill that at least one drops; a player\'s level and class limits are not counted.' : null),
+      dropsCards(detail, m, rewards),
       card('Where it spawns', null, spawns)),
     h('div', { class: 'span-4 stack' },
+      card('Monster', null, body(portrait, facts([['Element', m.elementName || '-'], ['Race', m.race || '-'], ['Size', m.size || '-'],
+        ['Rank', rankNames[m.rank]]]))),
       card('Stats', null, body(facts([...detail.stats.map(s => [s.name, h('span', { class: 'num' }, s.value)]),
-        ['Move speed', h('span', { class: 'num' }, num(detail.speed))]]))),
-      card('Monster', null, body(facts([['Element', m.elementName || '-'], ['Race', m.race || '-'], ['Size', m.size || '-'],
-        ['Rank', rankNames[m.rank]]])))))];
+        ['Move speed', h('span', { class: 'num' }, num(detail.speed))]])))))];
 }
 
 routes.push([/^\/monsters$/, monstersPage, 'monsters'], [/^\/monsters\/(\d+)$/, monsterPage, 'monsters']);

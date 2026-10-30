@@ -15,6 +15,9 @@ public partial interface IPanelBackend
     /// <summary>False while the server stops: the panel refuses every change then, as the server's own HTTP does.</summary>
     bool Accepting { get; }
 
+    /// <summary>The folder the /img/ pictures are served from (PanelOptions.ImageDir), or null when there is none.</summary>
+    string? ImageDir { get; }
+
     /// <summary>The server's credential budget per address (the SDK login's): false = answer 429 without hashing.</summary>
     bool TryAcquireCredentialCheck(IPAddress? remote);
 
@@ -79,22 +82,23 @@ public sealed record PanelCounts(int Accounts, int Characters);
 public sealed record PanelNewsItem(long Id, string Title, string Body, string Tag, DateTimeOffset Published, string Author,
     bool Pinned = false);
 
-public sealed record PanelOnlineRole(string Name, string Class, int Level, string Map, string Account);
+/// <param name="ClassIcon">The class emblem's /img/ address; empty when the server has no pictures.</param>
+public sealed record PanelOnlineRole(string Name, string Class, int Level, string Map, string Account, string ClassIcon = "", long MapId = 0);
 
 /// <param name="Id">The board's key in the URL.</param>
 /// <param name="Score">What the score column counts.</param>
 /// <param name="ByClass">The board can be narrowed to one root class.</param>
 public sealed record PanelBoardInfo(string Id, string Title, string Score, bool Guild, bool ByClass);
 
-public sealed record PanelClass(long Id, string Name);
+public sealed record PanelClass(long Id, string Name, string Icon = "");
 
 public sealed record PanelBoard(PanelBoardInfo Info, IReadOnlyList<PanelBoardRow> Rows);
 
 /// <param name="Level">A character's base level, a guild's level.</param>
-public sealed record PanelBoardRow(int Rank, string Name, string Class, int Level, long Score);
+public sealed record PanelBoardRow(int Rank, string Name, string Class, int Level, long Score, string ClassIcon = "");
 
 public sealed record PanelCharacter(long Id, string Name, string Class, int Level, int JobLevel, string Map, string Guild,
-    DateTimeOffset Created, DateTimeOffset? LastLogin, bool Online);
+    DateTimeOffset Created, DateTimeOffset? LastLogin, bool Online, string ClassIcon = "");
 
 public sealed record PanelBan(string Reason, DateTimeOffset Banned, DateTimeOffset? Until, string? By);
 

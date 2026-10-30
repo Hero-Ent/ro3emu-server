@@ -1,5 +1,5 @@
 // The item database: every item of the game's data, searchable, and a page per item with its stats, the monsters
-// that drop it and the shops that sell it (/api/items).
+// that drop it and the shops that sell it (/api/items). Rows the game repeats under other ids are one entry.
 'use strict';
 
 async function itemsPage() {
@@ -13,7 +13,7 @@ async function itemsPage() {
   ], 'Name or ID');
   const rows = result.items.length
     ? table([
-      { label: 'Item', grow: true, value: i => itemName(i.id, i.name, i.quality) },
+      { label: 'Item', grow: true, value: i => itemName(i.id, i.name, i.quality, false, i.icon) },
       { label: 'ID', num: true, opt: true, value: i => mono(String(i.id)) },
       { label: 'Type', value: i => [i.typeName, i.subType && h('span', { class: 'muted' }, ' · ' + i.subType)] },
       { label: 'Quality', opt: true, value: i => chip('q' + i.quality, i.qualityName) },
@@ -31,7 +31,7 @@ async function itemPage(id) {
   const i = item.item;
   const dropped = item.droppedBy.length
     ? table([
-      { label: 'Monster', grow: true, value: d => monsterName(d.monsterId, d.monster, d.rank) },
+      { label: 'Monster', grow: true, value: d => monsterName(d.monsterId, d.monster, d.rank, d.icon) },
       { label: 'Level', num: true, value: d => num(d.level) },
       { label: 'Rank', opt: true, value: d => rankChip(d.rank) || h('span', { class: 'muted' }, 'Normal') },
       { label: 'How', value: d => d.kind ? chip(d.kind === 'Rare winner' ? 'event' : 'info', 'MVP: ' + d.kind) : h('span', { class: 'muted' }, 'Drop') },
@@ -50,8 +50,11 @@ async function itemPage(id) {
   const stats = item.stats.length
     ? facts(item.stats.map(s => [s.name, h('span', { class: 'num strong' }, s.value)]))
     : null;
+  const picture = item.picture ? h('img', { class: 'picture', src: item.picture, alt: i.name, loading: 'lazy' }) : null;
+  if (picture) picture.addEventListener('error', () => picture.closest('.card')?.remove(), { once: true });
   return [pageHead({ crumbs: [{ href: '/', label: 'Home' }, { href: '/items', label: 'Items' }, { label: i.name }],
-    title: i.name, after: [chip('q' + i.quality, i.qualityName), chip('plain', i.typeName)],
+    title: i.name, art: thumb(i.icon, i.name, 'q' + i.quality, 'xl'), after: [chip('q' + i.quality, i.qualityName), chip('plain', i.typeName)],
+    subtitle: variantLine(item.variants),
     meta: [['ID', mono(String(i.id))], ['Type', [i.typeName, i.subType ? ' · ' + i.subType : '']], ['Level', i.level > 0 ? num(i.level) : 'Any']] }),
   h('div', { class: 'grid' },
     h('div', { class: 'span-8 stack' },
@@ -59,6 +62,7 @@ async function itemPage(id) {
       card('Dropped by', null, dropped, item.droppedBy.length ? 'Chance per kill that at least one drops; a player\'s level and class limits are not counted.' : null),
       shops && card('Sold in shops', null, shops)),
     h('div', { class: 'span-4 stack' },
+      picture && card(null, null, body(picture)),
       card('Item', null, body(facts([
         ['Quality', h('span', { class: 'strong q' + i.quality }, i.qualityName)],
         ['Required level', i.level > 0 ? h('span', { class: 'num' }, num(i.level)) : 'Any'],
