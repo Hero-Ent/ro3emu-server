@@ -211,6 +211,7 @@ public sealed partial class TerritoryWarsService : IGameTicker
         combat.PlayerHostile = Hostile;
         combat.MonsterTargetAllowed = CanHitObjective;
         combat.SkillLineBlocked = SiegeSkillLineBlocked;
+        combat.DamageAdjusters.Add((_, target, row, _, damage) => SiegeTagDamage(target, row, damage));
         combat.PvpDealtAsync.Add(PvpRecordedAsync);
         combat.PvpDealtAsync.Add(SiegePvpRecordedAsync);
         combat.HealedAsync.Add(BattleHealRecordedAsync);

@@ -254,4 +254,25 @@ public sealed partial class SiegeTests
         Assert.DoesNotContain(74L, inner);
         Assert.False(WalkBlocked(At(605, 150), At(590, 150)) || SkillBlocked(At(605, 150), At(590, 150)));
     }
+
+    [ClientDataFact]
+    public async Task ACannonShotDealsATenthToTheGateAndTheBarricades()
+    {
+        var (attack, defense) = await SeededSiege("F");
+        await using var _ = attack;
+        await using var __ = defense;
+        var run = Run(attack);
+        var a = Session(attack);
+        var data = Service<Ro3Emu.Server.Data.GameData>();
+        long Hit(MonsterUnit m, int skill, long damage) => Service<CombatService>().DamageAdjusters.Aggregate(damage,
+            (d, adjust) => adjust(a, m, Ro3Emu.Server.Data.Config.SkillConfig.Get(data, skill)!.Value.Row,
+                DamageHitResult.Normal, d));
+
+        // GVGCannonConfig 4900010's skill 4900701 (cannon 4900013, bullet 4900101: tag 3002) on tag 3003:
+        // ArtilleryAttackCityGateReduceDamage [3002, 3003, -9000].
+        Assert.Equal(1000, Hit(run.Objects[GatePoint], 4900701, 10000));
+        Assert.Equal(1000, Hit(run.Objects[321], 4900701, 10000));
+        Assert.Equal(10000, Hit(run.Objects[38], 4900701, 10000)); // a guardian has no tag
+        Assert.Equal(10000, Hit(run.Objects[GatePoint], 1000001, 10000)); // a player's own attack is no cannon
+    }
 }

@@ -283,9 +283,8 @@ Code: `TerritoryWarsService.MachineDamage.cs`, `TerritoryWarsService.WarRepair.c
   statistics like damage to the crystal.
 - `OutCannonHpPercent` (80) sits among the GVE cannon parameters (`GVECannonExitInteractId`,
   `GVESwitchBulletInteractIds`), not the siege ones, so it is not applied to siege cannons.
-- `ArtilleryAttackCityGateReduceDamage` [3002, 3003, -9000] would lower cannon damage against the city gates. The
-  siege has no gate units yet (NPC 4900005 and the "Break Through the Castle Gate" phase are not spawned), so it is
-  not applied.
+- `ArtilleryAttackCityGateReduceDamage` [3002, 3003, -9000] lowers cannon damage against the gates, the barricades
+  and the other tag 3003 NPCs (see "Damage by tag" under "Siege castle").
 - Restocking the warehouse: 32275 has no client sender and no shop or award sells the machine items (the "War Machine
   Shop" text has no data behind it), so the stock is only `SiegeInitItemList` and what the machines leave or return.
 
@@ -394,6 +393,21 @@ Code: `TerritoryWarsService.SiegeWalls.cs`, `Data/Config/SceneEditorAirWalls.cs`
   target's: the gate and the barricades stand inside their own walls.
 - The navigation grid still stops skills at the castle's solid parts, with the crystal's own blocked cell allowed as
   before.
+
+### Damage by tag
+
+Code: `TerritoryWarsService.SiegeTags.cs` (a `CombatService.DamageAdjusters` entry).
+
+- `PublicParamConfig` has two rows the client never reads: `ArtilleryAttackCityGateReduceDamage` [3002, 3003, -9000]
+  and `GuardAttackOtherReduceDamage` [3004, 3005, -5000]. NPCConfig `_kNpcTag` 3002 is every siege cannon (4900013-4900016,
+  4900023-4900027) and bullet (4900101-4900108, `_iNPCType` 10); 3003 the City Gate 4900005, the ram 4900002, the ladders
+  4900000/4900012, the Obstacle 4900022 and the Barrier Stele 4905012; 3004 the archers 4901001; 3005 the ladders.
+
+**Inferred:**
+- Both rows read [attacker tag, target tag, change / 10 000]: a cannon shot on a tag 3003 NPC deals a tenth, and an
+  archer's hit on a ladder half (that one has no effect yet: no monster fights a monster here).
+- A player's cast carries the tags of the cannons whose `GVGCannonConfig._iSkillID` it is and of its bullet NPC
+  (`SkillConfig._kLogicData[2]`); every other skill, the war vehicles' seat skills included, carries none.
 
 ## Descriptor and runtime evidence boundaries
 
