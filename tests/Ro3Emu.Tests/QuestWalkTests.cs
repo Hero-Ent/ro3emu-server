@@ -151,9 +151,10 @@ public sealed class QuestWalkTests : IAsyncLifetime
                         break;
                 }
             }
-            // The task must move (delivered) within a moment.
+            // The task must move (delivered). Its targets complete through the loop and the database writer: a fixed
+            // 2 s of polling ran out under suite load, so wait as long as for any message.
             bool moved = false;
-            for (int i = 0; i < 40 && !moved; i++)
+            for (var until = DateTime.UtcNow + Wait; !moved && DateTime.UtcNow < until;)
             {
                 await Task.Delay(50);
                 moved = (await State()).Delivered.Contains(task);
