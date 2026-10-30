@@ -116,9 +116,11 @@ public sealed partial class TerritoryWarsTests
             },
         });
         Assert.Equal(0, (await Next(a, WorldInteractionService.Action, UseInteractActionRes.Parser)).Result);
-        var deadline = DateTime.UtcNow.AddSeconds(8);
-        while (Session(b).CurrentHp == before && DateTime.UtcNow < deadline) await Task.Delay(50);
-        Assert.NotEqual(before, Session(b).CurrentHp);
+        // The bullet flies about 5.3 s of wall-clock time before it lands (40 m/s up, 15 m/s^2 down: LaunchBulletAsync
+        // schedules the explosion after its flight). A fixed 8 s poll left a loaded run under 3 s for the timer and the
+        // hit; wait for the hit itself instead, as long as for any other message.
+        await Next(b, CombatService.SkillHit, SkillHitInfo.Parser, h => h.Dsts.Any(d => d.DstID == enemy));
+        Assert.NotEqual(before, await Service<GameLoop>().InvokeAsync(() => Task.FromResult(Session(b).CurrentHp)));
 
         // Only another guild hits it; its last blow destroys it, puts the operator on foot and clears the slot.
         var unit = Machine(cannon.Uuid);
@@ -138,7 +140,7 @@ public sealed partial class TerritoryWarsTests
 
         // The personal record counts the machine destroyed and the damage dealt to it (1021002, 1021003).
         GetDungeonStatisticsInDungeonResp report = null!;
-        deadline = DateTime.UtcNow.AddSeconds(5);
+        var deadline = DateTime.UtcNow.AddSeconds(5);
         do
         {
             await b.SendGameAsync(30117, new GetDungeonStatisticsInDungeonReq());
