@@ -180,6 +180,13 @@ public sealed class ServerOptions
     public int ScriptedScenePacePercent { get; set; } = 100;
 
     /// <summary>
+    /// Fewer of one monster on one map (Ro3Emu:SpawnLimits). Empty by default: every spawn pool group creates as many as the
+    /// client's own scene data says (docs/systems/monster-ai.md). A rule only lowers the count a pool group rolls for its NPC
+    /// at the first spawn of a map line; respawns replace each defeated monster one for one.
+    /// </summary>
+    public List<SpawnLimitRule> SpawnLimits { get; set; } = [];
+
+    /// <summary>
     /// (inferred) Star Cores drop for roles with the Astral Level open (ParagonService.StarCoreDrops). The client data gives
     /// them no source; false turns the reconstructed drop off.
     /// </summary>
@@ -438,4 +445,13 @@ public sealed class OpenContentOptions
     public bool ForcesActivity(long activityId) => Enabled && Activities.Contains(activityId);
     public bool OpensStageActivities => Enabled && SeasonStageActivities;
     public bool ServerDayFree => Enabled && IgnoreServerDay;
+}
+
+/// <summary>One <see cref="ServerOptions.SpawnLimits"/> rule: on the map <see cref="Scene"/>, at most <see cref="Max"/> of the
+/// NPC <see cref="Npc"/> spawn from its pool group (a group that rolls fewer keeps its count).</summary>
+public sealed class SpawnLimitRule
+{
+    public long Scene { get; set; }
+    public int Npc { get; set; }
+    public int Max { get; set; }
 }

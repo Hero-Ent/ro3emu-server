@@ -55,6 +55,26 @@ Everything in this section is *(inferred)*.
 - against a player strafing within reach, a surrounding monster swings as often as one without surround (within one
   swing over 8 s).
 
+## Fewer monsters on a map (`Ro3Emu:SpawnLimits`)
+
+A field map's spawn pool group creates as many of an NPC as the client's scene data says: Payon Forest (10220) has one group of
+1120 monsters (`genNumberRandomRange` 1120, `refreshThreshold` 1120, the sum of its limits) with 400 Greatest Generals
+(5000070); Deep Forest (10219) rolls 425 to 435. The server follows that. A server operator who finds a map too crowded can cap
+one NPC on one map; the list is empty by default, so nothing changes unless it is set (**inferred**: the original had no such knob):
+
+```json
+{
+  "Ro3Emu": {
+    "SpawnLimits": [
+      { "Scene": 10220, "Npc": 5000070, "Max": 300 },
+      { "Scene": 10219, "Npc": 5000070, "Max": 400 }
+    ]
+  }
+}
+```
+
+A rule only lowers the count a pool group rolls for that NPC at the first spawn of a map line (a group that rolls fewer keeps its
+count); respawns replace each defeated monster one for one. It is read at start-up.
 ## RO1 HP reference (`Ro3Emu:Ro1MonsterHp`)
 
 The client makes some RO1 cocoons and eggs die in one hit: the Ant Egg of the fields (5000085) has 92 HP and the Peco Peco Egg
