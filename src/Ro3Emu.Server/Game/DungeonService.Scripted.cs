@@ -184,6 +184,7 @@ public sealed partial class DungeonService
         // Dracula's Lair: a bush search may find the key; its finder is the rescuer, the only one the cage opens for.
         if (a!.Dracula is { } dracula) await dracula.Owner.InteractedAsync(a, s, actor!.NpcId);
         await StrikeAsync(a!, s, actor!, req.InteractionId);
+        await SeatRiderAsync(a!, s, actor!, (int)req.InteractionId);
         var events = new List<(Kind, long)> { (Kind.Interaction, req.InteractionId) };
         if (_catalog.DungeonMessage(req.InteractionId) is { } message) events.Add((Kind.Message, message));
         await StepEventAsync(a!, s, events, actor);
@@ -329,14 +330,19 @@ public sealed partial class DungeonService
         _log.LogInformation("Scripted scene {Scene} step {Step} '{Stage}' completed by {Role} ({Events})",
             a.Plan.SceneEntry, a.Wave + 1, step.Stage, s.Role?.Id, string.Join(", ", events));
         int hold = await RespondAsync(a, step.React, step.React?.Complete, used);
-        if (step.TeleportAfter != 0 && _catalog.ScenePoint(a.Plan.SceneEntry, step.TeleportAfter) is { } to)
-            foreach (var member in Present(a).Where(m => a.Loaded.Contains(m) && !m.SceneLoading))
-                await _scenes.TeleportInMapAsync(member, to);
-        // The next step or the settlement runs in its own owner scope, like the room's timers: the message that
-        // completed the step (a walk, an interaction, a plot end) reserves only what its own route needs. A completing
-        // reaction's line is read first (inferred).
-        if (hold > 0)
-            _loop.ScheduleLegacy(Paced(hold), () => a.Room.Closed ? Task.CompletedTask : AdvanceAsync(a), "dungeon scripted step");
-        else _loop.PostLegacy(() => AdvanceAsync(a), "dungeon scripted step");
+        async Task FinishAsync()
+        {
+            if (step.TeleportAfter != 0 && _catalog.ScenePoint(a.Plan.SceneEntry, step.TeleportAfter) is { } to)
+                foreach (var member in Present(a).Where(m => a.Loaded.Contains(m) && !m.SceneLoading))
+                    await _scenes.TeleportInMapAsync(member, to);
+            // The next step or the settlement runs in its own owner scope, like the room's timers: the message that
+            // completed the step (a walk, an interaction, a plot end) reserves only what its own route needs. A completing
+            // reaction's line is read first (inferred).
+            if (hold > 0)
+                _loop.ScheduleLegacy(Paced(hold), () => a.Room.Closed ? Task.CompletedTask : AdvanceAsync(a), "dungeon scripted step");
+            else _loop.PostLegacy(() => AdvanceAsync(a), "dungeon scripted step");
+        }
+        // A step with a ride first walks it; the teleport and the next step follow its arrival.
+        if (!TryStartRide(a, step, used, FinishAsync)) await FinishAsync();
     }
 }

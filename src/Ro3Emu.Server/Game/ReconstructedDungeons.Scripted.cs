@@ -43,6 +43,10 @@ public sealed partial class ReconstructedDungeons
         Seek? Seek = null, Shelter? Shelter = null, Reaction? React = null)
     {
         public IReadOnlyList<SceneActor> Companions { get; init; } = [];
+
+        /// <summary>A scene-editor guide route (m_kGuidePoints) the actor a player used to complete the step walks, the
+        /// participants with it, before <see cref="TeleportAfter"/> and the next step (0: none; inferred).</summary>
+        public long RideAfter { get; init; }
     }
 
     /// <summary>
@@ -146,7 +150,10 @@ public sealed partial class ReconstructedDungeons
                     shelter.GetProperty("width").GetSingle(), shelter.GetProperty("depth").GetSingle())
                 : null,
             s.TryGetProperty("react", out var react) ? ParseReaction(react) : null)
-        { Companions = [.. listed.Where(IsCompanion).Select(Actor)] };
+        {
+            Companions = [.. listed.Where(IsCompanion).Select(Actor)],
+            RideAfter = s.TryGetProperty("after", out var rideAfter) && rideAfter.TryGetProperty("ride", out var ride) ? ride.GetInt64() : 0,
+        };
     }
 
     private static SceneActor Actor(JsonElement x) => new(x.GetProperty("npc").GetInt32(), x.GetProperty("point").GetInt64(),
