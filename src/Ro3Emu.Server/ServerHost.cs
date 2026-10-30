@@ -72,6 +72,7 @@ public static partial class ServerHost
         builder.Services.AddSingleton<TaskService>();
         builder.Services.AddSingleton<AwardService>();
         builder.Services.AddSingleton<DailyActivityService>();
+        builder.Services.AddSingleton<TestingSwitches>();
         builder.Services.AddSingleton<ActivityClock>();
         builder.Services.AddSingleton<NewActivityService>();
         builder.Services.AddSingleton<TimedEventService>();
@@ -447,6 +448,7 @@ public static partial class ServerHost
         }
         app.Logger.LogInformation("Data dir {DataDir}", options.DataDir);
         LogGmPolicy(app.Logger, options, builder.Environment.EnvironmentName);
+        LogTesting(app.Logger, options.Testing);
         // D1 inventory across many short-lived servers (a whole test suite): each appends its loop waits on stop.
         if (Environment.GetEnvironmentVariable("RO3EMU_LOOPWAIT_DUMP") is { Length: > 0 } dump)
             app.Lifetime.ApplicationStopped.Register(() => Diagnostics.LoopWaitDump.Append(dump, app.Services.GetRequiredService<AccountStore>().AccessMetrics));
@@ -510,6 +512,23 @@ public static partial class ServerHost
         else
             logger.LogInformation("GM: every account (Ro3Emu:GmAccounts is empty; local or test server)");
     }
+
+    /// <summary>Ro3Emu:Testing switches are test aids, never the original game: say so loudly while one is on.</summary>
+    private static void LogTesting(ILogger logger, TestingOptions testing)
+    {
+        if (testing.AlwaysOpen) LogAlwaysOpen(logger);
+        if (testing.UnlimitedRewards) LogUnlimitedRewards(logger);
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "!!! Ro3Emu:Testing:AlwaysOpen is ON: every To-Do activity is open at " +
+        "any hour, its occurrence repeating all day. TEST AID, not original behaviour; turn it off for a real realm " +
+        "(docs/guide/hosting.md).")]
+    private static partial void LogAlwaysOpen(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "!!! Ro3Emu:Testing:UnlimitedRewards is ON: dungeon, MVP, Commendation " +
+        "Vault and Dodo's Request reward counts never run out. TEST AID, not original behaviour; turn it off for a real realm " +
+        "(docs/guide/hosting.md).")]
+    private static partial void LogUnlimitedRewards(ILogger logger);
 
     private static string RepositoryRoot()
     {

@@ -39,6 +39,7 @@ public sealed partial class DailyActivityService : IGameTicker
     private readonly SessionRegistry _sessions;
     private readonly GameLoop _loop;
     private readonly TimedTodoSchedule _timedSchedule;
+    private readonly TestingSwitches _testing;
     private readonly MailService _mail;
     private readonly ILogger<DailyActivityService> _log;
     private Dictionary<int, ActivityDef>? _definitions;
@@ -63,8 +64,10 @@ public sealed partial class DailyActivityService : IGameTicker
 
     public DailyActivityService(GameData data, CharacterService character, FunctionService functions, SeasonService seasons,
         TaskService tasks, RoleStore roles, RewardService rewards, SessionRegistry sessions, GameLoop loop,
-        TimedTodoSchedule timedSchedule, TimeProvider clock, MailService mail, ILogger<DailyActivityService> log)
+        TimedTodoSchedule timedSchedule, TimeProvider clock, MailService mail, ILogger<DailyActivityService> log,
+        TestingSwitches testing)
     {
+        this._testing = testing;
         this._data = data;
         this._character = character;
         this._functions = functions;
@@ -146,7 +149,7 @@ public sealed partial class DailyActivityService : IGameTicker
         foreach (var def in Defs().Values.Where(d => Available(session, d)))
             if (!rows.ActivityData.ContainsKey(def.Id)) rows.ActivityData[def.Id] = NewRow(def.Id, daily);
         ProjectWindows(rows, ToUnix(now));
-        UpdateRingCount(rows, state);
+        UpdateRingCount(rows, state, _testing.UnlimitedRewards);
         state.Rows = rows.ToByteArray();
         if (!resetDaily && !resetWeekly)
         {
@@ -231,7 +234,13 @@ public sealed partial class DailyActivityService : IGameTicker
             if (!Available(session, def) || !ParticipationOpen(id) || !_functions.IsOpen(session, TodoFunction)
                 || !_functions.IsOpen(session, def.Function) || def.Count <= 0) continue;
             if (id == RingActivity && (!ringNode || taskId != start + 9)) continue;
-            if (!rows.ActivityData.TryGetValue(id, out var row) || row.TaskCompleteTimes >= def.Count) continue;
+            if (!rows.ActivityData.TryGetValue(id, out var row) || row.TaskCompleteTimes >= def.Count)
+            {
+                // Testing UnlimitedRewards (TEST AID, not original): a chain past the day's allowance still ends, so
+                // another one can be accepted.
+                if (id == RingActivity && row != null && _testing.UnlimitedRewards) { next.ActiveRingStart = 0; changed = true; }
+                continue;
+            }
             row.TaskCompleteTimes++;
             row.Tasks[taskId] = row.Tasks.GetValueOrDefault(taskId) + 1;
             row.ActivityState = row.TaskCompleteTimes >= def.Count ? (EDailyState)2 : (EDailyState)1;
@@ -260,7 +269,7 @@ public sealed partial class DailyActivityService : IGameTicker
         int result = req.ActivityId != RingActivity || req.RunRingTaskAccept == null ? ErrorCodes.Parameter
             : !_functions.IsOpen(session, TodoFunction) || !_functions.IsOpen(session, RingFunction) ? ErrorCodes.FeatureUnavailable
             : session.Daily is { ActiveRingStart: not 0 } ? ErrorCodes.TaskExists
-            : session.Daily == null || Remaining(session.Daily) <= 0 ? ErrorCodes.AttemptsExhausted
+            : session.Daily == null || Remaining(session.Daily) <= 0 && !_testing.UnlimitedRewards ? ErrorCodes.AttemptsExhausted
             : 0;
         int start = 0;
         if (result == 0)
@@ -274,7 +283,7 @@ public sealed partial class DailyActivityService : IGameTicker
             if (result == 0)
             {
                 session.Daily.ActiveRingStart = start;
-                UpdateRingCount(Rows(session), session.Daily);
+                UpdateRingCount(Rows(session), session.Daily, _testing.UnlimitedRewards);
                 session.Daily.Rows = Rows(session).ToByteArray();
                 var nextDaily = JsonSerializer.SerializeToUtf8Bytes(session.Daily);
                 bool committed;
@@ -538,14 +547,16 @@ public sealed partial class DailyActivityService : IGameTicker
     private static int Remaining(DailyState state) => DBDailyActivityInfo.Parser.ParseFrom(state.Rows).ActivityData.TryGetValue(RingActivity, out var row)
         ? row.ActivityInfo?.ActivityParam?.RunRingTask?.RemainRingCount ?? 0 : 0;
 
-    private static void UpdateRingCount(DBDailyActivityInfo rows, DailyState state)
+    /// <param name="unlimited">Testing UnlimitedRewards (TEST AID, not original): a finished chain does not use the
+    /// allowance up.</param>
+    private static void UpdateRingCount(DBDailyActivityInfo rows, DailyState state, bool unlimited)
     {
         if (!rows.ActivityData.TryGetValue(RingActivity, out var row)) return;
         row.ActivityInfo ??= new PlayerActivityInfo();
         row.ActivityInfo.ActivityParam ??= new PlayerActivityParam();
         // Remain count is sent even while the chain is active; accept consumes one allowance (inferred).
         row.ActivityInfo.ActivityParam.RunRingTask = new PlayerActivityRunRingTask
-        { RemainRingCount = state.ActiveRingStart != 0 || row.TaskCompleteTimes > 0 ? 0 : RingRuns };
+        { RemainRingCount = state.ActiveRingStart != 0 || row.TaskCompleteTimes > 0 && !unlimited ? 0 : RingRuns };
     }
 
     private static DBDailyActivityData NewRow(int id, long epoch) => new()
