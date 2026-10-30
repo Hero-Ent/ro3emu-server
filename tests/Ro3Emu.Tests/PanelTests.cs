@@ -23,7 +23,7 @@ public sealed class PanelTests : IAsyncLifetime
 
     public Task DisposeAsync() => _host.DisposeAsync().AsTask();
 
-    private static async Task<(SyntheticHost Host, string Panel)> StartAsync(Action<ServerOptions> configure)
+    internal static async Task<(SyntheticHost Host, string Panel)> StartAsync(Action<ServerOptions> configure)
     {
         int port = TestPorts.FreePort();
         var host = await SyntheticHost.StartAsync(o =>
@@ -287,7 +287,7 @@ public sealed class PanelTests : IAsyncLifetime
         Assert.True(character.GetProperty("level").GetInt32() >= 1);
     }
 
-    private static async Task<int> SdkLoginAsync(SyntheticHost host, string identity, string credential)
+    internal static async Task<int> SdkLoginAsync(SyntheticHost host, string identity, string credential)
     {
         using var client = new HttpClient();
         using var form = new FormUrlEncodedContent(new Dictionary<string, string> { ["identity"] = identity, ["credential"] = credential });
@@ -296,7 +296,7 @@ public sealed class PanelTests : IAsyncLifetime
     }
 
     /// <summary>A browser on the panel: its cookies, and the CSRF token of its latest /api/session.</summary>
-    private sealed class PanelBrowser : IDisposable
+    internal sealed class PanelBrowser : IDisposable
     {
         private readonly HttpClientHandler _handler = new() { CookieContainer = new CookieContainer(), UseCookies = true };
 
