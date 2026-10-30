@@ -135,6 +135,7 @@ public sealed partial class CombatService
         _eventAttacks.Remove(s);
         await PayCostsAsync(s, costs);
         if (!unlimited) await _buffs.SpendEnergyAsync(s, row!.Value);
+        int lead = owned == null && BeforeCast is { } before ? await before(s) : 0;
         await s.SendGameAsync(UseSkill, new CastSkillRsp { SessionId = id, IsAutoCast = req.IsAutoCast });
         var target = FindMonster(s.WorldScene, req.TargetId);
         var playerTarget = EventTarget(s, req.TargetId);
@@ -147,7 +148,7 @@ public sealed partial class CombatService
             s.Attack = new AttackLoop
             {
                 Target = target, SkillId = loopSkill,
-                NextSwingMs = Now + SkillMs(s, row.Value) + ChantMs(s, row.Value) + 1,
+                NextSwingMs = Now + lead + SkillMs(s, row.Value) + ChantMs(s, row.Value) + 1,
                 StartX = s.Position.X, StartZ = s.Position.Z, StartedWalking = s.Walking, StartMs = Now,
                 ArrivalSpeed = s.Speed / 100f, WalkFromUtc = s.LastWalkUtc
             };
@@ -155,11 +156,11 @@ public sealed partial class CombatService
         else s.Attack = null;
         if (GameData.Int(row.Value, "_iIfAutoAtk") == 2 && owned == null && playerTarget != null)
             _eventAttacks[s] = new EventAttack(playerTarget, loopSkill,
-                Now + SkillMs(s, row.Value) + ChantMs(s, row.Value) + 1,
+                Now + lead + SkillMs(s, row.Value) + ChantMs(s, row.Value) + 1,
                 s.Position.X, s.Position.Z);
         if (own != null) await OwnSkillCast!(s, req.SkillId);
         else await StartCooldownAsync(s, row.Value, SkillConfig.Get(_data, request.SkillId) is { } asked ? (int)asked.Mode : null);
-        await StartCastAsync(s, row.Value, req, id, owned);
+        await StartCastAsync(s, row.Value, req, id, owned, lead);
     }
 
     /// <summary>Cast item cost and frozen intent share one owner receipt; HP/SP/buffs remain runtime resources.
@@ -463,7 +464,9 @@ public sealed partial class CombatService
         return Current();
     }
 
-    private async Task StartCastAsync(GameSession s, JsonElement row, CastSkillReq req, long id, SkillObject? actor = null)
+    /// <param name="leadMs">How long the cast waits before it starts (<see cref="BeforeCast"/>): its timeline is sent and its
+    /// impact lands that much later, and an interrupt in between cancels it like any cast.</param>
+    private async Task StartCastAsync(GameSession s, JsonElement row, CastSkillReq req, long id, SkillObject? actor = null, int leadMs = 0)
     {
         var origin = actor?.Pos ?? s.Position.Clone();
         var target = FindMonster(s.WorldScene, req.TargetId);
@@ -472,28 +475,30 @@ public sealed partial class CombatService
         {
             Id = id, OwnerId = s.Role!.Id, WorldScene = s.WorldScene, SceneGeneration = s.SceneGeneration,
             Attachment = s.Attachment, Request = req, Row = row, Origin = origin, StartedWalking = actor == null && s.Walking, WalkFromUtc = s.LastWalkUtc,
-            StartMs = Now, ChantMs = ChantMs(s, row), ActionMs = SkillMs(s, row), Operator = actor,
+            StartMs = Now + leadMs, ChantMs = ChantMs(s, row), ActionMs = SkillMs(s, row), Operator = actor,
         };
         s.SkillCast = action;
         s.WorldState.ResurrectionCastId = Script(row) == "Resurrection" ? id : 0;
         s.Face = face;
         req.Face = face;
-        await SendCastTimelineAsync(s, new UseInSkillInfo
+        Task Timeline() => SendCastTimelineAsync(s, new UseInSkillInfo
         {
             SrcID = action.SourceId, SkillID = req.SkillId, TargetId = req.TargetId, TargetPos = req.TargetPos ?? origin,
             Face = face, SessionId = id, ChantMs = action.ChantMs, SkillMs = action.ActionMs, StartTime = action.StartMs, PlayAct = true,
         }, highLevel: GameData.Int(row, "_iSkillEffectLevel") > 0, extra: actor != null || req.IsExtraSkill);
+        if (leadMs <= 0) await Timeline();
+        else ScheduleRuntime(action.WorldScene, TimeSpan.FromMilliseconds(leadMs), () => Live(s, action) ? Timeline() : Task.CompletedTask);
         var template = _data.SkillTemplate(GameData.Int(row, "_iScriptShow"));
         var points = template is { } t ? Numbers(t, "m_kAtkPoints") : [];
         double point = points.FirstOrDefault(0.2);
         int at = Script(row) == "Resurrection" ? action.ChantMs : ImpactOffset(template, point, action.ChantMs, action.ActionMs);
-        ScheduleRuntime(action.WorldScene, TimeSpan.FromMilliseconds(at), async () =>
+        ScheduleRuntime(action.WorldScene, TimeSpan.FromMilliseconds(leadMs + at), async () =>
         {
             if (!Live(s, action)) return;
             action.Resolved = true;
             await ResolveCastAsync(s, action);
         });
-        ScheduleRuntime(action.WorldScene, TimeSpan.FromMilliseconds(Math.Max(at, action.ChantMs + action.ActionMs) + 1), () =>
+        ScheduleRuntime(action.WorldScene, TimeSpan.FromMilliseconds(leadMs + Math.Max(at, action.ChantMs + action.ActionMs) + 1), () =>
         {
             if (ReferenceEquals(s.SkillCast, action)) s.SkillCast = null;
             return Task.CompletedTask;
