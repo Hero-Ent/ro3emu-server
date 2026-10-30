@@ -64,6 +64,14 @@ Ro3Emu.Server.Accounts.DungeonRewardObligation/<RoleId>k__BackingField
 Ro3Emu.Server.Accounts.DungeonRewardObligation/<RoomId>k__BackingField
 Ro3Emu.Server.Accounts.DungeonRewardObligation/<SceneEntry>k__BackingField
 Ro3Emu.Server.Accounts.DungeonRewardObligation/<Success>k__BackingField
+Ro3Emu.Server.Accounts.Persistence.AccountBanWritePlan/<account>P
+Ro3Emu.Server.Accounts.Persistence.AccountBanWritePlan/<admin>P
+Ro3Emu.Server.Accounts.Persistence.AccountBanWritePlan/<now>P
+Ro3Emu.Server.Accounts.Persistence.AccountBanWritePlan/<reason>P
+Ro3Emu.Server.Accounts.Persistence.AccountBanWritePlan/<until>P
+Ro3Emu.Server.Accounts.Persistence.AccountPasswordPlan/_hash
+Ro3Emu.Server.Accounts.Persistence.AccountPasswordPlan/_name
+Ro3Emu.Server.Accounts.Persistence.AccountPasswordPlan/_salt
 Ro3Emu.Server.Accounts.Persistence.AccountRegisterPlan/_createdUtc
 Ro3Emu.Server.Accounts.Persistence.AccountRegisterPlan/_hash
 Ro3Emu.Server.Accounts.Persistence.AccountRegisterPlan/_name
@@ -73,6 +81,10 @@ Ro3Emu.Server.Accounts.Persistence.AccountTokenPlan/<expires>P
 Ro3Emu.Server.Accounts.Persistence.AccountTokenPlan/<kind>P
 Ro3Emu.Server.Accounts.Persistence.AccountTokenPlan/<now>P
 Ro3Emu.Server.Accounts.Persistence.AccountTokenPlan/<token>P
+Ro3Emu.Server.Accounts.Persistence.AccountUnbanPlan/<account>P
+Ro3Emu.Server.Accounts.Persistence.AccountUnbanPlan/<admin>P
+Ro3Emu.Server.Accounts.Persistence.AccountUnbanPlan/<now>P
+Ro3Emu.Server.Accounts.Persistence.AccountUnbanPlan/<reason>P
 Ro3Emu.Server.Accounts.Persistence.ActivityEveGlobalPlan/_activity
 Ro3Emu.Server.Accounts.Persistence.ActivityEveGlobalPlan/_blob
 Ro3Emu.Server.Accounts.Persistence.ActivityEveGlobalPlan/_cycle
