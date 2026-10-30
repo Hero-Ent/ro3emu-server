@@ -52,13 +52,12 @@ async function adminGiftCodesPage() {
   return adminLayout('gift-codes',
     pageHead({ crumbs: adminCrumbs({ label: 'Gift codes' }), title: 'Gift codes', actions: densityToggle(),
       subtitle: 'Codes players type in the game\'s Redemption Code screen; the rewards arrive by mail. Changes are in the audit log.' }),
-    h('div', { class: 'grid' },
-      h('div', { class: 'span-8' }, card('Codes', null, listHost)),
-      h('div', { class: 'span-4' }, card('Create codes', null, body(create, created)))));
+    card('Codes', null, listHost),
+    h('div', { class: 'tools-gap-top' }, card('Create codes', null, body(create, created))));
 }
 
 function codeTable(codes, refresh) {
-  if (!codes.length) return emptyState('gift', 'No gift codes yet', 'Create one on the right.');
+  if (!codes.length) return emptyState('gift', 'No gift codes yet', 'Create one below.');
   const toggle = async (code, disable) => {
     await api('POST', `/api/admin/gift-codes/${encodeURIComponent(code.code)}/${disable ? 'disable' : 'enable'}`);
     toast(`${code.code} ${disable ? 'disabled' : 'enabled'}.`);

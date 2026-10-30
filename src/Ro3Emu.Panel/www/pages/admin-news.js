@@ -24,7 +24,7 @@ async function adminNewsPage() {
   const list = news.length
     ? table([
       { label: 'Title', grow: true, wrap: true, value: n => h('span', { class: 'strong' }, n.title) },
-      { label: 'Category', value: n => chip(n.tag, n.tag) },
+      { label: 'Category', opt: true, value: n => chip(n.tag, n.tag) },
       { label: 'Published', value: n => [stamp(n.published), new Date(n.published).getTime() > now ? [' ', chip('info', 'scheduled')] : null] },
       { label: 'Pinned', opt: true, value: n => n.pinned ? chip('info', 'Pinned') : h('span', { class: 'muted' }, '-') },
       { label: '', value: n => h('div', { class: 'row' },

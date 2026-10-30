@@ -48,7 +48,7 @@ async function adminGmPage() {
   const quick = ['!help', '!where', '!online'].map(c => h('button', { type: 'button', class: 'btn secondary sm', onclick: () => { line.value = c; prompt.requestSubmit(); } }, mono(c)));
   const past = history.entries.length
     ? table([
-      { label: 'Time', value: e => stamp(e.utc) },
+      { label: 'Time', opt: true, value: e => stamp(e.utc) },
       { label: 'Character', value: e => e.target },
       { label: 'Command and first reply', grow: true, wrap: true, value: e => mono(e.detail) },
     ], history.entries)

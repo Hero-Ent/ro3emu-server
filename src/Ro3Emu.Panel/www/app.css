@@ -320,7 +320,7 @@ select.input{padding-right:var(--s6)}
   .nav .menu-auth{display:flex;gap:var(--s2);padding:var(--s2) 0 0;border-top:1px solid var(--line-soft)}
   .nav .menu-auth .btn{flex:1}
   .admin{grid-template-columns:minmax(0,1fr)}
-  .side{position:static;display:flex;gap:var(--s1);overflow-x:auto;padding:var(--s1)}
+  .side{position:static;display:flex;flex-wrap:wrap;gap:var(--s1);padding:var(--s1)}
   .side .label,.side hr,.side .later{display:none}
   .side a{flex:none}
 }
