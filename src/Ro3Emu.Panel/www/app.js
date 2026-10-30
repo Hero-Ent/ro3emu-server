@@ -350,7 +350,7 @@ async function homePage() {
   const newsCard = card('Latest news', link('/news', { class: 'more' }, 'All news', icon('arrow')),
     news.news.length
       ? h('ul', { class: 'rows' }, news.news.map(n => h('li', null, h('span', { class: 't' }, n.title), day(n.published),
-        h('span', { class: 'm' }, chip(n.tag, n.tag), n.author && ['by ', n.author]))))
+        h('span', { class: 'm' }, n.pinned && chip('info', 'Pinned'), chip(n.tag, n.tag), n.author && ['by ', n.author]))))
       : emptyState('book', 'No news yet', 'Announcements from the team will show up here.'));
   const onlineCard = card("Who's online", link('/online', { class: 'more' }, 'All', icon('arrow')),
     online.players.length ? onlineTable(online.players, false, 6) : emptyState('users', 'Nobody is in the world', null),
@@ -407,7 +407,7 @@ async function newsPage() {
   return [pageHead({ crumbs: [{ href: '/', label: 'Home' }, { label: 'News' }], title: 'News' }),
     news.length
       ? h('div', { class: 'stack' }, news.map(n => h('article', { class: 'card article' }, body(
-        h('div', { class: 'm' }, chip(n.tag, n.tag), stamp(n.published), n.author && ['by ', n.author]),
+        h('div', { class: 'm' }, n.pinned && chip('info', 'Pinned'), chip(n.tag, n.tag), stamp(n.published), n.author && ['by ', n.author]),
         h('h2', null, n.title), h('p', { class: 'text' }, n.body)))))
       : card(null, null, emptyState('book', 'No news yet', 'Announcements from the team will show up here.'))];
 }
@@ -519,15 +519,26 @@ const adminSections = [
   ['accounts', '/admin/accounts', 'Accounts', 'users'],
   ['audit', '/admin/audit', 'Audit log', 'list'],
 ];
-const laterSections = [['Items & monsters', 'box'], ['Mail & rewards', 'mail'], ['Gift codes', 'gift'], ['GM console', 'terminal'],
-  ['Economy log', 'coins'], ['News editor', 'pen'], ['Broadcasts', 'bell']];
+const laterSections = [['items', 'Items & monsters', 'box'], ['mail', 'Mail & rewards', 'mail'], ['gift-codes', 'Gift codes', 'gift'],
+  ['gm', 'GM console', 'terminal'], ['economy', 'Economy log', 'coins'], ['news', 'News editor', 'pen'], ['broadcasts', 'Broadcasts', 'bell']];
+
+/**
+ * An admin page from its own file (www/pages/*.js, loaded after this one): a sidebar entry, which replaces the
+ * "Coming later" entry of the same id, and its route. Call it while the scripts load, before the first route.
+ */
+function registerAdminPage({ id, label, icon: iconName, path, pattern, page }) {
+  adminSections.push([id, path, label, iconName]);
+  const later = laterSections.findIndex(([laterId]) => laterId === id);
+  if (later >= 0) laterSections.splice(later, 1);
+  routes.push([pattern, page, 'admin']);
+}
 
 function adminLayout(current, ...content) {
   const side = h('nav', { class: 'card side', 'aria-label': 'Admin' },
     h('span', { class: 'label' }, 'Admin'),
     adminSections.map(([id, href, label, name]) => link(href, { 'aria-current': id === current ? 'page' : null }, icon(name), label)),
-    h('hr'), h('span', { class: 'label' }, 'Coming later'),
-    laterSections.map(([label, name]) => h('span', { class: 'later', 'aria-disabled': 'true' }, icon(name), label)));
+    laterSections.length > 0 && [h('hr'), h('span', { class: 'label' }, 'Coming later')],
+    laterSections.map(([, label, name]) => h('span', { class: 'later', 'aria-disabled': 'true' }, icon(name), label)));
   return h('div', { class: 'admin' }, side, h('div', { class: 'admin-main' }, content));
 }
 
@@ -663,7 +674,8 @@ async function adminAudit() {
 
 // ---------------------------------------------------------------- start
 
-(async () => {
+// After every deferred script, so the admin pages in www/pages/ have registered their routes.
+document.addEventListener('DOMContentLoaded', async () => {
   try { await loadSession(); } catch { /* the pages show the error */ }
   await route();
-})();
+});
