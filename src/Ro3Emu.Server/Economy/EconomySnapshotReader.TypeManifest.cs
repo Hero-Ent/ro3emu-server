@@ -82,7 +82,10 @@ public static partial class EconomySnapshotReader
     // leave the warehouse by being built on a war map; WartimeSlots are operator permissions and WartimePrepay the
     // machines a member reserved for the blueprint they place. No balance and no asset: machines never reach a bag, a
     // purse or a trade.
-    public const string ExpectedFormatManifestHash = "BA5E8395604B3C714F797006E333C5049C1890E5468ED623A68D953FB65ED5E7";
+    // Daily compensation: role.daily DailyState.Compensation lists, per ended day, the goods of the To-Do boxes that day
+    // reached and left unclaimed. An obligation, not a holding: the goods are sourced only by the 1058 letter's
+    // mail/deliver receipt (ActivityReward), delivered once by its daily-compensation delivery key, which also removes the day.
+    public const string ExpectedFormatManifestHash = "C99D38A7E3C57714CB7F363C3296CB1CD3255D33D2CFB739999F4E1BFF0D98B6";
     public static string FormatManifestHash => State.FormatManifestHash;
 
     private sealed partial class State
