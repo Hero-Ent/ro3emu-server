@@ -41,6 +41,8 @@ public sealed partial class SiegeTests
         Assert.True(max > 0);
         Assert.Equal(max, Property(tank, 2000));
         var unit = Machine(tank.Uuid);
+        // A hit neither locks it nor leaves it to heal to full when the fight moves away (MonsterService returning home).
+        Assert.True(unit.KeepsDamage && unit.StaysOutOfBattle);
         Assert.Equal(0, await Interact(attack, tank.Uuid, 4900022));
 
         // Only the other camp may hit it.
@@ -97,6 +99,7 @@ public sealed partial class SiegeTests
             n => n.Uid == builder && n.DataInfo.EType == InteractInfo.Types.EState.Gvgcannon);
 
         var unit = Machine(cannon.Uuid);
+        Assert.True(unit.KeepsDamage && unit.StaysOutOfBattle);
         var pos = cannon.MovementInfo.Pos;
         await OnLoop(async () =>
         {

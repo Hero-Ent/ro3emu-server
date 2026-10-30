@@ -244,10 +244,16 @@ public sealed partial class SiegeTests
         Assert.Equal(gateHp, gate.Hp);
         Assert.True(guardian.Hp < guardian.Template.MaxHp);
         await OnLoop(wars.ReconcileAsync);
-        var hp = await Next(defense, GlobalObjectNotify, GlobalObjectDataNotify.Parser,
-            n => AtPoint(n, GatePoint) is { } g && g.Hp < g.MaxHp);
-        Assert.Equal(gateHp, AtPoint(hp, GatePoint)!.Hp);
-        await Next(defense, GlobalObjectNotify, GlobalObjectDataNotify.Parser, n => AtPoint(n, 38) is { } g && g.Hp < g.MaxHp);
+        // The gate and the guardian may come in one 30115 or in two, in either order.
+        long? sentGate = null;
+        bool sentGuardian = false;
+        await Next(defense, GlobalObjectNotify, GlobalObjectDataNotify.Parser, n =>
+        {
+            if (AtPoint(n, GatePoint) is { } g && g.Hp < g.MaxHp) sentGate = g.Hp;
+            if (AtPoint(n, 38) is { } h && h.Hp < h.MaxHp) sentGuardian = true;
+            return sentGate != null && sentGuardian;
+        });
+        Assert.Equal(gateHp, sentGate);
     }
 
     private static long[] Walls(DungeonBaseInfoNotify info)

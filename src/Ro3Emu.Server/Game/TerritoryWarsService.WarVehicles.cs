@@ -113,6 +113,8 @@ public sealed partial class TerritoryWarsService
             Template = template, Group = group, Home = home, Hp = template.MaxHp, BornTimeMs = MonsterService.NowMs,
             SeatRows = seats, Seats = new GameSession?[seats.Length],
             SeatTypes = [.. seats.Select(seat => VehicleSeatConfig.Get(_data, seat)?.Type ?? 0)],
+            // As a cannon: damage stays until the repair zone mends it, and a hit does not lock or leash it.
+            KeepsDamage = true, StaysOutOfBattle = true,
         };
         foreach (long[] entry in npc.BornEventBuff)
             if (entry is [var buff, ..] && buff > 0 && _data.Row("BuffConfig", buff) != null)

@@ -124,6 +124,9 @@ public sealed partial class TerritoryWarsService
                 Camp = camp, CampOverride = (int)camp, Guild = battle.Guild, Name = role.Name,
                 Template = template, Group = group, Home = home, Hp = template.MaxHp, BornTimeMs = MonsterService.NowMs,
                 ConfigId = new GVGCannonConfig(cannon).Id, Bullets = new GVGCannonConfig(cannon).BulletNumLimit,
+                // Its HP is only its own: no lock on whoever hits it, no heal to full when the fight moves away; the repair
+                // zone mends it (TerritoryWarsService.WarRepair.cs).
+                KeepsDamage = true, StaysOutOfBattle = true,
             };
             foreach (long[] entry in new NPCConfig(npc).BornEventBuff)
                 if (entry is [var buff, ..] && buff > 0 && owner._data.Row("BuffConfig", buff) != null)
