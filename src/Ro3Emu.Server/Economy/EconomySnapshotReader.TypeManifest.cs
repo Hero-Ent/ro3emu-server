@@ -72,7 +72,9 @@ public static partial class EconomySnapshotReader
     // casual_battle_obligation.payout is CasualBattleService.Payout: a frozen match result (rating delta, record,
     // numbers) and the DropPool ids its payment rolls. No goods: they are granted by the role's event/casual-battle
     // receipt that also writes the timed_battle state and marks the row delivered.
-    public const string ExpectedFormatManifestHash = "D5E7E8D429207929DD339BBB976CBDAEA16B4197AD5A969D76BFCE9CD3EC6E54";
+    // Friend gifts: role.gifts (ShopService.GiftState) holds appearance gift orders already paid for; an order carries
+    // no goods itself, the recipient's pick or the expiry refund mail grants them under their own receipts.
+    public const string ExpectedFormatManifestHash = "7EF149A4A0A8662CBFFC21AEDC38A3EC5461100E977AD6F8D59E964D0C7AA154";
     public static string FormatManifestHash => State.FormatManifestHash;
 
     private sealed partial class State

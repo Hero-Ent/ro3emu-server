@@ -113,6 +113,17 @@ public sealed class S3EconomyDecoderTests
     }
 
     [Fact]
+    public void EveryJsonRoleBlobHasAStrictProfile()
+    {
+        // A role with a sent gift (ShopService.GiftState) once made every economic write of the realm refuse.
+        using var f = new Fixture();
+        f.Insert("INSERT INTO role(id,currency,gifts) VALUES(101,'1:7',$0)",
+            B("""{"Received":{},"Sent":{"9":{"OrderId":9,"SenderId":101,"SenderName":"a","RecipientId":102,"RecipientName":"b","CommodityId":1,"AppearanceId":2,"AppearanceAwardId":0,"CurrencyId":1,"CurrencyCount":5,"GiftContent":"","CreatedUtc":1,"State":1}}}"""));
+        Assert.DoesNotContain(EconomySnapshotReader.Read(f.PathName, Catalog, "realm-fixture").Issues,
+            x => x.Kind is EconomyIssueKind.UnknownSchema or EconomyIssueKind.Corruption);
+    }
+
+    [Fact]
     public void HandAuthoredCompartmentsCountEachHoldingOnce()
     {
         using var f = new Fixture();
