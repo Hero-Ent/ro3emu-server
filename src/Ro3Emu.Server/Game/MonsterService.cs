@@ -438,7 +438,8 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
             if (now >= m.EndMs)
             {
                 m.Moving = false;
-                if (m.Target == null) SendStop(m, now);
+                // A marching monster's next leg starts below in this tick: no stop in between.
+                if (m.Target == null && m.March is not { Arrived: false }) SendStop(m, now);
             }
         }
         if (m.PetTarget != null)
@@ -460,6 +461,11 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
                 Engage(m, near);
                 return;
             }
+        }
+        if (m.March is { } march)
+        {
+            March(m, map, march, now); // MonsterService.March
+            return;
         }
         if (m.Returning && !m.Moving)
         {
@@ -561,6 +567,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         var previous = monster.Target;
         if (ReferenceEquals(previous, target)) return;
         monster.Target = target;
+        if (previous == null && target != null) LeaveRoute(monster); // MonsterService.March
         ReleaseSurroundSlot(monster);
         foreach (var handler in TargetChanged) _loop.TrackRuntimeDetached("monster target change", () => handler(monster, previous, target));
     }
@@ -569,7 +576,11 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     public void Engage(MonsterUnit m, TowerPetUnit target)
     {
         if (m.Dead || m.Hp <= 0 || target.Dead || target.Hp <= 0 || m.InstanceId == 0 || m.WorldScene != target.WorldScene) return;
-        if (m.PetTarget == null) m.NextSwingMs = NowMs + 300;
+        if (m.PetTarget == null)
+        {
+            m.NextSwingMs = NowMs + 300;
+            if (m.Target == null) LeaveRoute(m); // MonsterService.March
+        }
         m.PetTarget = target;
         m.Returning = false;
     }
@@ -578,7 +589,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     {
         var target = m.PetTarget!;
         if (target.Dead || target.Hp <= 0 || target.Owner.SceneLoading || target.WorldScene != m.WorldScene
-            || Distance(m.Home.X, m.Home.Z, target.X, target.Z) > m.Template.LeashDistance)
+            || Distance(LeashX(m), LeashZ(m), target.X, target.Z) > m.Template.LeashDistance)
         {
             m.PetTarget = null;
             if (m.Target == null) Disengage(m, map);
@@ -625,7 +636,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     {
         var target = m.Target!;
         bool lost = target.Role == null || target.Dead || target.SceneLoading || TargetVisible?.Invoke(m, target) == false || target.WorldScene != m.WorldScene
-                    || Distance(m.Home.X, m.Home.Z, target.Position.X, target.Position.Z) > m.Template.LeashDistance;
+                    || Distance(LeashX(m), LeashZ(m), target.Position.X, target.Position.Z) > m.Template.LeashDistance;
         if (lost)
         {
             Disengage(m, map);
@@ -685,6 +696,14 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         EndBossSkills(m, interrupt: true);
         SetTarget(m, null);
         m.PetTarget = null;
+        if (m.March is { } march)
+        {
+            // Back on its way from where the fight ended, not home, and to the goal again if the fight drew it off.
+            march.Route.Clear();
+            march.Arrived = false;
+            march.Failures = 0;
+            return;
+        }
         m.Returning = true;
         if (m.Template.SpeedCm > 0) WalkTo(m, map, m.Home.X, m.Home.Z, 2f); // buff 901501: +100 % MSPD on the way back
     }
