@@ -183,6 +183,9 @@ public sealed class MonsterMarch(float goalX, float goalZ, float arriveRadius)
     public float LeashZ { get; set; }
     /// <summary>Plans in a row that found no way on; past a few the monster stays where it is.</summary>
     public int Failures { get; set; }
+    /// <summary>Held where it stands until released (the siege's battering ram without an escort,
+    /// TerritoryWarsService.SiegeUnits).</summary>
+    public bool Halted { get; set; }
 }
 
 /// <summary>Runs a monster's AI each map tick (MonsterService).</summary>

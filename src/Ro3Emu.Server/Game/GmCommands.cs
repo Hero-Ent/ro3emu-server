@@ -343,7 +343,7 @@ public sealed partial class GmCommands(IOptions<ServerOptions> options, GameData
                 : await seasons.SetPlayBookAsync(I(a[0])));
         }
         ),
-        ["siege"] = ("open|close|state|seed <city> <attackGuild> <defenseGuild> (test aid)", async (s, a) =>
+        ["siege"] = ("open|close|state|prepare|objects|seed <city> <attackGuild> <defenseGuild> (test aid)", async (s, a) =>
             await ReplyAsync(s, await services.GetRequiredService<TerritoryWarsService>().SiegeGmAsync(a))),
         ["twpoint"] = ("<point> unready|ready|complete [readySeconds] [owner|self] (test aid: 30129 stronghold gameplay point)", async (s, a) =>
             await ReplyAsync(s, await services.GetRequiredService<TerritoryWarsService>().ScenePointGmAsync(s, a))),
