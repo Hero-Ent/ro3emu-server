@@ -464,7 +464,10 @@ async function loginPage() {
     field('Account name', 'account', 'text', { autocomplete: 'username', maxlength: '64' }),
     field('Password', 'password', 'password', { autocomplete: 'current-password' })],
   'Log in', async values => {
-    adopt(await api('POST', '/api/login', { account: values.account, password: values.password }));
+    const result = await api('POST', '/api/login', { account: values.account, password: values.password });
+    // With two-factor authentication the password opens a code step (pages/account-security.js).
+    if (result.twoFactor) { render(twoFactorStep(result)); return; }
+    adopt(result);
     navigate(nextPath(), true);
     toast('Welcome back, ' + state.session.account + '.');
   }), state.session?.registration && ['New here? ', link('/register', null, 'Create an account')]);
@@ -515,7 +518,9 @@ async function accountPage() {
   });
   return [pageHead({ crumbs: [{ href: '/', label: 'Home' }, { label: 'Account' }], title: account.name,
     after: account.admin ? chip('admin', 'Admin') : null,
-    actions: [densityToggle(), account.admin && link('/admin', { class: 'btn secondary sm' }, icon('shield'), 'Admin area')] }),
+    actions: [densityToggle(), link('/account/security', { class: 'btn secondary sm' }, icon('key'), 'Security'),
+      account.admin && link('/admin', { class: 'btn secondary sm' }, icon('shield'), 'Admin area')] }),
+  state.session?.twoFactorRequired && twoFactorBanner(),
   h('div', { class: 'grid' },
     h('div', { class: 'span-8' }, card('Characters', null,
       account.characters.length ? characterTable(account.characters) : emptyState('user', 'No characters yet', 'Create one in the game; it shows up here.'))),
@@ -536,11 +541,22 @@ const laterSections = [['items', 'Items & monsters', 'box'], ['mail', 'Mail & re
   ['gm', 'GM console', 'terminal'], ['economy', 'Economy log', 'coins'], ['news', 'News editor', 'pen'], ['broadcasts', 'Broadcasts', 'bell']];
 
 /**
+ * Staff roles, each with everything of the ones before it. A sidebar entry shows only to the roles that may use it
+ * (its registered role, else this table, else GM); the server checks every request anyway.
+ */
+const roleRank = { '': 0, moderator: 1, gm: 2, admin: 3 };
+const sectionRoles = { dashboard: 'moderator', accounts: 'moderator', audit: 'moderator' };
+const mayUse = role => (roleRank[state.session?.role || ''] ?? 0) >= roleRank[role || 'gm'];
+/** Cards a page file adds to an account's admin page: functions of the account returning a node (or null). */
+const adminAccountCards = [];
+
+/**
  * An admin page from its own file (www/pages/*.js, loaded after this one): a sidebar entry, which replaces the
  * "Coming later" entry of the same id, and its route. Call it while the scripts load, before the first route.
  */
-function registerAdminPage({ id, label, icon: iconName, path, pattern, page }) {
-  adminSections.push([id, path, label, iconName]);
+function registerAdminPage({ id, label, icon: iconName, path, pattern, page, role }) {
+  if (role) sectionRoles[id] = role;
+  if (path) adminSections.push([id, path, label, iconName]);
   const later = laterSections.findIndex(([laterId]) => laterId === id);
   if (later >= 0) laterSections.splice(later, 1);
   routes.push([pattern, page, 'admin']);
@@ -549,17 +565,30 @@ function registerAdminPage({ id, label, icon: iconName, path, pattern, page }) {
 function adminLayout(current, ...content) {
   const side = h('nav', { class: 'card side', 'aria-label': 'Admin' },
     h('span', { class: 'label' }, 'Admin'),
-    adminSections.map(([id, href, label, name]) => link(href, { 'aria-current': id === current ? 'page' : null }, icon(name), label)),
+    // The roles' own pages first: moderation, then the GM tools, then the Admin's (a stable sort keeps each group's order).
+    adminSections.filter(([id]) => mayUse(sectionRoles[id]))
+      .sort((a, b) => roleRank[sectionRoles[a[0]] || 'gm'] - roleRank[sectionRoles[b[0]] || 'gm']).map(([id, href, label, name]) =>
+      link(href, { 'aria-current': id === current ? 'page' : null }, icon(name), label)),
     laterSections.length > 0 && [h('hr'), h('span', { class: 'label' }, 'Coming later')],
     laterSections.map(([, label, name]) => h('span', { class: 'later', 'aria-disabled': 'true' }, icon(name), label)));
   return h('div', { class: 'admin' }, side, h('div', { class: 'admin-main' }, content));
 }
 
+const roleName = role => ({ moderator: 'Moderator', gm: 'GM', admin: 'Admin' })[role] || 'Player';
+/** A staff role's chip (its own class: "admin" alone is the admin layout's). */
+const roleChip = role => chip('role-' + role, roleName(role));
+
 const adminCrumbs = (...rest) => [{ href: '/', label: 'Home' }, { href: '/admin', label: 'Admin' }, ...rest];
 
 function requireAdmin() {
   if (!state.session?.account) throw new ApiError('Please log in.', 401);
-  if (!state.session.admin) throw new ApiError('Only an admin can open this page.', 403);
+  if (!state.session.admin) throw new ApiError('Only staff can open this page.', 403);
+}
+
+/** A page of the given staff role or above (moderator, gm, admin). */
+function requireRole(role) {
+  requireAdmin();
+  if (!mayUse(role)) throw new ApiError(role === 'admin' ? 'Only an Admin can open this page.' : 'Only a GM or an Admin can open this page.', 403);
 }
 
 async function adminDashboard() {
@@ -622,18 +651,19 @@ async function adminAccounts() {
 
 async function adminAccount(name) {
   requireAdmin();
-  const { account, admin } = await api('GET', '/api/admin/accounts/' + encodeURIComponent(name));
+  const { account, admin, role } = await api('GET', '/api/admin/accounts/' + encodeURIComponent(name));
   const self = account.name === state.session.account;
   const status = account.ban ? chip('banned', 'Banned') : chip('active', 'Active');
   return adminLayout('accounts',
     pageHead({ crumbs: adminCrumbs({ href: '/admin/accounts', label: 'Accounts' }, { label: account.name }), title: account.name,
-      after: [status, admin && chip('admin', 'Admin')], actions: densityToggle() }),
+      after: [status, admin && roleChip(role)], actions: densityToggle() }),
     h('div', { class: 'grid' },
-      h('div', { class: 'span-8' }, card('Characters', null,
-        account.characters.length ? characterTable(account.characters, true) : emptyState('user', 'No characters', null))),
+      h('div', { class: 'span-8 stack' }, card('Characters', null,
+        account.characters.length ? characterTable(account.characters, true) : emptyState('user', 'No characters', null)),
+        adminAccountCards.map(f => f(account, self))),
       h('div', { class: 'span-4 stack' },
         card('Account', null, body(facts([['Name', mono(account.name)], ['Created', stamp(account.created)], ['Last played', stamp(account.lastLogin)],
-          ['Role', admin ? 'Admin (GM list)' : 'Player']]))),
+          ['Role', roleName(role)]]))),
         card(account.ban ? 'Ban' : 'Ban this account', null,
           body(self ? h('p', { class: 'hint' }, 'This is your own account.') : account.ban ? unbanForm(account) : banForm(account))))));
 }
