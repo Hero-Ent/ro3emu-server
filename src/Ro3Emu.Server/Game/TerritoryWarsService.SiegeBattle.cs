@@ -500,8 +500,8 @@ public sealed partial class TerritoryWarsService
             role.ExtraData[1001004] = new ExtraValueData { LongValue = p.Kills }; // KillPlayer
             role.ExtraData[1001005] = new ExtraValueData { LongValue = p.Assists }; // AssistKill
             role.ExtraData[1021001] = new ExtraValueData(); // AttackCityValue (no supported formula)
-            role.ExtraData[1021002] = new ExtraValueData(); // DestroyMachinery (not implemented)
-            role.ExtraData[1021003] = new ExtraValueData(); // MachineryDamage (not implemented)
+            role.ExtraData[1021002] = new ExtraValueData { LongValue = p.MachineKills }; // DestroyMachinery
+            role.ExtraData[1021003] = new ExtraValueData { LongValue = p.MachineDamage }; // MachineryDamage
             role.ExtraData[1021004] = new ExtraValueData(); // DefenseValue (no supported formula)
             role.ExtraData[1021006] = new ExtraValueData(); // TitleHistoryList
             role.ExtraData[1021007] = new ExtraValueData { LongValue = p.Score }; // CurrentScore

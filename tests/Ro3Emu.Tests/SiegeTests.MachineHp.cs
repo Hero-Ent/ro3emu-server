@@ -109,5 +109,12 @@ public sealed partial class SiegeTests
             n => n.Uid == builder && n.DataInfo.EType == InteractInfo.Types.EState.Idle);
         await Next(attack, GameAoiSink.SyncAoiView, AoIViewChangeData.Parser, v => v.LeaveAoi.Contains(cannon.Uuid));
         Assert.Equal(ErrorCodes.NpcMissing, await Interact(attack, cannon.Uuid, 4900005)); // the wreck is gone
+
+        // The siege record counts the destroyed machine and the damage dealt to it (DestroyMachinery, MachineryDamage).
+        await defense.SendGameAsync(30117, new GetDungeonStatisticsInDungeonReq());
+        var report = await Next(defense, 30117, GetDungeonStatisticsInDungeonResp.Parser);
+        var record = report.DungeonStatistics.SceneStatistics.Values.Single().RoleStatistics[Session(defense).Role!.Id].ExtraData;
+        Assert.Equal(1, record[1021002].LongValue);
+        Assert.True(record[1021003].LongValue > 0);
     }
 }
