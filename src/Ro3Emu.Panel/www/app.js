@@ -325,7 +325,7 @@ const levelCol = { label: 'Level', num: true, value: r => num(r.level) };
 function onlineTable(players, admin, limit) {
   const rows = limit ? players.slice(0, limit) : players;
   return table([
-    { label: 'Name', grow: true, value: p => h('span', { class: 'strong' }, p.name) },
+    { label: 'Name', grow: true, value: p => link('/profiles/' + encodeURIComponent(p.name), { class: 'row-link' }, p.name) },
     classCol, levelCol,
     { label: 'Map', opt: !limit, value: p => p.mapId ? link('/maps/' + p.mapId, { class: 'text-link' }, p.map) : p.map },
     admin && !limit && { label: 'Account', opt: true, value: p => link('/admin/accounts/' + encodeURIComponent(p.account), { class: 'text-link mono' }, p.account) },
@@ -337,7 +337,8 @@ function boardTable(board, limit) {
   const rows = limit ? board.rows.slice(0, limit) : board.rows;
   return table([
     { label: '#', value: r => h('span', { class: 'rank' + (r.rank <= 3 ? ' r' + r.rank : '') }, r.rank) },
-    { label: info.guild ? 'Guild' : 'Name', grow: true, value: r => h('span', { class: 'strong' }, r.name) },
+    { label: info.guild ? 'Guild' : 'Name', grow: true, value: r => info.guild ? h('span', { class: 'strong' }, r.name)
+      : link('/profiles/' + encodeURIComponent(r.name), { class: 'row-link' }, r.name) },
     !info.guild && classCol,
     { label: info.guild ? 'Guild level' : 'Level', num: true, value: r => num(r.level) },
     { label: info.score, num: true, value: r => num(r.score) },

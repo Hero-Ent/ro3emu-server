@@ -19,7 +19,8 @@ namespace Ro3Emu.Server.Http;
 /// </summary>
 public sealed partial class PanelBackend(IOptions<ServerOptions> options, AccountStore accounts, RankService ranks, GameData data,
     GameLoop loop, SessionRegistry sessions, ReconnectService reconnect, Diagnostics.SessionCensus census,
-    Diagnostics.ServerMetrics metrics, CredentialLimiter limiter, TimeProvider clock) : IPanelBackend
+    Diagnostics.ServerMetrics metrics, CredentialLimiter limiter, TimeProvider clock,
+    TerritoryWarsService territory) : IPanelBackend
 {
     /// <summary>JobConfig 1000, Novice: the root of every class line (TrainingService.RootJob); its children are the classes.</summary>
     private const long Novice = 1000;

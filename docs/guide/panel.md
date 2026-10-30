@@ -6,9 +6,9 @@ the player at once, and the panel never writes the database behind the server's 
 
 | Who | Pages |
 |---|---|
-| everyone | Home (status, version, players online, uptime, accounts and characters; latest news, who's online, top 5 by level) · Who's online · Rankings · News · Items · Monsters · Maps |
+| everyone | Home (status, version, players online, uptime, accounts and characters; latest news, who's online, top 5 by level) · Who's online · Rankings · News · Items · Monsters · Maps · Guilds and the territory map · Market · every character's public profile |
 | a player, logged in with the game account | My account (created, last played, characters with class, level, map and guild) · the sheet of each own character · password change |
-| an admin | Dashboard (the server's own metrics) · Accounts (search, detail, ban and unban) · every character's sheet and mailbox · Audit log · Mail & rewards · Gift codes · GM console · News editor · Broadcasts · Economy log |
+| an admin | Dashboard (the server's own metrics) · Accounts (search, detail, ban and unban) · every character's sheet and mailbox · Audit log · Mail & rewards · Gift codes · GM console · News editor · Broadcasts · Economy log · Item tracking |
 
 Players log in with the same account name and password as in the game. An account the game created logs in here,
 and an account made on the panel's sign-up page logs in to the game: both paths write the same record
@@ -156,6 +156,9 @@ decodes them from the client's Unity bundles into `icons/` of the data folder:
 | `icons/classes/` | JobConfig `_kIcon`, `_kBigIcon` | class emblems |
 | `icons/maps/` | MapConfig `_kBgImage[0]` | the map window's outline (halved to 512 px) |
 | `icons/skills/` | SkillConfig `_kIcon` | skill icons for the character sheet |
+| `icons/guilds/` | GuildIconConfig `_kBigIcon` | guild badge frames and designs |
+| `icons/titles/` | TitleConfig `_kTitleIcon02` | title rank emblems for the profiles |
+| `icons/achievements/` | AchievementType, AchievementLevel `_kIcon` | achievement level and category icons |
 
 About 2 500 PNG files, 120 MB, in about 20 seconds; a later export decodes only what a client update changed
 (`icons/index.json` records the client file each picture came from) and removes what the client dropped.
@@ -170,6 +173,97 @@ works and draws the first letter of the name instead; the next `RO3Emu.exe start
 The admin's **Economy log** reads the server's ledger (`economy_entry` with its `operation_receipt`) on the read
 pool, newest first: filter by account, character, item (an id, or part of a name) and a range of UTC days. The totals
 add up everything the filter matches; they only mean something for one item or currency.
+
+## Profiles, guilds, the territory map and the market
+
+These public pages show the realm's own state. They are read from the database on the read pool, from the cached
+online list and, for the territory map, from TerritoryWarsService on the game loop at most once every 5 seconds. Heavy
+traffic on them never reaches the game loop.
+
+**Profiles** (`/profiles/<name>`; the names on *Who's online*, *Rankings* and the guild pages link to them) show what
+another player can see in the game's details window. That is the class, the base and job level, the guild and the
+position in it, the title rank (TitleConfig), the equipment with each slot's strengthen and refine levels, the
+achievement level with each category's level and the latest achievements reached (`DBRoleAchievementInfo`), and the
+character's place on every board where it is in the top 100.
+
+A profile never shows the bags, purse, map, position, mail or account. It shows what the server last saved, so a
+character in the game may be a few minutes ahead of its profile.
+
+The game has one privacy choice: the setting *show detailed info* (`SettingShowDetailInfo`, `NoShow` or `ShowAll`).
+When a player turns it off in the game, the profile shows only the name, class, levels and guild, and says the
+player keeps the rest private. *(Inferred:)* a character that never saved the setting is shown in full, because the
+client offers the setting as a way to hide details.
+
+**Guilds** (`/guilds`, `/guilds/<id>`) list every guild by prestige. Each row has its badge (the frame
+`State.Background` with the design `State.Icon` over it, both GuildIconConfig `_kBigIcon`), leader, level, members,
+prestige, territories held and guild league tier. A guild's page also shows:
+
+- the declaration (`Announce`; the internal notice stays private);
+- the members with class, level, position (GuildPositionConfig) and Battle Merit;
+- the territory zones it holds and the siege cities it defends;
+- its guild league standing (tier, group, place, strength; GuildLeagueService's state);
+- its place on the guild boards.
+
+*(Inferred:)* the game has no guild Battle Merit, so the page adds up the members' scores on the Battle Merit board.
+
+**Territory map** (`/territory`) shows the war's zones (GVGWarZoneConfig: the capital, its regions, their
+strongholds and fields) with the guild that holds each. It also shows the stage in force, the next stage and the war's
+coming battles (TerritoryWarStageConfig through TerritoryWarsClock), the battles running now with their guild scores
+and the number fighting, and the siege cities (SiegeConfig 1001 and 1101-1103, the cities with an owner source) with
+their defender, attacker and, while a siege runs, its stage. *(Inferred:)* the stage names in words.
+
+The client draws its territory map from a UI prefab whose art no table names, so there is no picture to export. The
+page draws a schematic of the zones' own tree instead: the capital in the middle, the regions around it, and each
+region's strongholds (medium) and fields (small) fanned out around the region. A zone is filled with its holder's
+colour and ringed while a battle runs on it. Each zone links to its map page.
+
+**Market** (`/market`, `/market/<id>`) shows the following, read at most once every 30 seconds *(inferred interval)*:
+
+- what is on offer: the exchange's listings (TradeService `trade_listing`) not yet expired, and the stock of open
+  stalls (StallsService `stall`, player and system stalls);
+- the lowest price, the last sale and the most traded items of the last 30 days (`trade_history`, the exchange's
+  sales; the game itself shows its last 20 as an item's recent price);
+- an item's daily price history over 90 days as a chart (the day's average with its low-high range and the quantity
+  sold), its latest sales and its auction lots (AuctionStore);
+- the guild materials exchange's hourly price (GuildStore `MarketState.PriceHistory`, the game's own last 168 hours).
+
+Sellers on the exchange are not named, as in the game. A stall shows its owner, whose name stands over it in the
+street.
+
+## Item tracking
+
+**Item tracking** (`/admin/items`, admins) finds an item by name or id and shows where it is held now and how it moved.
+The places it counts:
+
+| Place | From |
+|---|---|
+| Bag, Cart, Worn | the item table (cart = pack 100, worn = a grid slot) |
+| Mail | the unclaimed letters of every mailbox: configured grants and attached instances |
+| Exchange | listings in escrow |
+| Stall | stall stock |
+| Auction | open auction lots |
+
+Each holding has a count, the instance guids, and links to the character and its account. Only characters that are not
+deleted count. The economy's other holding places (caravan, escort and territory pendings, recovery) are not
+counted, so a total is a lower bound. A currency has no holders here, only its ledger. Currencies are kept in the
+characters' purses.
+
+The ledger part adds up the item's legs in `economy_entry`: what its source legs let in, what its sink legs took out,
+the first and the last entry. It also shows the latest 25 movements, which link to the full economy log.
+
+The **duplication check** runs over one item (on its page) or over every item held anywhere (*Run the check*, the 200
+worst). Its rules are *inferred*. They rest on the server's own economy invariant (`EconomyExactnessChecker`): what is
+held changes by exactly the ledger's sources minus its sinks.
+
+| Flag | When |
+|---|---|
+| Instance seen twice | one instance guid is in two places. A guid is unique in the item table, and a clone in escrow or mail keeps its guid only while the table row is gone |
+| Exceeds ledger | more is held than the ledger's sources minus its sinks |
+| Unrecorded | the item is held but the ledger never recorded it |
+
+*Exceeds ledger* and *Unrecorded* assume that the ledger has run since the realm began. Items from before the ledger,
+or from a database restored without it, show up as *Unrecorded*. The report gives the ledger's first entry, so you
+can tell. Nothing here changes anything: the check is a lead for an admin to follow in the economy log.
 
 ## Behind nginx with https
 
@@ -226,7 +320,8 @@ proxy's.
   `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`. Every value from the server reaches the page as
   text, never as HTML. Request bodies are capped at 16 KB; API answers are not cached.
 - **Data.** Who's online shows character names, classes, levels and maps to everyone; the account behind a
-  character only to admins.
+  character only to admins. A public profile shows only what the game's details window shows another player, and less
+  when the player turned *show detailed info* off.
 - **Load.** The online list is read on the game loop at most once every 5 seconds, the level board from the database
   at most every 30; the other boards are RankService's own cache. Heavy traffic does not reach the loop.
 
