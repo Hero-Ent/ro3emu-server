@@ -40,6 +40,7 @@ public sealed partial class TerritoryWarsService
     /// </summary>
     private static readonly HashSet<long> SiegeSpawnedNpcs = [4900005, 4901011, 4901012, 4900022, 4903002, 4900010, 4901021, 4901022];
 
+    private const int SiegeGatePoint = 36;
     private const int SiegeReviveNpc = 4900010, SiegeReviveRowPoint = 45, SiegeRevivePoint = 286;
     /// <summary>
     /// (inferred) The attackers' marker of the contested revive point 269 ("争夺复活点-进攻方") stands on the same spot as
@@ -117,6 +118,7 @@ public sealed partial class TerritoryWarsService
         battle.State.ObjectHp.Remove(point);
         await SaveAsync(state);
         await SiegePublishObjectsAsync(battle);
+        await SiegeAdvanceStageAsync(battle);
     }
 
     /// <summary>The siege clock: castle objects that died without a kill callback (their killer left meanwhile), then

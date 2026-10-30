@@ -108,4 +108,54 @@ public sealed partial class SiegeTests
         await Next(attack, GlobalObjectNotify, GlobalObjectDataNotify.Parser, n => AtPoint(n, 38) is { Hp: 0 });
         Assert.Contains(38, run.State.Destroyed);
     }
+
+    /// <summary>Fixture: the gate and the inner city's three Knight Guardians die (the siege clock finds them dead), which
+    /// opens the Crystal stage once Prepare is over.</summary>
+    private async Task BreakToTheCrystal(TerritoryWarsService.SiegeRun run)
+    {
+        await OnLoop(() =>
+        {
+            foreach (int point in InnerTowers.Prepend(GatePoint)) { run.Objects[point].Hp = 0; run.Objects[point].Dead = true; }
+            return Task.CompletedTask;
+        });
+        await OnLoop(Service<TerritoryWarsService>().ReconcileAsync);
+        Assert.Equal(3, run.State.Stage);
+    }
+
+    private static DungeonBaseInfoNotify LastBaseInfo(BotClient bot) =>
+        DungeonBaseInfoNotify.Parser.ParseFrom(bot.Inbox.Snapshot().Last(e => e.IsGame(30401)).Body);
+
+    [ClientDataFact]
+    public async Task TheSiegeOpensInPrepareTheGateStageFollowsAndTheCrystalWaitsForTheLastStage()
+    {
+        var (attack, defense) = await SeededSiege("C");
+        await using var _ = attack;
+        await using var __ = defense;
+        var run = Run(attack);
+        var wars = Service<TerritoryWarsService>();
+
+        // DungeonStageModule "0" Prepare: 300 s from the siege's start, its countdown in var 512.
+        var loaded = LastBaseInfo(defense);
+        Assert.Equal((0, 0), (loaded.Stage, loaded.StageModuleData.Stage));
+        Assert.Equal((_siege.Start * 1000, (_siege.Start + 300) * 1000),
+            (loaded.StageModuleData.StageStartTime, loaded.StageModuleData.StageEndTime));
+        Assert.Equal((_siege.Start + 300) * 1000, Assert.Single(loaded.Vars, v => v.VarId == 512).Vi64.Single());
+
+        // "1" Gate after it, 1500 s at most; its countdown is var 542 [end, added].
+        _clock.Set(_siege.Start + 300);
+        await OnLoop(wars.ReconcileAsync);
+        var gate = await Next(defense, 30401, DungeonBaseInfoNotify.Parser, i => i.StageModuleData.Stage == 1);
+        Assert.Equal((1, DungeonBaseInfoNotify.Types.eChangeType.Change), (gate.Stage, gate.ChangeType));
+        Assert.Equal(((_siege.Start + 300) * 1000, (_siege.Start + 1800) * 1000),
+            (gate.StageModuleData.StageStartTime, gate.StageModuleData.StageEndTime));
+        Assert.Equal([(_siege.Start + 1800) * 1000, 0], Assert.Single(gate.Vars, v => v.VarId == 542).Vi64);
+
+        // The crystal waits for "3": the gate and the three Knight Guardians first.
+        Assert.False(wars.CanHitObjective(Session(attack), run.Crystal!));
+        await BreakToTheCrystal(run);
+        var crystal = await Next(attack, 30401, DungeonBaseInfoNotify.Parser, i => i.StageModuleData.Stage == 3);
+        Assert.Equal(Math.Min(_siege.Start + 300 + 3000, _siege.End) * 1000, crystal.StageModuleData.StageEndTime);
+        Assert.True(wars.CanHitObjective(Session(attack), run.Crystal!));
+        Assert.False(wars.CanHitObjective(Session(defense), run.Crystal!));
+    }
 }

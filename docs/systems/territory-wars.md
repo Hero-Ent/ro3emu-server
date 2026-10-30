@@ -323,6 +323,29 @@ Code: `TerritoryWarsService.SiegeObjects.cs`.
 - Who hits what: a camp 2 object (gates, guardians, barricades) by the attackers only, a camp 1 object by the
   defenders only, the camp 4 revive point and anything with `_iNoSelected` 1 (the markers) by nobody.
 
+### Siege stages
+
+Code: `TerritoryWarsService.SiegeStages.cs`.
+
+- `DungeonLua_2230101.lua` `DungeonBase.DungeonStageModule`: "0" 准备阶段 Prepare (maxTime 300 000 ms), "1" 城门阶段 Gate
+  (1 500 000), "2" 内城阶段 inner city (3 000 000), "3" 华丽阶段 the crystal (3 000 000); the top bar calls them Prepare,
+  Gate, Stronghold, Crystal. 30401 carries the stage in `stage` and `stageModuleData` (start, end); a change goes out as
+  `eChangeType_Change` (the client handles both types alike). The client pushes the stage's chat itself when the stage
+  changes (`UIModule_StageSwitchChatIdMap`: 4110141-4110146, "Phase I Destroy the Outer Gate" / "Defend the Gate" and on).
+- The top bar's countdown is var 512 `CSiegeTopBarTimestamp` (epoch ms) in Prepare and var 542 `CSiegeStageCountdown`
+  [end ms, ms added] after it (`UI_Sys_Siege_TopBarWidgetCtrl._refreshStage`). Nothing adds time yet (`UIModule_KillAddTimeList`
+  "0": [120, 300] is not applied).
+- Dungeon task 4900000 "Reach Dungeon Stage 1" is met when the Gate stage starts.
+
+**Inferred:**
+- Prepare runs from the siege's start for its 300 s; the Gate stage follows; the Stronghold stage starts when the gate at
+  36 falls and the Crystal stage when the three Knight Guardians (41-43, InnerTower) fall: the stage names and each
+  stage's top bar objects ("Destroy the Outer Gate", "Defeat the Protector", "Destroy the Ornate Metal").
+- A stage's countdown ends at its maxTime or at the siege's end, whichever is first. Only the siege's end (60 min,
+  `AttackCityEndTime`) settles the battle for the defenders: whether a Gate stage that runs out (30 min in) already
+  ends the siege is not known (`DungeonResultModule` has a type 4 time-out result without a stage).
+- The crystal can be hit in the Crystal stage only.
+
 ## Descriptor and runtime evidence boundaries
 
 The checked-in `MG_Guild.proto` defines `TerritoryWarsGuildData.occupyWarzone` and places auction fields inside `guildData`. `LC_DAL_TerritoryWars.lua:884-925,988-1008` reads `campDatas` and some wrapper-level auction fields instead. Implementation sends the supplied descriptor, plus the coherent modern 5013/84037 and deadline notifications; exact legacy panel decoding remains unverified. A new field number is not invented.

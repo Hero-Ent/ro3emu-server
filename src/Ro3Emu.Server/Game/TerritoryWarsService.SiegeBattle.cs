@@ -35,6 +35,9 @@ public sealed partial class TerritoryWarsService
         /// (TerritoryWarsService.SiegeObjects.cs).</summary>
         public Dictionary<int, long> ObjectHp { get; set; } = [];
         public List<int> Destroyed { get; set; } = [];
+        /// <summary>The stage (0 Prepare to 3 Crystal) and when it began, epoch s (TerritoryWarsService.SiegeStages.cs).</summary>
+        public int Stage { get; set; }
+        public long StageStart { get; set; }
         public long SettledAt { get; set; }
         public bool Settled { get; set; }
         public long Winner { get; set; }
@@ -139,6 +142,7 @@ public sealed partial class TerritoryWarsService
             if (!entered)
             { s.EventFaction = 0; if (added) { record.Players.Remove(s.Role.Id); await SaveAsync(state); } return true; }
             s.SiegeBattle = battle;
+            await SiegeAdvanceStageAsync(battle);
             await SiegeSpawnAsync(battle);
         }
         finally { stagedTerritoryState.Dispose(); _gate.Release(); reservation?.Dispose(); }
@@ -193,10 +197,10 @@ public sealed partial class TerritoryWarsService
     private DungeonBaseInfoNotify SiegeBaseInfo(SiegeRun battle)
     {
         var r = battle.State;
-        return new DungeonBaseInfoNotify
+        var info = new DungeonBaseInfoNotify
         {
             DungeonEntry = SiegeScene, DungeonId = battle.Room.Id,
-            Stage = r.Settled ? 3 : 2, Level = 99,
+            Stage = r.Stage, Level = 99,
             InitData = new DungeonInitData
             {
                 SiegeInitData = new SiegeInitData
@@ -208,12 +212,14 @@ public sealed partial class TerritoryWarsService
             },
             StageModuleData = new DungeonStageModuleData
             {
-                MapState = r.Settled ? 3 : 2, Stage = r.Settled ? 3 : 2,
-                StageStartTime = r.Start * 1000, StageEndTime = r.End * 1000,
+                MapState = r.Settled ? 3 : 2, Stage = r.Stage,
+                StageStartTime = SiegeStageStart(r) * 1000, StageEndTime = SiegeStageEnd(r) * 1000,
                 MapStateStartTime = r.Start * 1000, MapStateEndTime = r.End * 1000
             },
             ChangeType = (DungeonBaseInfoNotify.Types.eChangeType)2
         };
+        info.Vars.Add(SiegeStageVars(r));
+        return info;
     }
 
     private Task SiegeLeavingAsync(GameSession s)
@@ -227,9 +233,12 @@ public sealed partial class TerritoryWarsService
         && ReferenceEquals(b.SiegeBattle, battle) && SiegeActive(battle) && SiegeMember(a, battle)
         && SiegeMember(b, battle) && OwnId(a) != OwnId(b);
 
+    /// <summary>The crystal falls to the attackers in the Crystal stage only (inferred: the stage is named after it and comes
+    /// after the inner city's guardians, TerritoryWarsService.SiegeStages.cs).</summary>
     private bool SiegeCanHit(GameSession s, MonsterUnit m, SiegeRun battle)
         => MachineCamp(m) is { } camp ? MachineHittable(s, battle, camp)
             : m == battle.Crystal ? SiegeActive(battle) && SiegeMember(s, battle) && OwnId(s) == battle.State.Attack
+                && battle.State.Stage == SiegeCrystalStage
             : SiegeObjectPoint(battle, m) is null || SiegeObjectHittable(s, battle, m);
 
     /// <summary>
@@ -378,6 +387,7 @@ public sealed partial class TerritoryWarsService
                 else if (!current.Settled)
                 {
                     await SiegeObjectsClockAsync(battle);
+                    await SiegeAdvanceStageAsync(battle);
                     await SiegeSpawnAsync(battle);
                 }
             }
