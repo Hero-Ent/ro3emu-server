@@ -103,7 +103,7 @@ Evidence for the rest: `LC_DAL_BattleGlory._updateRealLevel` shows `Lua_CFG_Batt
 
 ## War warehouse and machine permissions
 
-`GuildService.Wartime`, the guild's `guildWartimeInfo` (DBGuildData field 36): the warehouse view, the Tactics panel, reserving and building a cannon; firing and vehicles come later.
+`GuildService.Wartime`, the guild's `guildWartimeInfo` (DBGuildData field 36): the warehouse view, the Tactics panel, reserving and building a cannon; firing, vehicles and machine HP follow below.
 
 | Message | Use |
 |---|---|
@@ -121,7 +121,16 @@ Editing needs GuildPermissionConfig 13 War Machine Management (`ErrorCodes.Guild
 - A guild that never used its warehouse holds `SiegeInitItemList` (50 each of cannons 1006001-1006004).
 - A member holds at most one slot. The client only offers members without a slot; anything else is 82.
 - Slots are guild-wide: the siege `dungeonId` in 32282 is not used.
-- `roleUsingToolId` (the machine a member is in, which makes the client ask before revoking) stays 0 until machines can be built.
+- `roleUsingToolId` is the member's standing machine of the page's type: a cannon on the Firearm page, a vehicle on the
+  Vehicle page, never one under the other.
+- Revoking takes the machine away. The panel asks before changing a slot whose holder has a machine
+  (`LC_SiegeHelper.SendModifyPermissionReq`: UIWords 61027 "Revoke Access", 61028 "This Member is currently using a war
+  machine. Revoke their access?"), for clearing the slot or giving it to someone else. The holder's cannon or vehicle
+  is then destroyed as a replaced one is (UIWords 61001): whoever is on it gets off, it leaves the map and nothing goes
+  back to the warehouse; 32285 and 32286 show nothing in use. A machine left standing without its slot would stay the
+  former holder's (interaction 4900005 checks `CheckBuilder` against the entity's owner, not the permission) or nobody's,
+  and the client keeps no machine outside a slot. A reserved machine and a cannon still being built go back to the
+  warehouse (the builder goes back to Idle). Leaving or being kicked from the guild does the same.
 
 ### Reserving a machine (32270, 32272)
 
@@ -133,7 +142,7 @@ refusal shows its code instead (`LC_AssetManager` calls the DAL's `DecodeError` 
 blueprint sends 32272 (`LC_WartimeItemHelper.CancelPrepay`) and the machine goes back. Leaving or being kicked from the
 guild gives a held machine back too.
 
-Refusals: outside a guild 6001, not loaded into a running siege the member fights 28, an item that is not a cannon of
+Refusals: outside a guild 6001, not loaded into a running siege or active type-18 territory battle the member fights 28, an item that is not a cannon of
 GVGCannonConfig (`_iItemID`) 82, no Firearm permission 466, none left 535 "Not enough guild supplies".
 
 **Inferred:**
@@ -154,11 +163,14 @@ with `buildCannonInfo` {Building, the GVGCannonConfig id, the end time}, to the 
 
 The cannon is the row's `_iNPCID` (NPCConfig type 2, sub type 102), a unit of the siege room, so it ends with the siege.
 Its entity names the builder as `owner` and carries the builder's camp, which interaction 4900005 checks (`CheckBuilder`
-reads the head info Owner, `CheckCamp` the EntityCamp), and wears the NPC's `_kBornEventBuff`. The builder's slot shows
+reads the head info Owner, `CheckCamp` the EntityCamp), and wears the NPC's `_kBornEventBuff`. Its `name` is the
+builder's name: `LC_Unit_NPC.GetUnitName` titles a GVGCANNON (sub type 102) with a name as UIWords 61000 "${1}'s ${2}"
+(that name, then the NPC's `_kName`), as the client's own blueprint does with the local player
+(`LC_GVGBuildCannon`). Vehicles keep their NPC name. The builder's slot shows
 it as `roleUsingToolId` in 32284/32286 and in the builder's 32285. A member with a standing cannon who builds another
 loses the first (UIWords 61001, "Building another will destroy the current one").
 
-Refusals: 6001 outside a guild, 28 outside a running siege, 82 without a reserved machine or while building, 530
+Refusals: 6001 outside a guild, 28 outside a running siege or type-18 territory battle, 82 without a reserved machine or while building, 530
 "Cannot place this here." for a spot the client would refuse: farther than `_iBuildRadius` from the builder, not walkable,
 or inside another cannon's `_iExclusiveRadius` (both circles, as the client's `Circle.CheckCircleIntersection`).
 
@@ -168,7 +180,6 @@ or inside another cannon's `_iExclusiveRadius` (both circles, as the client's `C
 - A builder who dies or leaves the siege before the build time ends gets no cannon; the machine goes back to the
   warehouse.
 - `roleUsingToolId` is not saved: cannons only stand during their siege.
-- The cannon's own HP is not simulated: players and monsters cannot destroy it yet.
 
 ### Firing the cannons (32700, 32703, 32705)
 
@@ -218,7 +229,7 @@ Code: `GuildService.WarVehicles.cs`, `TerritoryWarsService.WarVehicles.cs`.
   4903501 -> NPC 4900301, Madogear 1006005..007 -> 4903201..401 -> 4900401..403, Jet Backpack 1006009 -> 4903601 ->
   4900501. One leaves the warehouse (32273), and the member's slot and own permission name the vehicle
   (`roleUsingToolId` in 32285 and 32286). The answer only clears the bag's busy state (`ReceiveGuildVehicleUseRsp`).
-  Refusals: 6001 outside a guild, 28 outside a running siege, 82 for an item that is not a vehicle, 466 without the
+  Refusals: 6001 outside a guild, 28 outside a running siege or type-18 territory battle, 82 for an item that is not a vehicle, 466 without the
   Vehicle permission, 535 without stock.
 - **The vehicle.** An NPC of `_iNPCSubType` 103 (`enum_NpcSubType.Vehicle`): `LC_Unit_NPC` gives it `LC_VehicleComponent`
   with VehicleConfig `_iSubTypeValue` -> `_kSeats` (VehicleSeatConfig rows, 0-based seat index,
@@ -281,12 +292,52 @@ Code: `TerritoryWarsService.MachineDamage.cs`, `TerritoryWarsService.WarRepair.c
   suggests.
 - A destroyed machine's wreck stays for its `_iBodyRemainTime`, and damage to machines counts in the siege's damage
   statistics like damage to the crystal.
+- Damage dealt to the other side's machines also counts as the hitter's MachineryDamage (statistics 1021003), and the
+  last hit on one as their DestroyMachinery (1021002), in a siege and in a territory battle. The client only displays
+  the two counters (`UI_Sys_TerritoryWars_PushUp_Achievements_ListWidgetCtrl`).
 - `OutCannonHpPercent` (80) sits among the GVE cannon parameters (`GVECannonExitInteractId`,
   `GVESwitchBulletInteractIds`), not the siege ones, so it is not applied to siege cannons.
 - `ArtilleryAttackCityGateReduceDamage` [3002, 3003, -9000] lowers cannon damage against the gates, the barricades
   and the other tag 3003 NPCs (see "Damage by tag" under "Siege castle").
 - Restocking the warehouse: 32275 has no client sender and no shop or award sells the machine items (the "War Machine
   Shop" text has no data behind it), so the stock is only `SiegeInitItemList` and what the machines leave or return.
+- When the siege settles, its standing machines leave with whoever is on them and their slots show nothing in use, as
+  in a territory battle (below).
+
+### War machines in territory battles
+
+Code: `TerritoryWarsService.WarRooms.cs` (`WarRoomOf`), the machine files above.
+
+- **Which battles.** Of the 36 `GVGWarZoneConfig._iDungeonID` battles, four are DungeonConfig `_iGamePlayType` 18
+  (`enum_DungeonGameplayType.TerritoryWars`): 3030401 (zone 2), 3030101 (3), 3030201 (6) and 3030301 (7); the others are
+  type 6 (Single). Type 18 mounts the UI template `Battle_TerritoryWars` (`LC_MainUIDefine`), whose
+  `UI_Sys_Dungeon_TerritoryWars_ButtonWidget` has the siege's three buttons: Manage (the Tactics panel), Command and
+  Instrument (shown for the Firearm permission, it opens `UI_Sys_Siege_BattleBagPanel`). `LC_DAL_TerritoryWars` keeps
+  the 32285 permission as the siege DAL does, and the personal record shows DestroyMachinery and MachineryDamage. So the
+  reservations, builds, vehicles and repair zones (32270, 32271, 32272, 32281) work for a member of an active type-18
+  battle as in a running siege.
+- **Same warehouse and slots.** No config row gives territory battles their own stock or rules (no Territory machine
+  list in PublicParamConfig, no map field in GVGCannonConfig, VehicleConfig or the items), and the client's 32282 always
+  names the siege dungeon (`LC_SiegeHelper`), so one warehouse and one Tactics permission set serve both.
+- **Sides by guild.** Every territory player is camp 1, and the client tells friend from enemy by guild
+  (`LC_CampRelationStrategy_TerritoryWars`: the unit's head info Guild, else custom data 104 `BelongGuild`,
+  `LC_CampRelationUtils`). A machine keeps camp 1 and carries its builder's guild as `guildId` (EntityBase 59) and custom
+  data 104. `CheckCamp` (2200) on a cannon or a seat and `VehicleHasEmptySeat` (12002, "not an enemy") compare that
+  guild; another guild's members damage and destroy the machine, the own guild cannot; a repair zone heals the vehicles
+  of its guild; the cannon's explosion hits the players hostile to the shooter (other guilds of the battle).
+- **The end.** When the battle settles, its standing cannons and vehicles leave with whoever is on them, and their
+  owners' slots show nothing in use (32285, 32286). Machines die with the room anyway.
+- **Statistics.** The territory report (30117, 30114 and the result's `sceneStatistics`) carries the personal record's
+  `extraData`: 1001001-1001005 (damage, damage taken, healing, player kills, assists), 1021002 DestroyMachinery, 1021003
+  MachineryDamage and 1031001 `TerritoryWarPersonIntegral`.
+
+**Inferred:**
+- Type-6 battles refuse machines with 28: they have no Instrument button or battle bag.
+- The guild relation for a machine's seat and cannon conditions, and its `guildId`/`BelongGuild` (the client reads
+  them for any unit; the original's machine entity is not captured). Siege machines carry them too.
+- The machines leaving at the settlement (the siege as well): nothing says they outlive the battle, and the room closes
+  shortly after.
+- 1031001 is the participant's battle score; territory battles count no assists (always 0).
 
 ## Siege castle
 
@@ -461,7 +512,7 @@ What the client and config show about each object, and what is unknown (a decisi
 |---|---|---|
 | SteleBarrier 34/59/74 | NpcLevelPointRespawnConfig 4905003-4905005 place 4905012 "Barrier Stele" (destructible: HP bar, `_kAttriScale` 101 x1.7) at these points. Scene groups 38/39/40 "结界-交互组" hold the point plus three sub points (35-37, 60-62, 75-77). Sub NPCs 4905011/4905014 (MutiInteractSubNpc, NPCInteractConfig 4905011/4905012, conditions 7000031/7000032, NPC conditions 490021/490022 on condition var 9012) exist without a placement row. ChatConfig 4111007 "Stronghold barrier activated. The stronghold will be locked in 5 minutes", 4111008 barrier destroyed, 4111025 stone monument activated, 4111026 defensive stone monument destroyed. The map hides the icon until the point is owned and shows `Preparing` neutral (`MapWidgetCtrl:150-230`). | Who may activate it and how (where sub NPCs stand, what var 9012 is), the 5-minute lock's effect on the flag, stele HP regeneration/respawn, the 30129 state after destruction. |
 | DivinityStatue 41 | Groups 45 "神像-攻击-交互组1" (points 41-44) and 47 "神像-防御-交互组1" (78-80, not in UIModule_NpcData). ChatConfig 4111012 "Statue Ready!", 4111017 statue activated. No NPC or spawn row. | Its effect, cooldown (`readyTime`), who may use it. |
-| SummonPlatform 49/57/83 | NpcLevelPointRespawnConfig 4905008-4905010 place vehicle 4900402 (subtype 103, NPCType 2, interact 4900022/4900025). Groups 48/53 "载具-交互组", 82 "载具-防守方" (defenders). ChatConfig 4111013-4111015 southern/eastern/base vehicle point ready, 4111018-4111020 activated. | Vehicles are not implemented server-side (`SiegeVehicleUse` answers FeatureUnavailable); ready timers and sides. |
+| SummonPlatform 49/57/83 | NpcLevelPointRespawnConfig 4905008-4905010 place vehicle 4900402 (subtype 103, NPCType 2, interact 4900022/4900025). Groups 48/53 "载具-交互组", 82 "载具-防守方" (defenders). ChatConfig 4111013-4111015 southern/eastern/base vehicle point ready, 4111018-4111020 activated. | These fixed vehicles are not spawned (the warehouse vehicles of 32281 are, "War machines in territory battles"); ready timers and sides. |
 | BossPlatform 51 | NpcLevelPointRespawnConfig 4905011 places 4905053 "Vanguard" (Pioneer subtype 213, AI 20000011, skills 4905002-4905004). Group 54 "先锋-交互组1". ChatConfig 4111016 altar ready, 4111021 "a Behemoth is advancing toward the stronghold", 4111027 behemoth fallen. | Activation condition, route, timer. |
 | AirWallGate 63/66 | Client air walls 63/66 in groups 65/68 "门-1/门-2" with spawn points 64/67, where NpcLevelPointRespawnConfig 4905001/4905002 place Knight Guardian 4905051 (camp 2). ChatConfig 4111022/4111023 east/west gate breached. | Whether the guardian's death opens the gate; the server loads no air walls (`m_kAirWalls`) at all. |
 | RevivalPoint 55/56/81/85/86 | `m_kResurrectionPointList`; NpcLevelPointRespawnConfig 4905006/4905007 place Bow Guardian 4905052 at 55/56. ChatConfig 4111024 "A Revive Point has changed hands!". The generic per-player revive list is CustomData 11 `Dungeon_Player_RevivePoint_ListLong` (`LC_CustomDataHandler_Revive.lua`, `LC_DunGeon_Helper.SetRevivePointList`). | The capture rule and initial owners. Today every territory participant revives at `MapWorld.Revive`, the first resurrection point (55), regardless of owner; restricting revival to owned points (and the default point otherwise) needs that rule. |

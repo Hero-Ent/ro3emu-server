@@ -205,9 +205,12 @@ public sealed partial class TerritoryWarsService : IGameTicker
         combat.PlayerDied.Add(VehicleDiedAsync);
         combat.GrantedSkill.Add(SeatSkill);
         combat.AfterLethalPublication.Add(MachineDestroyedAsync);
+        combat.Killed.Add(MachineKilledAsync);
+        SiegeSettled.Add(SiegeMachinesSettled);
         world.PlayerEntered.Add(VehicleRiderSeenAsync);
         combat.EventDamageRecorded.Add(DamageRecordedAsync);
         combat.EventDamageRecorded.Add(SiegeDamageRecordedAsync);
+        combat.EventDamageRecorded.Add(MachineDamageRecordedAsync);
         combat.PlayerHostile = Hostile;
         combat.MonsterTargetAllowed = CanHitObjective;
         combat.SkillLineBlocked = SiegeSkillLineBlocked;
