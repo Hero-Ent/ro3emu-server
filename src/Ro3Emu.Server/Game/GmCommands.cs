@@ -286,6 +286,18 @@ public sealed partial class GmCommands(IOptions<ServerOptions> options, GameData
         ["job"] = ("<jobId>", (s, a) => Op(s, OpSetJob, a)),
         ["clearbag"] = ("", (s, a) => Op(s, OpClearPack, a)),
         ["client"] = ("<find name>", ClientDiagnostics),
+        ["fieldexp"] = ("[set <minLevel> <maxLevel> <percent> [...] | clear | reset] (in memory, until the next start)", async (s, a) =>
+        {
+            // FieldExpRates (inferred): the operator's rate for open-field kills, changed here without a restart.
+            var rewards = services.GetRequiredService<RewardService>();
+            string sub = a.Length == 0 ? "" : a[0].ToLowerInvariant();
+            if (sub == "set") rewards.SetFieldExpRules(FieldExpRates.Parse(a[1..]));
+            else if (sub == "clear") rewards.SetFieldExpRules([]);
+            else if (sub == "reset") rewards.ResetFieldExpRules();
+            else if (a.Length != 0) throw new ArgumentException("set | clear | reset");
+            await ReplyAsync(s, "Field EXP rates: " + FieldExpRates.Describe(rewards.FieldExpRules));
+        }
+        ),
         ["speed"] = ("<speed, 0 = normal>", async (s, a) => await ReplyAsync(s, await character.SetSpeedAsync(s, L(a[0])))),
         ["quest"] = ("[accept|finish|done <taskId> | reset]", async (s, a) => await ReplyAsync(s, a.Length == 0
             ? "Quests: " + tasks.Describe(s)
