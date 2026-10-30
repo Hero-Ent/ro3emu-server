@@ -31,57 +31,6 @@ public sealed partial class PanelBackend
     private Task<PanelCatalog>? _catalog;
     private Task<Dictionary<long, List<PanelSpawn>>>? _spawnIndex;
 
-    public async Task<PanelItemPage> FindItemsAsync(PanelItemQuery query)
-    {
-        var catalog = await CatalogAsync();
-        long id = long.TryParse(query.Text, NumberStyles.None, CultureInfo.InvariantCulture, out long n) ? n : -1;
-        // An id finds its item even when the lists leave it out (a variant, a "TBD" row).
-        var found = id >= 0 && catalog.ItemSummary(id) is { } exact ? [exact] : catalog.Items.Where(i =>
-                (query.Text.Length == 0 || i.Name.Contains(query.Text, StringComparison.OrdinalIgnoreCase))
-                && (query.Type == 0 || i.Type == query.Type) && (query.Quality == 0 || i.Quality == query.Quality)
-                && (query.MinLevel == 0 || i.Level >= query.MinLevel) && (query.MaxLevel == 0 || i.Level <= query.MaxLevel))
-            .ToList();
-        return new PanelItemPage(Page(found, query.Page, query.PageSize), found.Count, query.Page, query.PageSize, catalog.Types, catalog.Qualities);
-    }
-
-    public async Task<PanelItem?> ItemAsync(long id) => (await CatalogAsync()).Item(id);
-
-    public async Task<PanelMonsterPage> FindMonstersAsync(PanelMonsterQuery query)
-    {
-        var catalog = await CatalogAsync();
-        long id = long.TryParse(query.Text, NumberStyles.None, CultureInfo.InvariantCulture, out long n) ? n : -1;
-        var found = id >= 0 && catalog.MonstersById.TryGetValue(id, out var exact) ? [exact.Rep.Summary] : catalog.Monsters.Where(g =>
-                (query.Text.Length == 0 || g.Rep.Summary.Name.Contains(query.Text, StringComparison.OrdinalIgnoreCase))
-                && (query.Element == 0 || g.Rep.Summary.Element == query.Element) && (query.Race == 0 || g.Rep.RaceId == query.Race)
-                && (query.Size == 0 || g.Rep.SizeId == query.Size) && (query.Rank.Length == 0 || g.Rep.Summary.Rank == query.Rank)
-                && (query.MinLevel == 0 || g.Rep.Summary.Level >= query.MinLevel) && (query.MaxLevel == 0 || g.Rep.Summary.Level <= query.MaxLevel))
-            .Select(g => g.Rep.Summary).ToList();
-        return new PanelMonsterPage(Page(found, query.Page, query.PageSize), found.Count, query.Page, query.PageSize,
-            catalog.Elements, catalog.Races, catalog.Sizes);
-    }
-
-    public async Task<PanelMonster?> MonsterAsync(long id)
-    {
-        var catalog = await CatalogAsync();
-        if (!catalog.MonstersById.TryGetValue(id, out var group)) return null;
-        var index = await SpawnIndexAsync();
-        var spawns = MergeSpawns(group.Ids.SelectMany(v => index.GetValueOrDefault(v) ?? []));
-        // The variants by what they drop: each set says where its variants spawn.
-        var sets = group.Members.GroupBy(m => DropKey(m.Drops)).Select(set => new PanelDropSet([.. set.Select(m => m.Summary.Id)],
-            [.. set.SelectMany(m => index.GetValueOrDefault(m.Summary.Id) ?? []).Select(s => s.Map).Distinct(StringComparer.OrdinalIgnoreCase)],
-            set.First().Drops)).ToList();
-        var rep = group.Rep;
-        return new PanelMonster(rep.Summary with { Id = id }, rep.Stats, rep.Speed, sets[0].Drops, spawns, group.Ids, sets);
-    }
-
-    /// <summary>One line per map: the variants' counts added, the shortest respawn.</summary>
-    private static List<PanelSpawn> MergeSpawns(IEnumerable<PanelSpawn> spawns) =>
-        [.. spawns.GroupBy(s => s.MapId).Select(g => g.First() with { Count = g.Sum(s => s.Count), RespawnSeconds = g.Min(s => s.RespawnSeconds) })
-            .OrderByDescending(s => s.Count).ThenBy(s => s.Map, StringComparer.OrdinalIgnoreCase)];
-
-    private static string DropKey(IReadOnlyList<PanelMonsterDrop> drops) => string.Join(';', drops.Select(d =>
-        string.Create(CultureInfo.InvariantCulture, $"{d.ItemId}|{d.Chance:R}|{d.Min}|{d.Max}|{d.Kind}|{string.Join(',', d.Maps)}")));
-
     public async Task<IReadOnlyList<PanelMapSummary>> MapsAsync()
     {
         var (spawns, online) = (await MapSpawnsAsync(), await OnlineRowsAsync());

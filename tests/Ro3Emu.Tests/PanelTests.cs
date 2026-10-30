@@ -300,8 +300,16 @@ public sealed class PanelTests : IAsyncLifetime
         Assert.Equal(2, (await anonymous.GetJsonAsync("/api/items")).GetProperty("total").GetInt32());
         Assert.Equal("TBD", Assert.Single((await anonymous.GetJsonAsync("/api/items?q=3990004")).GetProperty("items").EnumerateArray())
             .GetProperty("name").GetString());
-        Assert.Equal([3990001L, 3990003L], (await anonymous.GetJsonAsync("/api/items/3990003")).GetProperty("variants").EnumerateArray()
-            .Select(v => v.GetInt64()));
+        var copy = await anonymous.GetJsonAsync("/api/items/3990003");
+        Assert.Equal([3990001L, 3990003L], copy.GetProperty("ids").EnumerateArray().Select(v => v.GetInt64()));
+        // One row per name: the purple and the orange Synthetic Blade are one row with their level range; a filter picks
+        // the variant it matches.
+        var blades = Assert.Single((await anonymous.GetJsonAsync("/api/items?q=blade")).GetProperty("items").EnumerateArray());
+        Assert.Equal((2, 30, 40), (blades.GetProperty("variants").GetInt32(), blades.GetProperty("level").GetInt32(), blades.GetProperty("maxLevel").GetInt32()));
+        Assert.Equal(3990005, Assert.Single((await anonymous.GetJsonAsync("/api/items?quality=5")).GetProperty("items").EnumerateArray())
+            .GetProperty("id").GetInt64());
+        Assert.Equal([3990002L, 3990005L], (await anonymous.GetJsonAsync("/api/items/3990005")).GetProperty("variants").EnumerateArray()
+            .Select(v => v.GetProperty("id").GetInt64()));
         Assert.Equal("Synthetic Blade", Assert.Single((await anonymous.GetJsonAsync("/api/items?type=5&quality=4&min=20")).GetProperty("items")
             .EnumerateArray()).GetProperty("name").GetString());
         Assert.Equal(0, (await anonymous.GetJsonAsync("/api/items?q=synthetic&max=10&type=5")).GetProperty("total").GetInt32());
@@ -343,9 +351,15 @@ public sealed class PanelTests : IAsyncLifetime
     {
         using var anonymous = new PanelBrowser(_panel);
         Assert.Equal(HttpStatusCode.OK, (await anonymous.Http.GetAsync("/monsters/16320002")).StatusCode);
-        // 16320004 is the same monster for a player (a copy without the drop row): one entry, its first id.
+        // One row per name: 16320004 is a copy of 16320002 (without the drop row), 16320005 a level 20 Synthetic Poring. The
+        // row is the variant that spawns in the field, with the level range of all of them.
         var found = Assert.Single((await anonymous.GetJsonAsync("/api/monsters?q=poring&element=4&rank=mini")).GetProperty("monsters").EnumerateArray());
-        Assert.Equal(16320002, found.GetProperty("id").GetInt64());
+        Assert.Equal((16320002, 12, 20, 2), (found.GetProperty("id").GetInt64(), found.GetProperty("level").GetInt32(),
+            found.GetProperty("maxLevel").GetInt32(), found.GetProperty("variants").GetInt32()));
+        // A level 1 actor with a boss's HP and no field spawn is not listed; its id finds it.
+        Assert.Equal(0, (await anonymous.GetJsonAsync("/api/monsters?q=dancer")).GetProperty("total").GetInt32());
+        Assert.Equal(16320006, Assert.Single((await anonymous.GetJsonAsync("/api/monsters?q=16320006")).GetProperty("monsters").EnumerateArray())
+            .GetProperty("id").GetInt64());
 
         var poring = await anonymous.GetJsonAsync("/api/monsters/16320002");
         var monster = poring.GetProperty("monster");
@@ -363,14 +377,14 @@ public sealed class PanelTests : IAsyncLifetime
         var spawn = Assert.Single(poring.GetProperty("spawns").EnumerateArray());
         Assert.Equal(("Synthetic Field", 4, 30), (spawn.GetProperty("map").GetString(), spawn.GetProperty("count").GetInt32(),
             spawn.GetProperty("respawnSeconds").GetInt32()));
-        // The copies drop differently: one drop list per set, each with where its rows spawn.
-        Assert.Equal([16320002L, 16320004L], poring.GetProperty("variants").EnumerateArray().Select(v => v.GetInt64()));
-        var sets = poring.GetProperty("dropSets").EnumerateArray().ToList();
-        Assert.Equal(2, sets.Count);
-        Assert.Equal(("Synthetic Field", 2), (Assert.Single(sets[0].GetProperty("maps").EnumerateArray()).GetString(), sets[0].GetProperty("drops").GetArrayLength()));
-        Assert.Equal((16320004L, 0, 0), (Assert.Single(sets[1].GetProperty("ids").EnumerateArray()).GetInt64(), sets[1].GetProperty("maps").GetArrayLength(),
-            sets[1].GetProperty("drops").GetArrayLength()));
-        Assert.Equal(16320004, (await anonymous.GetJsonAsync("/api/monsters/16320004")).GetProperty("monster").GetProperty("id").GetInt64());
+        // Its page lists the variants of its name, with where each spawns; the drops are merged and say which variant drops
+        // what when not all of them do.
+        Assert.Equal([16320002L, 16320004L], poring.GetProperty("ids").EnumerateArray().Select(v => v.GetInt64()));
+        var variants = poring.GetProperty("variants").EnumerateArray().ToList();
+        Assert.Equal([(16320002L, 12, "Synthetic Field"), (16320005L, 20, "")], variants.Select(v => (v.GetProperty("id").GetInt64(),
+            v.GetProperty("level").GetInt32(), string.Join(",", v.GetProperty("maps").EnumerateArray().Select(m => m.GetString())))));
+        Assert.All(drops, d => Assert.Equal([16320002L], d.GetProperty("from").EnumerateArray().Select(v => v.GetInt64())));
+        Assert.Equal(20, (await anonymous.GetJsonAsync("/api/monsters/16320005")).GetProperty("monster").GetProperty("level").GetInt32());
         Assert.Equal(HttpStatusCode.NotFound, (await anonymous.Http.GetAsync("/api/monsters/16320001")).StatusCode); // no name
 
         // A field MVP pays out through MvpService's awards (MVPConfig -> MultiverseGroupConfig -> AwardConfig -> pool), by

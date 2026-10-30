@@ -36,6 +36,12 @@ function mapName(id, name, image) {
   return id ? link('/maps/' + id, { class: 'named' }, thumb(image, name, 'map'), h('span', null, name)) : h('span', null, name);
 }
 
+/** A list row's range, "2-5", or its one value. */
+const range = (low, high, format = num) => high > low ? `${format(low)}-${format(high)}` : format(low);
+
+/** A list row standing for several variants of its name: a small "4 variants" chip after the name. */
+const variantsChip = count => count > 1 ? h('span', { class: 'chip plain variants-chip' }, `${count} variants`) : null;
+
 /** The game's other ids for the same entry, in one small line: "IDs 3084401 · 3084402". */
 function variantLine(ids) {
   return ids && ids.length > 1 ? h('span', { class: 'variants mono' }, 'IDs ' + ids.join(' · ')) : null;

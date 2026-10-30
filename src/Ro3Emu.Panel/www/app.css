@@ -338,6 +338,7 @@ select.input{padding-right:var(--s6)}
   .data th:last-child,.data td:last-child{padding-right:var(--s3)}
   /* the growing column takes what is left and cuts its text, so a list fits a phone without scrolling sideways */
   .data td.grow{max-width:0;overflow:hidden;text-overflow:ellipsis}
+  .data td.grow.wrap-text{min-width:0}
   .page-head{align-items:flex-start}
   .auth-card{margin-top:var(--s4)}
 }

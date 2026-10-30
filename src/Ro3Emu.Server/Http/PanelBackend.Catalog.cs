@@ -34,6 +34,9 @@ public sealed partial class PanelBackend
         private readonly Dictionary<long, ItemEntry> _items = [];
         /// <summary>Every named item id to the ids of its group (itself included), first id first.</summary>
         private readonly Dictionary<long, List<long>> _itemGroups = [];
+        /// <summary>The list summaries (first id of each group) by name, unfinished names included.</summary>
+        private readonly Dictionary<string, List<PanelItemSummary>> _itemNames = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, List<MonsterGroup>> _monsterNames = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _hidden = new(StringComparer.Ordinal);
         private readonly Dictionary<long, List<PanelItemDrop>> _droppedBy = [];
         private readonly Dictionary<long, List<PanelShopOffer>> _shops = [];
@@ -84,6 +87,12 @@ public sealed partial class PanelBackend
 
         public PanelItemSummary? ItemSummary(long id) => _items.TryGetValue(id, out var entry) ? entry.Summary : null;
 
+        /// <summary>The ids of an item's group (rows that differ only in id and sort order), itself included.</summary>
+        public List<long> IdsOf(long id) => _itemGroups.GetValueOrDefault(id) ?? [id];
+
+        /// <summary>Every monster group of a name.</summary>
+        public List<MonsterGroup> MonstersNamed(string name) => _monsterNames.GetValueOrDefault(name) ?? [];
+
         /// <summary>
         /// Items a player cannot tell apart are one group: the same name, type and kind, quality, level, description,
         /// stats, trade, stack and classes. Returns the list's rows, the first id of each group.
@@ -96,6 +105,8 @@ public sealed partial class PanelBackend
                 var ids = group.Select(i => i.Summary.Id).ToList();
                 foreach (long id in ids) _itemGroups[id] = ids;
                 var first = group.First().Summary;
+                if (!_itemNames.TryGetValue(first.Name, out var named)) _itemNames[first.Name] = named = [];
+                named.Add(first);
                 if (!Hidden(first.Name)) list.Add(first);
             }
             return [.. list.OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ThenBy(i => i.Id)];
@@ -147,6 +158,8 @@ public sealed partial class PanelBackend
             {
                 var group = new MonsterGroup(members[0], members);
                 foreach (var member in members) MonstersById[member.Summary.Id] = group;
+                if (!_monsterNames.TryGetValue(group.Rep.Summary.Name, out var named)) _monsterNames[group.Rep.Summary.Name] = named = [];
+                named.Add(group);
                 if (!Hidden(group.Rep.Summary.Name)) Monsters.Add(group);
                 AddDroppedBy(group);
             }
@@ -284,15 +297,18 @@ public sealed partial class PanelBackend
         {
             if (!_items.TryGetValue(id, out var entry)) return null;
             var row = entry.Row;
-            var ids = _itemGroups.GetValueOrDefault(id) ?? [id];
+            var ids = IdsOf(id);
             var classes = row.JobNeed.Where(j => j > 0).Select(j => _backend.ClassName(j)).ToList();
             string trade = row.Trade switch { 1 => "Exchange", 2 => "Stalls", _ => "Not tradeable" };
-            var dropped = ids.SelectMany(i => _droppedBy.GetValueOrDefault(i) ?? []).Distinct()
-                .OrderByDescending(d => d.Chance).ThenBy(d => d.Level).Take(DetailRows).ToList();
-            var shops = ids.SelectMany(i => _shops.GetValueOrDefault(i) ?? []).Distinct().ToList();
+            // The variants of its name (an unfinished name's rows are no variants of each other), their drops and shops together.
+            var variants = Hidden(entry.Summary.Name) ? [_items[ids[0]].Summary]
+                : (_itemNames.GetValueOrDefault(entry.Summary.Name) ?? []).OrderBy(v => v.Level).ThenBy(v => v.Quality).ThenBy(v => v.Id).ToList();
+            var dropped = variants.SelectMany(v => IdsOf(v.Id).SelectMany(i => _droppedBy.GetValueOrDefault(i) ?? []).Select(d => d with { ItemId = v.Id }))
+                .Distinct().OrderByDescending(d => d.Chance).ThenBy(d => d.Level).Take(DetailRows).ToList();
+            var shops = variants.SelectMany(v => IdsOf(v.Id)).SelectMany(i => _shops.GetValueOrDefault(i) ?? []).Distinct().ToList();
             string picture = row.Pic.StartsWith("item_null", StringComparison.OrdinalIgnoreCase) ? "" : _backend.Image("items", row.Pic);
             return new PanelItem(entry.Summary, Description(row), (int)row.StackLimit, trade, row.IsUse == 1, classes, Stats(row), dropped, shops,
-                ids, picture);
+                ids, variants, picture);
         }
 
         /// <summary>Equipment: EquipConfig _kBasicAttribute [attribute, min, max]; a card: the lowest level's

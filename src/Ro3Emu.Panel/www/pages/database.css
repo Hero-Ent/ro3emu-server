@@ -28,11 +28,10 @@
 .picture{display:block;max-width:100%;height:auto;margin:0 auto;border-radius:var(--r2)}
 .portrait{display:flex;justify-content:center;padding-bottom:var(--s3);margin-bottom:var(--s3);border-bottom:1px solid var(--line-soft)}
 .variants{display:block;font-size:var(--t-xs);color:var(--muted);overflow-wrap:anywhere}
-.set-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:var(--s1) var(--s3);
-  padding:var(--s3) var(--s4) var(--s2);font-size:var(--t-sm)}
-.set-head .mono{font-size:var(--t-xs);color:var(--muted)}
+
 .named{display:inline-flex;align-items:center;gap:var(--s2);min-width:0;max-width:100%;font-weight:700}
 .named.plain{font-weight:inherit}
+.variants-chip{margin-left:var(--s2);vertical-align:middle;font-size:11px}
 .named span{overflow:hidden;text-overflow:ellipsis}
 a.named:hover span{text-decoration:underline}
 .q1{color:var(--q1)} .glyph.q1{background:var(--q1-bg)}

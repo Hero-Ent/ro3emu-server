@@ -132,12 +132,16 @@ class limits), and the maps whose scene editor spawns it, with how many stay ali
 picture, the monsters that spawn there with their levels, and the characters on it now.
 
 The client's tables hold many rows of one thing: an item copied under another id with only its sort order changed, a
-monster copied for another map, quest or scene. Rows a player cannot tell apart are one entry: items with the same
-name, type, quality, level, description, stats, trade rule, stack and classes; monsters with the same name, level,
-HP, stats, speed, element, race, size and rank. The list shows the first id; the page lists every id in a small line
-and merges what the rows drop, sell and spawn. When the rows of a monster drop differently, the page shows one drop
-list per set, each saying where its rows spawn. Rows still named `TBD`, or with a `@{n}` placeholder the row gives no
-value for, are left out of the lists; searching for their id still finds them.
+monster copied for another map, quest or scene. Rows a player cannot tell apart are one *variant*: items with the
+same name, type, quality, level, description, stats, trade rule, stack and classes; monsters with the same name,
+level, HP, stats, speed, element, race, size and rank. The lists then show **one row per name**: the row stands for
+the variants of that name the filters match, with the picture and numbers of the one the game repeats most (an item)
+or spawns most in the field (a monster), the level (and HP) range of all of them, and a "4 variants" chip. A page
+lists the variants of its name in a table (id, level, HP, size and where each spawns for a monster; id, quality, type
+and level for an item), shows the ids of its own variant in a small line, and merges what the variants drop, sell and
+spawn; a merged drop says "Only from ..." when not every variant drops it. Rows still named `TBD`, rows with a `@{n}`
+placeholder the row gives no value for, and level-1 monsters with 100 000 HP or more that spawn on no map (story and
+scene actors) are left out of the lists; searching for their id still finds them.
 
 ## Pictures
 
