@@ -88,6 +88,9 @@ public sealed partial class TerritoryWarsService
         internal CommandBoard Command { get; } = new();
         internal HashSet<long> CapturedActors { get; } = new();
         internal Dictionary<int, ScenePointUnit> ScenePointActors { get; } = new();
+        /// <summary>The SummonPlatforms' rings and the vehicles they raised, by platform point (TerritoryWarsService.SummonPlatforms.cs).</summary>
+        internal Dictionary<int, PlatformRing> PlatformRings { get; } = [];
+        internal Dictionary<int, VehicleUnit> PlatformVehicles { get; } = [];
         internal bool Spawning;
     }
     private sealed class QueueEntry
@@ -620,6 +623,7 @@ public sealed partial class TerritoryWarsService
             { if (!s.SceneLoading && s.TerritoryBattle == b && !Member(s, b)) await _instances.LeaveAsync(s); });
             await SpawnObjectivesAsync(b);
             await SpawnScenePointsAsync(b);
+            await PlatformClockAsync(b, elapsed);
             foreach (var p in r.Points.Values.Where(p => !p.Crystal && _clock.Now >= p.GuardUntil))
             {
                 var groups = b.Room.ActiveMembers.Select(m => m.Session).Where(s => !s.Dead && Member(s, b)

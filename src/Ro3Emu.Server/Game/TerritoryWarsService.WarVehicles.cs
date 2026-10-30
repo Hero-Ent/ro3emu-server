@@ -152,7 +152,7 @@ public sealed partial class TerritoryWarsService
         if (id == SceneService.NpcInteraction)
         {
             var req = NpcInteractionReq.Parser.ParseFrom(body.Span);
-            if (!_vehicles.TryGetValue(req.NpcUid, out var vehicle)) return false;
+            if (!_vehicles.TryGetValue(req.NpcUid, out var vehicle)) return await RingInteractAsync(s, req);
             int code = await VehicleInteractAsync(s, vehicle.Unit, vehicle.Room, req);
             if (code != 0) await Send(s, id, new NpcInteractionRsp { Result = code, Req = req });
             return true;
@@ -209,7 +209,8 @@ public sealed partial class TerritoryWarsService
         if (MonsterService.Distance(s.Position.X, s.Position.Z, unit.X, unit.Z) > Math.Max(npc.InteractDistance, 3) + 1)
             return ErrorCodes.NpcTooFar;
         seat = (int)interaction.StatusLocation - 1;
-        if (seat < 0 || seat >= unit.Seats.Length || unit.Seats[seat] != null || _operators.ContainsKey(s)) return ErrorCodes.NpcParameter;
+        if (seat < 0 || seat >= unit.Seats.Length || unit.Seats[seat] != null || _operators.ContainsKey(s)
+            || _activators.ContainsKey(s)) return ErrorCodes.NpcParameter;
         int index = seat;
         return VehicleCondition(s, unit, interaction.Condition, index) && VehicleCondition(s, unit, interaction.NPCCondition, index)
             ? 0 : ErrorCodes.NpcParameter;
