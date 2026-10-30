@@ -3,19 +3,20 @@
 # self-contained). Exports the game data from a game folder on the first run, then runs the server in this terminal
 # or as a systemd service. Players join from Windows with: RO3Emu.exe join <address>
 #
-# usage: ./server.sh [--client DIR | --download DIR] [--host ADDRESS] [--gm ACCOUNT] [--voice-port PORT] [--service] [--reexport]
+# usage: ./server.sh [--client DIR | --download DIR] [--host ADDRESS] [--gm ACCOUNT] [--voice-port PORT] [--panel-port PORT | --no-panel] [--service] [--reexport]
 #   --client DIR    a game folder copied from Windows (at least its ro3_Data/StreamingAssets); first run only
 #   --download DIR  download only the game files the export needs from the official Genesis servers into DIR
 #   --host ADDRESS  the address players connect to (default: this machine's first address)
 #   --gm ACCOUNT    an account that gets GM commands in game (repeatable)
 #   --voice-port PORT  turn on party voice chat on this TCP port, for example 33101 (off by default)
+#   --panel-port PORT  the web panel for players and admins on this TCP port (default 5381); --no-panel: none
 #   --service       install and start a systemd service (needs sudo) instead of running in this terminal
 #   --reexport      export the game data again (after a game update)
 set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")"
 root=$(pwd)
 
-client=""; download=""; host=""; voice=""; service=0; reexport=0; gms=()
+client=""; download=""; host=""; voice=""; panel=5381; service=0; reexport=0; gms=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --client) client="$2"; shift 2 ;;
@@ -25,9 +26,13 @@ while [ $# -gt 0 ]; do
     --voice-port)
       [[ "$2" =~ ^[0-9]+$ ]] && [ "$2" -gt 0 ] && [ "$2" -lt 65536 ] || { echo "--voice-port needs a port number"; exit 1; }
       voice="$2"; shift 2 ;;
+    --panel-port)
+      [[ "$2" =~ ^[0-9]+$ ]] && [ "$2" -gt 0 ] && [ "$2" -lt 65536 ] || { echo "--panel-port needs a port number"; exit 1; }
+      panel="$2"; shift 2 ;;
+    --no-panel) panel=0; shift ;;
     --service) service=1; shift ;;
     --reexport) reexport=1; shift ;;
-    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
     *) echo "unknown option $1 (see ./server.sh --help)"; exit 1 ;;
   esac
 done
@@ -74,6 +79,7 @@ settings=(
 )
 for i in "${!gms[@]}"; do settings+=("Ro3Emu__GmAccounts__$i=${gms[$i]}"); done
 [ -z "$voice" ] || settings+=("Ro3Emu__Voice__Port=$voice")
+if [ "$panel" = 0 ]; then settings+=("Ro3Emu__Panel__Enabled=false"); else settings+=("Ro3Emu__Panel__Port=$panel"); fi
 [ ${#gms[@]} -gt 0 ] || echo '  No --gm account: nobody has GM commands in game.'
 
 ports_note() {
@@ -86,6 +92,7 @@ ports_note() {
     echo "  ufw: sudo ufw allow 5380/tcp && sudo ufw allow 20000/tcp && sudo ufw allow 33100/tcp${voice:+ && sudo ufw allow $voice/tcp}"
   fi
   echo "Players: RO3Emu.exe join $host"
+  [ "$panel" = 0 ] || echo "Web panel: http://$host:$panel (open TCP $panel too, or put it behind https: docs/guide/panel.md)"
 }
 
 # 3. Run: as a service, or in this terminal (Ctrl+C stops it).

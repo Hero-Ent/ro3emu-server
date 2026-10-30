@@ -1,0 +1,89 @@
+// Shared pieces of the item and monster databases and the economy log (pages/items.js, monsters.js, economy.js),
+// built on app.js's helpers. No game art: an item or monster is drawn as the initial of its name on a tint.
+'use strict';
+
+/** The initial of a name on a tint: an item's quality (q1-q6) or a monster's rank. */
+function glyph(name, kind, large) {
+  const letter = (String(name).match(/[\p{L}\p{N}]/u) || ['?'])[0];
+  return h('span', { class: 'glyph ' + (kind || '') + (large ? ' lg' : ''), 'aria-hidden': 'true' }, letter);
+}
+
+/** An item's name in its quality's colour, with its glyph; a link to its page unless plain. */
+function itemName(id, name, quality, plain) {
+  const content = [glyph(name, 'q' + quality), h('span', null, name)];
+  return plain ? h('span', { class: 'named q' + quality }, content)
+    : link('/items/' + id, { class: 'named q' + quality }, content);
+}
+
+const rankNames = { normal: 'Normal', mini: 'Mini boss', boss: 'Boss', mvp: 'MVP' };
+const rankChip = rank => rank && rank !== 'normal' ? chip(rank, rankNames[rank]) : null;
+
+function monsterName(id, name, rank) {
+  return link('/monsters/' + id, { class: 'named' }, glyph(name, rank !== 'normal' ? rank : ''), h('span', null, name));
+}
+
+/** A chance per kill, 0 to 1, as a percentage with as many decimals as a rare drop needs. */
+function percent(chance) {
+  const p = chance * 100;
+  if (p >= 99.995) return '100%';
+  if (p >= 10) return p.toFixed(1).replace(/\.0$/, '') + '%';
+  if (p >= 0.01) return p.toFixed(2).replace(/\.?0+$/, '') + '%';
+  return '<0.01%';
+}
+
+const countRange = (min, max) => min === max ? num(min) : `${num(min)}-${num(max)}`;
+
+/** The search params of the current page, as a plain object. */
+const queryOf = () => Object.fromEntries(new URLSearchParams(location.search));
+
+/** A list URL from its filters; empty values are left out. */
+function listHref(path, values) {
+  const params = new URLSearchParams(Object.entries(values).filter(([, v]) => v !== '' && v != null && v !== 0 && v !== '0'));
+  const text = params.toString();
+  return text ? path + '?' + text : path;
+}
+
+/** Previous / next for a page of results. */
+function listPager(result, href, noun) {
+  const pages = Math.max(1, Math.ceil(result.total / result.pageSize));
+  return [h('span', null, mono(num(result.total)), ' ', result.total === 1 ? noun : noun + 's',
+    pages > 1 ? [' · page ', mono(String(result.page)), ' of ', mono(String(pages))] : null),
+  pages > 1 && h('div', { class: 'actions' },
+    result.page > 1 ? link(href(result.page - 1), { class: 'btn secondary sm' }, icon('back'), 'Previous') : null,
+    result.page < pages ? link(href(result.page + 1), { class: 'btn secondary sm' }, 'Next', icon('arrow')) : null)];
+}
+
+/**
+ * The filter row of a list: a search box and the given controls; submitting navigates to the list with the form's
+ * values (page 1). A reset link appears once a filter is set.
+ */
+function filterForm(path, query, controls, placeholder) {
+  const set = Object.entries(query).some(([k, v]) => k !== 'page' && v);
+  const form = h('form', { class: 'filters', role: 'search' },
+    h('span', { class: 'search' }, icon('search'), h('input', {
+      class: 'input', name: 'q', value: query.q || '', placeholder, 'aria-label': placeholder, spellcheck: 'false', autocapitalize: 'off',
+    })),
+    controls,
+    h('button', { type: 'submit', class: 'btn primary sm' }, 'Search'),
+    set ? link(path, { class: 'btn secondary sm' }, 'Reset') : null);
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    const values = Object.fromEntries([...new FormData(form)].map(([k, v]) => [k, String(v).trim()]));
+    navigate(listHref(path, values));
+  });
+  return form;
+}
+
+/** A select of options [{ id, name }] with an "any" first choice. */
+function optionSelect(name, label, options, value, anyLabel) {
+  return h('select', { class: 'input', name, 'aria-label': label },
+    h('option', { value: '' }, anyLabel),
+    options.map(o => h('option', { value: String(o.id), selected: String(o.id) === String(value || '') }, o.name)));
+}
+
+/** Level from / to. */
+function levelRange(query) {
+  const box = (name, label) => h('input', { class: 'input', name, type: 'number', min: '0', max: '9999', inputmode: 'numeric',
+    value: query[name] || '', placeholder: label, 'aria-label': 'Level ' + label.toLowerCase() });
+  return h('span', { class: 'lv' }, 'Lv', box('min', 'From'), '-', box('max', 'To'));
+}

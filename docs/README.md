@@ -9,6 +9,7 @@
 
 ## Guides: running a server
 
+- [Web panel](guide/panel.md): the built-in website for players and admins (port 5381), bans, nginx and https
 - [GM access](guide/gm-access.md): who may use GM commands (`Ro3Emu:GmAccounts`)
 - [GM panel](guide/gm-panel.md): what each button of the client's GM panel does
 - [Open content](guide/open-content.md): every feature the client can show is playable (`Ro3Emu:OpenContent`)
@@ -17,7 +18,7 @@
 - [Tests](guide/testing.md): content tests on your exported data, rule tests on the invented fixture that CI runs
 - [Config tables](guide/config-tables.md): the typed views of the client's tables and the startup check of the export
 - [Security model](systems/security.md): what the server exposes, what it trusts, and how to report a vulnerability
-- [Account bans](systems/account-bans.md): the `account_ban` table the admin panel writes and where the server checks it
+- [Account bans](systems/account-bans.md): the `account_ban` table, how the web panel bans and where the server checks it
 
 ## Systems: how each part is implemented
 

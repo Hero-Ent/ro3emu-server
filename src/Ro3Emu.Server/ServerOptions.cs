@@ -104,6 +104,9 @@ public sealed class ServerOptions
     /// </summary>
     public bool? GmOpenWhenEmpty { get; set; }
 
+    /// <summary>The web control panel on its own port (docs/guide/panel.md).</summary>
+    public Ro3Emu.Panel.PanelOptions Panel { get; set; } = new();
+
     /// <summary>In-game bug reports (FeedbackService, docs/guide/feedback.md).</summary>
     public FeedbackOptions Feedback { get; set; } = new();
 
