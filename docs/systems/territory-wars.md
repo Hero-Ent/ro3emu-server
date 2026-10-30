@@ -121,7 +121,16 @@ Editing needs GuildPermissionConfig 13 War Machine Management (`ErrorCodes.Guild
 - A guild that never used its warehouse holds `SiegeInitItemList` (50 each of cannons 1006001-1006004).
 - A member holds at most one slot. The client only offers members without a slot; anything else is 82.
 - Slots are guild-wide: the siege `dungeonId` in 32282 is not used.
-- `roleUsingToolId` (the machine a member is in, which makes the client ask before revoking) stays 0 until machines can be built.
+- `roleUsingToolId` is the member's standing machine of the page's type: a cannon on the Firearm page, a vehicle on the
+  Vehicle page, never one under the other.
+- Revoking takes the machine away. The panel asks before changing a slot whose holder has a machine
+  (`LC_SiegeHelper.SendModifyPermissionReq`: UIWords 61027 "Revoke Access", 61028 "This Member is currently using a war
+  machine. Revoke their access?"), for clearing the slot or giving it to someone else. The holder's cannon or vehicle
+  is then destroyed as a replaced one is (UIWords 61001): whoever is on it gets off, it leaves the map and nothing goes
+  back to the warehouse; 32285 and 32286 show nothing in use. A machine left standing without its slot would stay the
+  former holder's (interaction 4900005 checks `CheckBuilder` against the entity's owner, not the permission) or nobody's,
+  and the client keeps no machine outside a slot. A reserved machine and a cannon still being built go back to the
+  warehouse (the builder goes back to Idle). Leaving or being kicked from the guild does the same.
 
 ### Reserving a machine (32270, 32272)
 
@@ -171,7 +180,6 @@ or inside another cannon's `_iExclusiveRadius` (both circles, as the client's `C
 - A builder who dies or leaves the siege before the build time ends gets no cannon; the machine goes back to the
   warehouse.
 - `roleUsingToolId` is not saved: cannons only stand during their siege.
-- The cannon's own HP is not simulated: players and monsters cannot destroy it yet.
 
 ### Firing the cannons (32700, 32703, 32705)
 
