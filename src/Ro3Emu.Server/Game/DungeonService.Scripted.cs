@@ -77,6 +77,7 @@ public sealed partial class DungeonService
     private async Task BeginStepAsync(Attempt a, ReconstructedDungeons.ScriptedStep step)
     {
         a.StepSeen.Clear();
+        a.StepHeld = a.StepHoldOver = false;
         // A fight-only step has no client event to wait for: its kills complete it.
         a.StepDone = step.Complete.Count == 0;
         await SyncSceneActorsAsync(a, step.Actors);

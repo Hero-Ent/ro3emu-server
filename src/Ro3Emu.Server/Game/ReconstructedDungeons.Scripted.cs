@@ -47,6 +47,10 @@ public sealed partial class ReconstructedDungeons
         /// <summary>A scene-editor guide route (m_kGuidePoints) the actor a player used to complete the step walks, the
         /// participants with it, before <see cref="TeleportAfter"/> and the next step (0: none; inferred).</summary>
         public long RideAfter { get; init; }
+
+        /// <summary>Milliseconds the step stays on after it is completed, before the next step or the settlement (0: none;
+        /// inferred): a bubble of the actors it showed is still being read, or a defeated enemy is still falling.</summary>
+        public int HoldAfterMs { get; init; }
     }
 
     /// <summary>
@@ -153,6 +157,7 @@ public sealed partial class ReconstructedDungeons
         {
             Companions = [.. listed.Where(IsCompanion).Select(Actor)],
             RideAfter = s.TryGetProperty("after", out var rideAfter) && rideAfter.TryGetProperty("ride", out var ride) ? ride.GetInt64() : 0,
+            HoldAfterMs = s.TryGetProperty("after", out var holdAfter) && holdAfter.TryGetProperty("hold", out var hold) ? hold.GetInt32() : 0,
         };
     }
 
