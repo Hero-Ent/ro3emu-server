@@ -37,7 +37,7 @@ public partial interface IPanelBackend
     /// <summary>True while the account (its stored name) has an active ban.</summary>
     Task<bool> IsBannedAsync(string account);
 
-    /// <summary>The account may use the admin area (listed in Ro3Emu:GmAccounts).</summary>
+    /// <summary>The account has a staff role (IPanelOperations.RoleOf): it may open the admin area.</summary>
     bool IsAdmin(string account);
 
     /// <summary>Players in the world now; read from the server's census, no work for the game loop.</summary>
