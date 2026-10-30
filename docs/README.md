@@ -24,7 +24,7 @@
 | Area | Notes |
 |---|---|
 | Combat and skills | [monster AI](systems/monster-ai.md) · [skill protocol](systems/skill-protocol.md) · [buffs and resources](systems/skill-buffs.md) · [skill growth](systems/skill-growth.md) · [remaining skill messages](systems/skills-rest.md) · [totem effects](systems/totem-effects.md) |
-| Character and items | [Astral Level (Paragon)](systems/paragon.md) · [Starshatter ritual](systems/starshatter.md) · [title ranks](systems/titles.md) · [equipment affixes](systems/equipment-affixes.md) · [build presets](systems/genre.md) · [wardrobe](systems/wardrobe.md) · [mounts and totems](systems/mount-totem.md) |
+| Character and items | [levelling from Lv 20 to 40](systems/leveling.md) · [Astral Level (Paragon)](systems/paragon.md) · [Starshatter ritual](systems/starshatter.md) · [title ranks](systems/titles.md) · [equipment affixes](systems/equipment-affixes.md) · [build presets](systems/genre.md) · [wardrobe](systems/wardrobe.md) · [mounts and totems](systems/mount-totem.md) |
 | Pets | [pets](systems/pet.md) · [ordinary guardian skills](systems/pet-guardian-skills.md) · [pets in the world](systems/pet-world-follow.md) · [tower companions and Bonus Time](systems/tower-pets-afk.md) |
 | Life jobs | [life jobs and production](systems/lifejob.md) · [gathering](systems/gathering.md) |
 | Economy | [gift codes](systems/gift-codes.md) · [trade and stalls](systems/trade-stalls.md) · [auctions](systems/auction.md) · [mail](systems/mail.md) · [durable activity settlement](systems/durable-settlement.md) |
