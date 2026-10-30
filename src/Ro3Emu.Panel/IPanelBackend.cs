@@ -36,6 +36,9 @@ public interface IPanelBackend
     /// <summary>Players in the world now; read from the server's census, no work for the game loop.</summary>
     int PlayersOnline();
 
+    /// <summary>How many accounts and characters the realm has (cached; the public home page shows them).</summary>
+    Task<PanelCounts> CountsAsync();
+
     Task<IReadOnlyList<PanelNewsItem>> NewsAsync(int limit);
 
     /// <summary>Characters in the world, with their account (the panel shows it to admins only).</summary>
@@ -70,6 +73,8 @@ public interface IPanelBackend
 public sealed record PanelServerInfo(string Name, string Area, string Version, DateTimeOffset StartedUtc);
 
 public enum PanelRegistration { Created, Taken, Banned, Invalid }
+
+public sealed record PanelCounts(int Accounts, int Characters);
 
 public sealed record PanelNewsItem(long Id, string Title, string Body, string Tag, DateTimeOffset Published, string Author);
 

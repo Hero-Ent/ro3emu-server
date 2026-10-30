@@ -137,14 +137,16 @@ public sealed partial class PanelSite
         return Reply.Ok(new { changed = true });
     }
 
-    private Task<Reply> StatusAsync(Call call)
+    private async Task<Reply> StatusAsync(Call call)
     {
         var info = _backend.Info;
-        return Task.FromResult(Reply.Ok(new
+        var counts = await _backend.CountsAsync();
+        return Reply.Ok(new
         {
             name = info.Name, area = info.Area, version = info.Version, players = _backend.PlayersOnline(),
+            accounts = counts.Accounts, characters = counts.Characters,
             startedUtc = info.StartedUtc, uptimeSeconds = (long)Math.Max(0, (_clock.GetUtcNow() - info.StartedUtc).TotalSeconds),
-        }));
+        });
     }
 
     private async Task<Reply> NewsAsync(Call call)

@@ -6,7 +6,7 @@ the player at once, and the panel never writes the database behind the server's 
 
 | Who | Pages |
 |---|---|
-| everyone | Home (server status, uptime, version, latest news) · Who's online · Rankings · News |
+| everyone | Home (status, version, players online, uptime, accounts and characters; latest news, who's online, top 5 by level) · Who's online · Rankings · News |
 | a player, logged in with the game account | My account (created, last played, characters with class, level, map and guild) · password change |
 | an admin | Dashboard (the server's own metrics) · Accounts (search, detail, ban and unban) · Audit log |
 
@@ -29,6 +29,10 @@ It is on by default, on port **5381**, next to the server's HTTP port 5380:
 
 Set them in `appsettings.json` under `Ro3Emu`, as environment variables (`Ro3Emu__Panel__Port=8081`) or as
 arguments (`--Ro3Emu:Panel:Port=8081`). The startup log says `Web panel on http://...`.
+
+`RO3Emu.exe start`, `host` and `install` take `--panel-port <n>` and `--no-panel` and pass them on; so do
+`server.sh` on Linux and `scripts/server.sh`. RO3Emu.exe checks the panel's port with the others before it starts the
+server, so a second server on the same PC needs its own (`--panel-port 5391`) or `--no-panel`.
 
 When you play on your own PC the panel listens on loopback only: open `http://127.0.0.1:5381`. On a public host it
 listens on every interface like the game ports; open TCP 5381 in the firewall, or better, put it behind a proxy with
@@ -127,7 +131,7 @@ Both are created by the server at startup like its other tables and are part of 
 ## For developers
 
 `src/Ro3Emu.Panel` holds the website: the static files (`www/`, embedded in the assembly; the fonts are the
-launcher's), the JSON API under `/api/` (`PanelSite`), sessions and CSRF. It knows nothing of the game: everything
+launcher's; the colours, spacing scale, type scale and components are the tokens at the top of `app.css`), the JSON API under `/api/` (`PanelSite`), sessions and CSRF. It knows nothing of the game: everything
 goes through `IPanelBackend`, which the server implements in `Http/PanelBackend.cs` over its stores, writer and loop.
 `ServerHost` routes every request that arrives on the panel's port to `PanelSite` before the server's own
 middleware, so neither port serves the other's paths. Tests: `PanelTests`; the test hosts keep the panel off unless a

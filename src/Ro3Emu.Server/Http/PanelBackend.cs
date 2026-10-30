@@ -47,6 +47,8 @@ public sealed partial class PanelBackend(IOptions<ServerOptions> options, Accoun
     private DateTimeOffset _onlineAt;
     private Task<List<PanelRoleRow>>? _levels;
     private DateTimeOffset _levelsAt;
+    private Task<(int, int)>? _counts;
+    private DateTimeOffset _countsAt;
 
     public PanelServerInfo Info { get; } = new(options.Value.ClusterName, options.Value.AreaName, ServerVersion(), clock.GetUtcNow());
 
@@ -57,6 +59,24 @@ public sealed partial class PanelBackend(IOptions<ServerOptions> options, Accoun
     public bool IsAdmin(string account) => options.Value.GmAccounts.Contains(account, StringComparer.Ordinal);
 
     public int PlayersOnline() => census.Current.Roles.Count;
+
+    /// <summary>Read at most once per <see cref="LevelBoardTtl"/>: the home page asks on every visit.</summary>
+    public async Task<PanelCounts> CountsAsync()
+    {
+        Task<(int, int)> task;
+        lock (_gate)
+        {
+            var now = clock.GetUtcNow();
+            if (_counts == null || _counts.IsFaulted || _counts.IsCompleted && now - _countsAt >= LevelBoardTtl)
+            {
+                _counts = accounts.ReadAsync<(int, int)>(new PanelCountsRead());
+                _countsAt = now;
+            }
+            task = _counts;
+        }
+        var (accountCount, characterCount) = await task;
+        return new PanelCounts(accountCount, characterCount);
+    }
 
     private long Now => clock.GetUtcNow().ToUnixTimeSeconds();
 

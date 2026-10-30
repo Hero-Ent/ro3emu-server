@@ -55,6 +55,8 @@ public sealed class PanelTests : IAsyncLifetime
         var status = await browser.GetJsonAsync("/api/status");
         Assert.Equal("RO3Emu", status.GetProperty("name").GetString());
         Assert.Equal(0, status.GetProperty("players").GetInt32());
+        Assert.Equal(0, status.GetProperty("characters").GetInt32());
+        Assert.Equal(JsonValueKind.Number, status.GetProperty("accounts").ValueKind);
         Assert.Equal(HttpStatusCode.NotFound, (await browser.Http.GetAsync("/api/nothing")).StatusCode);
     }
 
