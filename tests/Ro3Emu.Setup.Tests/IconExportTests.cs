@@ -27,7 +27,7 @@ public class IconExportTests
             File.WriteAllText(Path.Combine(dir.FullName, "AchievementLevel.json"), """{"1":{"_kIcon":"achievement_level_0.png"}}""");
 
             var requests = IconExport.Requests(dir.FullName);
-            Assert.Equal(["items/item_1.png", "items/card_2.png", "monsters/headicon_monster_a.png", "classes/icon_job_novice.png",
+            Assert.Equal(["items/item_1.png", "items/card_2.png", "monsters/headicon_monster_a.png", "npcs/headicon_npc_b.png", "classes/icon_job_novice.png",
                 "classes/iconbig_job_novice.png", "maps/sc_a_pathfind.png", "guilds/guild_frame_a.png", "guilds/guild_design_b.png", "titles/title_small_1.png",
                 "achievements/achievement_level_0.png"], requests.Select(r => r.Path));
             Assert.Equal(512, requests.Single(r => r.Kind == "maps").MaxSide);
