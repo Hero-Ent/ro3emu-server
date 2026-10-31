@@ -8,7 +8,9 @@ the player at once, and the panel never writes the database behind the server's 
 |---|---|
 | everyone | Home (status, version, players online, uptime, accounts and characters; latest news, who's online, top 5 by level) · Who's online · Rankings · News · Items · Monsters · Maps · Guilds and the territory map · Market · every character's public profile |
 | a player, logged in with the game account | My account (created, last played, characters with class, level, map and guild) · the sheet of each own character · password change |
-| an admin | Dashboard (the server's own metrics) · Accounts (search, detail, ban and unban) · every character's sheet and mailbox · Audit log · Mail & rewards · Gift codes · GM console · News editor · Broadcasts · Economy log · Item tracking |
+| a Moderator | Dashboard (the server's own metrics) · Accounts (search, detail, login history, deleted characters, ban and unban) · every character's sheet and mailbox · Reports · Audit log |
+| a GM | the Moderator's pages and Mail & rewards · Gift codes · GM console · News editor · Broadcasts · Economy log · Character actions (kick, teleport, rename, items and currencies, restore) · Item tracking |
+| an Admin | the GM's pages and Staff roles · Server control (restart, shutdown, maintenance, backups) · 2FA resets |
 
 Players log in with the same account name and password as in the game. An account the game created logs in here,
 and an account made on the panel's sign-up page logs in to the game: both paths write the same record
@@ -28,6 +30,9 @@ It is on by default, on port **5381**, next to the server's HTTP port 5380:
 | `Ro3Emu:Panel:Registration` | `true` | `false` hides the sign-up page; accounts are then created only by a first login in the game |
 | `Ro3Emu:Panel:ImageDir` | `icons/` of the game data | the pictures the pages show (see [Pictures](#pictures)) |
 | `Ro3Emu:Panel:Branding:*` | RO3Emu's | your server's name, tagline, logo, footer and colour (see [Branding](#branding)) |
+| `Ro3Emu:Panel:Roles:<account>` | none | a staff role, `Moderator`, `GM` or `Admin` (see [Staff roles](#staff-roles)) |
+| `Ro3Emu:Panel:RequireAdmin2FA` | `true` on a public bind, `false` on loopback | GM and Admin accounts must turn on two-factor authentication before the admin area opens to them |
+| `Ro3Emu:Panel:LoginAddresses` | `false` | keep and show the address of each login in the login history |
 
 Set them in `appsettings.json` under `Ro3Emu`, as environment variables (`Ro3Emu__Panel__Port=8081`) or as
 arguments (`--Ro3Emu:Panel:Port=8081`). The startup log says `Web panel on http://...`.
@@ -40,15 +45,37 @@ When you play on your own PC the panel listens on loopback only: open `http://12
 listens on every interface like the game ports; open TCP 5381 in the firewall, or better, put it behind a proxy with
 https as below and keep 5381 closed to the outside.
 
-## Admins
+## Staff roles
 
-The admin area is for the accounts listed in `Ro3Emu:GmAccounts` ([GM access](gm-access.md)), spelled as stored.
-**When the list is empty, nobody is an admin in the panel**, whatever `GmOpenWhenEmpty` says: the open-GM rule of
-local play applies to the game only. To administer a server, list your account even on your own PC.
+The admin area is for staff. Each role has everything of the one before it:
 
-Every admin action is written to the audit log (`admin_audit`: who, what, when, on which account, the reason) in the
-same database transaction as the action itself, so a recorded action always happened and a performed one is always
-recorded.
+| Role | May |
+|---|---|
+| Moderator | open the dashboard, accounts (with their login history and deleted characters), every character's sheet and mailbox, the reports and the audit log; ban and unban; triage reports |
+| GM | also send mail, make gift codes, run the GM console, edit news, broadcast, read the economy log, and act on characters |
+| Admin | also give and take staff roles, control the server (restart, shutdown, maintenance, backups) and reset another account's 2FA |
+
+An account gets its role from, in this order:
+
+1. `Ro3Emu:GmAccounts` ([GM access](gm-access.md)): every account listed there is an Admin, as before.
+2. `Ro3Emu:Panel:Roles`, account to role, spelled as stored: `Ro3Emu__Panel__Roles__anna=Moderator`, or in
+   `appsettings.json` `"Panel": { "Roles": { "anna": "Moderator", "tomek": "GM" } }`.
+3. The **Staff roles** page, where an Admin gives an existing account a role or takes it away. These are stored by
+   the server (`panel_role`) and audited; the roles of 1 and 2 are shown there but changed only in the configuration.
+   Nobody changes their own role.
+
+**When nobody has a role, nobody is staff in the panel**, whatever `GmOpenWhenEmpty` says: the open-GM rule of local
+play applies to the game only. To administer a server, list your account in `GmAccounts` even on your own PC. A panel
+role is the panel's only: GM commands in the game still follow `GmAccounts`.
+
+Every route of the API names the least role it needs and refuses the others (403); the sidebar shows each role only
+the pages it may use.
+
+Every admin action is written to the audit log (`admin_audit`: who, what, when, on which account, the reason). A change
+the panel's own plans make (a ban, a role, news, gift codes, report triage, a rename or restore, maintenance, a 2FA
+reset) is recorded in the same database transaction as the change itself, so a recorded action always happened and a
+performed one is always recorded. An action that runs through the game's own code (mail, a GM command, a broadcast, a
+kick, a teleport, an item grant, a planned restart, a backup) is recorded right after it ran.
 
 ## Bans
 
@@ -85,6 +112,89 @@ Each tool is a page of the admin area's sidebar; each change is written to the a
 - **Broadcasts.** A one-line notice on the screen of everyone in the game: the GM marquee (`BROADCAST_NOTIFY` 83270,
   the message GM replies use). It can repeat every few minutes, up to 100 more times; repeats are kept in the
   server's memory (a restart ends them) and can be cancelled.
+
+## Account security
+
+*My account → Security* is every player's own:
+
+- **Two-factor authentication** with any authenticator app (TOTP, RFC 6238: HMAC-SHA1, 30-second steps, 6 digits).
+  The page shows the key and an `otpauth://` link; the first code from the app turns it on and shows ten recovery
+  codes once (`ABCDE-FGHJK`, each good once, stored as SHA-256 hashes). From then on a login asks for a code after the
+  password: the current one, the one before or after it (a phone's clock may be 30 seconds off), or a recovery code.
+  A code is good once: the server keeps the last time step used and refuses it and every earlier one. Turning 2FA off
+  or making new recovery codes asks for a code too. Turning it on signs out the account's other browsers.
+- **Signed-in browsers**: the panel sessions of the account, with "Sign out" for one and "Log out everywhere else".
+  A password change already signs out the others, a ban all of them.
+- **Latest logins**: the account's last 30 logins (the server keeps 100), each with its time and whether it was the
+  panel or the game (the SDK login). The address only with `Ro3Emu:Panel:LoginAddresses`; without it no address is
+  stored at all.
+
+**Required for GM and Admin.** With `Ro3Emu:Panel:RequireAdmin2FA`, a GM or Admin without 2FA has no staff role in the
+panel until it is on: the admin area answers 403 and *My account* asks to set it up. Unset, it is on whenever the panel
+listens on an address that is not loopback (a public host) and off for local play; set `false` to turn it off on a
+public host, `true` to require it locally. Moderators are not required to use it.
+
+**Limits.** A login that needs a code waits 5 minutes for it and takes 5 tries; an account takes 10 wrong codes in 15
+minutes from all its logins together, then refuses codes until the window passes. Every code also counts against the
+address's login budget (`Ro3Emu:LoginAttemptsPerMinute`). Codes and recovery codes are compared in constant time and
+never logged; a wrong code logs only the account. An Admin can reset another account's 2FA (a lost phone without
+recovery codes) from its account page, which also signs it out; the reset is audited.
+
+A Moderator sees an account's login history, 2FA state and panel sessions on its page; an Admin can also sign it out of
+the panel there.
+
+## Report inbox
+
+**Reports** lists the players' in-game reports ([bug reports](feedback.md): `/bug` in chat and the Feedback button),
+newest first, with tabs for their status: *new*, *in progress*, *done* and *won't fix*. A report shows what the player
+wrote, the character, account, level, map, position and line, how it was sent, and the server's log lines about the
+player from the minutes before. Staff change its status and assignee (any account) and add notes; each change is
+audited. "Take it" assigns it to yourself. The reports stay in `reports/feedback.jsonl` as the game wrote them; the
+triage is the database's (`feedback_triage`, `feedback_note`). A Discord webhook, when set, still gets each report.
+
+## Character actions
+
+From an account's page a GM opens **Character actions** for each of its characters:
+
+- **Kick** (in the game): closes the game session at once, as a ban's kick does, without a ban; the player can log in
+  again.
+- **Teleport**: in the game, the server's own `!warp` moves the character now (to the given x and z, or the map's
+  arrival point). Out of the game, the stored position changes and the character logs in there; the login puts it on
+  the ground or, where the point is not walkable, at the map's arrival point.
+- **Rename**: the game's name rule (2 to 16 characters once trimmed, unique in any letter case). Only while the
+  character is out of the game; the old name is free the moment it commits.
+- **Items and currencies**: while the character is in the game, through the GM grant (`!item`, `!delitem`): the bag
+  changes on the player's screen at once and the economy log records it. Zeny is item 1, other currencies are items
+  too. For a character out of the game use *Mail & rewards*: the mail waits for the next login.
+- **Restore**: the server keeps a deleted character (its row, renamed `name~id`); an account's page lists them, and a
+  GM brings one back under its old name, unless another character took that name since. It gets a new lifecycle, so
+  nothing of the deleted one's server state applies to it.
+
+An action on a character out of the game takes the character's lifecycle reservation and is refused while it is in the
+game, loading or waiting for a reconnect, as the HTTP character deletion is. Every action is audited.
+
+## Server control
+
+**Server control** (Admins):
+
+- **Restart or shut down** now or in up to a day. The players in the game are told on the GM marquee at once and again
+  15, 10, 5, 3, 2 and 1 minutes and 30 and 10 seconds before; then the server stops the way Ctrl+C stops it (the loop
+  drains, the database closes). A plan can be cancelled (the players are told) and lives in memory: a restart forgets
+  it. The process exits with code **75** after a restart and **0** after a shutdown, so a process manager decides what
+  comes back: the systemd unit `server.sh` installs has `Restart=always` with `RestartPreventExitStatus=0` (a restart
+  comes back, a shutdown stays down). Without a process manager (`RO3Emu.exe start`, a terminal) a restart is a stop:
+  start the server again.
+- **Maintenance**: while it is on, a game login of an account without a staff role is refused at the game gate with
+  `ConnectServerResp` *ClusterShutdown*, which the client shows as its own maintenance notice
+  (`LC_LoginManager`: `ClusterShutdown` maps to UIWords 28108 *ServerMaintenancing*; that the gate's answer reaches
+  that state is inferred). Players already in the game stay; plan a restart to send them out. It is kept in the
+  database (`panel_setting`), so it survives a restart.
+- **Backups**: the files of `data/backups`, newest first. *Make a backup now* runs the server's own backup (a checked
+  copy, as at every start); *Download* sends the file; *Restore* plans a restart in 5 minutes whose next start puts
+  that backup back **before the realm opens**, exactly as `Ro3Emu.Server --restore-backup <file>` does: the running
+  database is never swapped. The request is `data/restore-request.txt`, removed as the restore starts, so a refused
+  restore is not tried again at every start; what it did is in `data/restore-result.txt` and on this page. The replaced
+  database is kept in `data/restore-saved/`.
 
 ## Branding
 
@@ -142,6 +252,34 @@ and level for an item), shows the ids of its own variant in a small line, and me
 spawn; a merged drop says "Only from ..." when not every variant drops it. Rows still named `TBD`, rows with a `@{n}`
 placeholder the row gives no value for, and level-1 monsters with 100 000 HP or more that spawn on no map (story and
 scene actors) are left out of the lists; searching for their id still finds them.
+
+## The rest of the game database
+
+The **Database** page links every public database. Besides items, monsters and maps:
+
+- **Cards**: every card of the card library with each star's effects as the client's tips write them (attributes by
+  _iNameEquip and _iTextValueDisplayType, special effects by LC_SpecialEffectHelper's rules), the copies a star costs,
+  what each level adds and costs (CardUpgradeConfig of the card's slot and quality), the revert price and who drops it.
+- **Crafting**: the Chef's formulas (LifeFormulaConfig: materials, vigor, time, life job EXP, the products and their
+  chances through the award's drop pool) and equipment crafting (EquipCraftConfig, each quality by
+  EquipCraftQualityConfig's weights, the guarantees). An item page shows the recipes it comes from and goes into.
+- **Classes & skills**: each class's line and skill trees laid out as the skill window does (SkillTreeConfig rows, 7
+  columns, the class's _kSkillReplace, Novice's row centred), and a page per skill with every level's description
+  (Language.Trans of _iDescription with _kDescData), cooldown, cast time, cost and prerequisites.
+- **Pets**: stats per level (AttriMonsterConfig times _iBaseAttr), fight and assist power, every star's step and cost,
+  what the pet gives while it fights and once collected, and its skills per star. **Mounts**: the speed each adds
+  (attribute 1131), its other stats and the items that lend it. **Shops**: every shop's goods and prices.
+- **Elements & EXP**: the element table (EleConfig) and how a kill's EXP is scaled (LvExpCorrectionConfig, the party
+  bonus). A monster page shows its Base EXP per kill (item 100 of its drop pools, also in Bonus Time and the low-level
+  bonus) and the damage it takes from each element; a map page its type, recommended levels
+  (OnHookMonsterRecommendConfig), NPCs with what they offer, portals, neighbours and dungeon floors.
+- **Event calendar**: the timed To-Do activities from now to a week ahead, as TimedTodoSchedule opens them, and the
+  season's long windows (NewActivityConfig), shown in the viewer's own time with live countdowns; it says when the
+  testing switch runs everything all day. Asked on the game loop at most once a minute.
+- **MVP timers**: every field MVP's state, last kill and next respawn from MvpService, at most every 5 seconds.
+
+The data export also writes the pictures these pages use: icons/pets (PetBaseConfig heads and illustrations),
+icons/npcs (world NPC heads), icons/mounts (the mount appearances) and icons/events (the To-Do icons).
 
 ## Pictures
 
@@ -308,7 +446,12 @@ proxy's.
 
 - **Sessions.** A random 256-bit id in an `HttpOnly`, `SameSite=Strict` cookie, `Secure` over https. Sessions live in
   the server's memory: a restart logs everyone out. A login always issues a new id. A password change signs out the
-  account's other browsers, a ban all of them.
+  account's other browsers, a ban all of them. The sessions page names a session by an HMAC of its id, never the id.
+- **Two-factor authentication.** See [Account security](#account-security): TOTP secrets stay in the database, recovery
+  codes only as hashes; codes are good once, compared in constant time, limited per login, per account and per
+  address, and never logged.
+- **Roles.** Every API route checks the caller's staff role on each request; a role taken away or a ban applies to the
+  next request.
 - **CSRF.** Every POST carries a token bound to the session cookie (before a login, to a visitor cookie) and is
   refused without it, or when its `Origin` is another site.
 - **Passwords** are checked and stored by the server's own code (PBKDF2-SHA256, 100 000 rounds). A wrong password, an
@@ -331,8 +474,13 @@ proxy's.
 |---|---|
 | `admin_audit` | one row per admin action |
 | `panel_news` | the news the public pages show, written with the news editor; `pinned` keeps an item on top |
+| `panel_role` | the staff roles an Admin gave on the panel |
+| `account_login` | the latest 100 logins of each account (panel or game; the address only with `LoginAddresses`) |
+| `account_totp` | each account's two-factor secret, last used step and recovery code hashes |
+| `feedback_triage`, `feedback_note` | the report inbox's status, assignee and notes |
+| `panel_setting` | maintenance mode |
 
-Both are created by the server at startup like its other tables and are part of every backup.
+They are created by the server at startup like its other tables and are part of every backup.
 
 ## For developers
 
@@ -344,7 +492,11 @@ rectangle). Bundles are read with AssetsTools.NET and BC1/BC3/BC7 textures decod
 
 `src/Ro3Emu.Panel` holds the website: the static files (`www/`, embedded in the assembly; the fonts are the
 launcher's; the colours, spacing scale, type scale and components are the tokens at the top of `app.css`), the JSON API under `/api/` (`PanelSite`), sessions and CSRF. It knows nothing of the game: everything
-goes through `IPanelBackend`, which the server implements in `Http/PanelBackend.cs` over its stores, writer and loop.
+goes through `IPanelBackend`, `IPanelAdminTools` and `IPanelOperations` (roles, security, reports, character actions,
+server control), which the server implements in `Http/PanelBackend*.cs`, `Http/PanelAdminTools*.cs` and
+`Http/PanelOperations*.cs` over its stores, writer and loop. A page in its own file registers with
+`registerAdminPage({ ..., role })`; `adminAccountCards` takes cards for an account's admin page.
 `ServerHost` routes every request that arrives on the panel's port to `PanelSite` before the server's own
 middleware, so neither port serves the other's paths. Tests: `PanelTests`; the test hosts keep the panel off unless a
-test turns it on with a free port (`TestHostDefaults`).
+test turns it on with a free port (`TestHostDefaults`). `PanelAdminTests` cover roles, security, reports, character
+actions and server control.

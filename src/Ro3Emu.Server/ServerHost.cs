@@ -30,6 +30,8 @@ public static partial class ServerHost
         builder.Services.AddSingleton(_ => RealmLock.Acquire(options.DataDir));
         builder.Services.AddSingleton(Options.Create(options));
         builder.Services.AddSingleton(clock ?? TimeProvider.System);
+        // GM and Admin accounts need two-factor authentication on a public panel unless the operator says otherwise.
+        options.Panel.RequireAdmin2FA ??= !System.Net.IPAddress.IsLoopback(PanelAddress(options));
         // Loopback for local play and tests; the web panel (docs/guide/panel.md) on its own port, routed by PanelSite.Map.
         builder.WebHost.UseUrls(options.Panel.Enabled
             ? [$"http://{options.ListenAddress()}:{options.HttpPort}", PanelUrl(options)]
@@ -176,7 +178,9 @@ public static partial class ServerHost
         builder.Services.AddSingleton<Voice.VoiceRooms>();
         // The voice relay PoC only opens a second listener when a port is configured for it.
         if (options.Voice.Port > 0) builder.Services.AddHostedService<Voice.VoiceGateServer>();
-        builder.Services.AddHostedService<DatabaseBackup>();
+        // A singleton too: the panel's server control lists backups and makes one on demand.
+        builder.Services.AddSingleton<DatabaseBackup>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<DatabaseBackup>());
         builder.Services.AddSingleton<ReceiptRetention>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<ReceiptRetention>());
         builder.Services.AddSingleton<Game.Persistence.PositionPersistence>();
@@ -223,6 +227,10 @@ public static partial class ServerHost
         builder.Services.AddSingleton<PanelBackend>();
         builder.Services.AddSingleton<Ro3Emu.Panel.IPanelBackend>(sp => sp.GetRequiredService<PanelBackend>());
         builder.Services.AddSingleton<Ro3Emu.Panel.IPanelAdminTools, PanelAdminTools>();
+        builder.Services.AddSingleton<StaffRoles>();
+        builder.Services.AddSingleton<MaintenanceMode>();
+        builder.Services.AddSingleton<PanelOperations>();
+        builder.Services.AddSingleton<Ro3Emu.Panel.IPanelOperations>(sp => sp.GetRequiredService<PanelOperations>());
         builder.Services.AddSingleton<Ro3Emu.Panel.PanelSite>();
         builder.Services.AddSingleton<GiftCodeLimiter>();
         builder.Services.AddSingleton<GiftCodeService>();
@@ -440,6 +448,9 @@ public static partial class ServerHost
         app.Services.GetRequiredService<StealthEffects>(); // hiding and detection attributes, reveals, Ruwach
         // Create the key before the first client connects, so ClientPatch can read the public half.
         app.Services.GetRequiredService<GateCrypto>();
+        // Staff roles and maintenance from the database before the gates take a login (the game gate asks both).
+        app.Services.GetRequiredService<StaffRoles>().Load();
+        app.Services.GetRequiredService<MaintenanceMode>().Load();
         if (options.Panel.Enabled)
         {
             app.Services.GetRequiredService<Ro3Emu.Panel.PanelSite>(); // built now, after every hook above
@@ -478,10 +489,13 @@ public static partial class ServerHost
         if (panel.Port is <= 0 or > 65535 || panel.Port == options.HttpPort || panel.Port == options.MicroGatePort
             || panel.Port == options.GameGatePort || panel.Port == options.Voice.Port)
             throw new InvalidOperationException($"Ro3Emu:Panel:Port {panel.Port} must be a free port of its own (docs/guide/panel.md).");
-        var address = panel.BindAddress is { Length: > 0 } bind ? System.Net.IPAddress.Parse(bind) : options.ListenAddress();
+        var address = PanelAddress(options);
         string host = address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? $"[{address}]" : address.ToString();
         return $"http://{host}:{panel.Port}";
     }
+
+    private static System.Net.IPAddress PanelAddress(ServerOptions options) =>
+        options.Panel.BindAddress is { Length: > 0 } bind ? System.Net.IPAddress.Parse(bind) : options.ListenAddress();
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Web panel on {Url}")]
     private static partial void LogPanel(ILogger logger, string url);

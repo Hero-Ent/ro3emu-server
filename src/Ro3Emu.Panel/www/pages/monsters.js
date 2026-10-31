@@ -81,7 +81,8 @@ function variantsCard(detail, m) {
 }
 
 async function monsterPage(id) {
-  const detail = await api('GET', '/api/monsters/' + encodeURIComponent(id));
+  const [detail, combat] = await Promise.all([api('GET', '/api/monsters/' + encodeURIComponent(id)),
+    api('GET', '/api/monsters/' + encodeURIComponent(id) + '/combat').catch(() => null)]);
   const m = detail.monster;
   const stat = name => detail.stats.find(s => s.name === name)?.value ?? '-';
   const rewards = detail.drops.filter(d => d.kind);
@@ -120,6 +121,7 @@ async function monsterPage(id) {
       dropsCard(detail, m, rewards),
       card('Where it spawns', null, spawns)),
     h('div', { class: 'span-4 stack' },
+      combat && expCard(combat), combat && elementCard(combat),
       card('Monster', null, body(portrait, facts([['Element', m.elementName || '-'], ['Race', m.race || '-'], ['Size', m.size || '-'],
         ['Rank', rankNames[m.rank]]]))),
       card('Stats', null, body(facts([...detail.stats.map(s => [s.name, h('span', { class: 'num' }, s.value)]),
@@ -128,3 +130,22 @@ async function monsterPage(id) {
 
 routes.push([/^\/monsters$/, monstersPage, 'monsters'], [/^\/monsters\/(\d+)$/, monsterPage, 'monsters']);
 titles.monsters = 'Monsters';
+
+/** Base EXP per kill as the server pays it (pages/wiki.js has the scaling rules). */
+function expCard(combat) {
+  if (!combat.exp.length) return card('EXP per kill', null, emptyState('trophy', 'Its kill pays no EXP', null));
+  const levels = r => r.minPlayerLevel || r.maxPlayerLevel ? `${r.minPlayerLevel}-${r.maxPlayerLevel}` : 'Any';
+  return card('EXP per kill', link('/elements', { class: 'more' }, 'Scaling', icon('arrow')), table([
+    { label: 'When', grow: true, value: r => [r.kind, r.maps.length ? h('span', { class: 'sub' }, 'Only on ' + r.maps.join(', ')) : null] },
+    { label: 'Base EXP', num: true, value: r => h('span', { class: 'strong' }, countRange(r.min, r.max)) },
+    { label: 'Your level', num: true, value: levels },
+  ], combat.exp, { short: true }), 'Job EXP is the same. A level gap to the monster and the party size scale both.');
+}
+
+/** The damage it takes from each attacking element (EleConfig). */
+function elementCard(combat) {
+  if (!combat.taken.length) return null;
+  return card('Element damage', link('/elements', { class: 'more' }, 'Table', icon('arrow')),
+    body(h('ul', { class: 'el-list' }, combat.taken.map(e => h('li', null, h('span', null, e.name), elementCell(e.percent))))),
+    'The change in damage it takes from an attack of each element.');
+}

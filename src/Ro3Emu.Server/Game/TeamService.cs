@@ -29,7 +29,7 @@ public sealed partial class TeamService(SessionRegistry sessions, CharacterServi
     private static readonly TimeSpan InviteLife = TimeSpan.FromSeconds(30);
 
     /// <summary>PublicParamConfig.TeamExpBuffNum (‱) by the number of members on the same map.</summary>
-    private static readonly int[] ExpBuff = [10000, 12500, 15000, 17500, 20000];
+    internal static readonly int[] ExpBuff = [10000, 12500, 15000, 17500, 20000];
 
     private const int MaxHp = 101, MaxSp = 102;
 

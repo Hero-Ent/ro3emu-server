@@ -224,7 +224,7 @@ public sealed class PanelPlayersTests : IAsyncLifetime
         bagGuid = saved.Single(i => i.Entry == 3990001).Guid;
 
         // The exchange's records as TradeService writes them (market_record JSON): one listing whose escrowed instance
-        // carries the guid of the bag's stack (a duplicate), and two sales a day apart.
+        // carries the guid of the bag's stack (a duplicate), and two sales on different UTC days (two days and one hour back, so never the same day).
         long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var listing = new TradeService.Listing
         {
@@ -233,7 +233,7 @@ public sealed class PanelPlayersTests : IAsyncLifetime
         };
         var sales = new[]
         {
-            new TradeService.Sale { Id = "sale-1", Entry = 3990001, Quantity = 4, UnitPrice = 90, TimeMs = now - 86_400_000, SellerId = role },
+            new TradeService.Sale { Id = "sale-1", Entry = 3990001, Quantity = 4, UnitPrice = 90, TimeMs = now - 2 * 86_400_000, SellerId = role },
             new TradeService.Sale { Id = "sale-2", Entry = 3990001, Quantity = 1, UnitPrice = 110, TimeMs = now - 3_600_000, SellerId = role },
         };
         var connection = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
