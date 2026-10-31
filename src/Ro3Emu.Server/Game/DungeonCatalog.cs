@@ -15,7 +15,9 @@ namespace Ro3Emu.Server.Game;
 public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterService monsters,
     SeasonService seasons, IOptions<ServerOptions> options, ReconstructedDungeons? reconstructed = null)
 {
-    public sealed record Spawn(int NpcId, MapPoint Point);
+    /// <summary>A monster of a wave where it appears; <paramref name="Script"/>: the scripted step's own spawn (its
+    /// patrol, delay, riders and end effects, DungeonService.Cues).</summary>
+    public sealed record Spawn(int NpcId, MapPoint Point, ReconstructedDungeons.Spawn? Script = null);
     /// <summary>
     /// A wave; <paramref name="Quest"/> is the DungeonQuestConfig quest it plays (0: none known). A scripted step
     /// (<paramref name="Step"/>, ReconstructedDungeons.Scripted) has no monsters: it completes on its client events.
@@ -321,6 +323,22 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
     }
 
     /// <summary>
+    /// A step's turret (DungeonService.Cannon): one of its actors offers the interaction, which enters a GameplayStatusConfig
+    /// of type 10 (UpperCannon); its fire button is a skill button casting a known skill, its quit button an action
+    /// button running QuitStatus; the step has a fight to fire at.
+    /// </summary>
+    private bool CannonResolves(ReconstructedDungeons.ScriptedStep step, ReconstructedDungeons.Cannon cannon) =>
+        step.Fight.Count > 0 && cannon.Shots > 0
+        && step.Actors.Any(a => Interactions(a.NpcId).Contains(cannon.Interaction))
+        && NPCInteractConfig.Get(data, cannon.Interaction) is { StatusId: > 0 and var status }
+        && GameplayStatusConfig.Get(data, status) is { StatusType: DungeonService.UpperCannonStatusType }
+        && GameplayStatusButtonConfig.Get(data, cannon.Fire) is { ButtonFuncType: DungeonService.SkillButton, Skill: > 0 and var skill }
+        && data.Row("SkillConfig", skill) != null
+        && (cannon.Show == 0 || data.SkillTemplate(cannon.Show) != null) && cannon.Shown >= 0
+        && GameplayStatusButtonConfig.Get(data, cannon.Quit) is { ButtonFuncType: DungeonService.ActionButton, Action: { } quit }
+        && DungeonService.RunsQuitStatus(quit);
+
+    /// <summary>
     /// A scripted scene's steps (ReconstructedDungeons.Scripted): one wave without monsters per step. Every reference
     /// must resolve in the client data and the scene's map, or the scene is refused like any unresolved encounter:
     /// the quests the tracker shows, the actors' NPCConfig rows, points and buffs, the companions' rows (each one able to
@@ -334,7 +352,7 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
         {
             if (!data.Table("DungeonQuestConfig").Values.Any(q => GameData.Int(q, "_iDungeonID") == scene.Scene
                 && GameData.Int(q, "_iQuestID") == step.Quest)) return [];
-            foreach (var actor in step.Actors)
+            foreach (var actor in step.Actors.Concat(step.Allies ?? []))
                 if (data.Row("NPCConfig", actor.NpcId) is not { } npc || GameData.Int(npc, "_iNPCType") is not (1 or 2)
                     || !map.Points.ContainsKey(actor.Point)
                     || actor.Buffs.Any(b => data.Row("BuffConfig", b) is not { } buff || GameData.Int(buff, "_iBuffID") <= 0)) return [];
@@ -357,6 +375,7 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
                     ReconstructedDungeons.TriggerKind.Region => map.Regions.ContainsKey(t.Id),
                     ReconstructedDungeons.TriggerKind.Point => map.Points.ContainsKey(t.Id) && t.Radius > 0,
                     ReconstructedDungeons.TriggerKind.Plot => data.Row("PlotInterpretation", t.Id) != null,
+                    ReconstructedDungeons.TriggerKind.After => t.Id > 0,
                     _ => false,
                 };
                 if (!known) return [];
@@ -372,11 +391,17 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
             foreach (var (interaction, skill, shots) in step.Strikes ?? [])
                 if (step.Fight.Count == 0 || shots < 0 || data.Row("SkillConfig", skill) == null
                     || !step.Actors.Any(a => Interactions(a.NpcId).Contains(interaction))) return [];
+            if (step.Cannon is { } cannon && !CannonResolves(step, cannon)) return [];
+            if (!(step.Cues ?? []).All(cue => CueResolves(step, cue, map))) return [];
+            // A later arrival waits on the step's clock, which a hide-and-seek game restarts.
+            if (step.Seek != null && step.Fight.Any(f => f.AtMs > 0)) return [];
             var fight = new List<Spawn>();
             foreach (var spawn in step.Fight)
             {
-                if (!map.Points.TryGetValue(spawn.Point, out var at) || monsters.Template(spawn.NpcId) == null) return [];
-                fight.Add(new Spawn(spawn.NpcId, at));
+                if (Placement(map, spawn.Point, spawn.Patrol, spawn.Path) is not { } at || monsters.Template(spawn.NpcId) == null
+                    || spawn.AtMs < 0 || spawn.Face is < 0 or >= 360 || !(spawn.Riders ?? []).All(r => SceneUnit(r.NpcId))
+                    || !(spawn.Sink ?? []).All(Effect)) return [];
+                fight.Add(new Spawn(spawn.NpcId, at, spawn));
             }
             waves.Add(new Wave(waves.Count + 1, fight, step.Quest, step));
         }
@@ -484,6 +509,68 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
     /// <summary>The points of a guide route of the scene (m_kGuidePoints), or null when it has none.</summary>
     public IReadOnlyList<(float X, float Y, float Z)>? GuidePath(long scene, long route) =>
         worldData.Map(scene)?.GuidePaths.TryGetValue(route, out var path) == true ? path : null;
+
+    /// <summary>A scene-editor patrol path (kPatrolList) of the scene's map.</summary>
+    public IReadOnlyList<MapPoint>? ScenePatrol(long scene, long patrol) =>
+        worldData.Map(scene)?.Patrols.TryGetValue(patrol, out var path) == true ? path : null;
+
+    /// <summary>Where a scripted unit appears: its point, or the first point of its patrol path (of two points at
+    /// least), facing along it.</summary>
+    public MapPoint? ScenePlacement(long scene, long point, long patrol, IReadOnlyList<MapPoint>? path = null) =>
+        worldData.Map(scene) is { } map ? Placement(map, point, patrol, path) : null;
+
+    /// <summary>The route a scripted unit flies: the scene's own path when it has one, else its patrol path (null: none).</summary>
+    public IReadOnlyList<MapPoint>? SceneRoute(long scene, long patrol, IReadOnlyList<MapPoint>? path) =>
+        path is { Count: > 0 } ? path : patrol != 0 ? ScenePatrol(scene, patrol) : null;
+
+    private static MapPoint? Placement(MapWorld map, long point, long patrol, IReadOnlyList<MapPoint>? route = null)
+    {
+        if (route is { Count: > 0 })
+            return route.Count == 1 ? route[0] : route[0] with { Face = MonsterService.Angle(route[0].X, route[0].Z, route[1].X, route[1].Z) };
+        if (patrol == 0) return map.Points.TryGetValue(point, out var at) ? at : null;
+        if (!map.Patrols.TryGetValue(patrol, out var path) || path.Count < 2) return null;
+        return path[0] with { Face = MonsterService.Angle(path[0].X, path[0].Z, path[1].X, path[1].Z) };
+    }
+
+    /// <summary>An NPCConfig row the client creates as a monster (1) or an NPC (2) unit.</summary>
+    private bool SceneUnit(int npcId) => NPCConfig.Get(data, npcId) is { NPCType: 1 or 2 };
+
+    /// <summary>A Lua_Config_EffectData effect.</summary>
+    private bool Effect(int effect) =>
+        data.SkillTemplateTable("Lua_Config_EffectData").ContainsKey(effect.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+    /// <summary>
+    /// A step's cue (DungeonService.Cues) does one thing that resolves: a ChatConfig line (over one of the step's actors
+    /// when it names a speaker), an actor's bubble interaction, a crew sent away, an effect (of one enum_DisplayEffectType
+    /// 1-10, or 0: each kind it has), or a unit the client creates at a point or on a route, with its riders. A cue that
+    /// waits for a share of HP waits on a monster of the step's fight.
+    /// </summary>
+    private bool CueResolves(ReconstructedDungeons.ScriptedStep step, ReconstructedDungeons.Cue cue, MapWorld map)
+    {
+        if (cue.AtMs < 0 || cue.EveryMs < 0 || cue.LifeMs < 0 || cue.Sight < 0 || cue.HpBelow is < 0 or > 100
+            || (cue.HpBelow > 0 && !step.Fight.Any(f => f.NpcId == cue.Of))) return false;
+        if (cue.Bubble != 0)
+            return cue.Chat == 0 && cue.Effect == 0 && cue.Npc == 0 && cue.Dismiss == 0
+                && step.Actors.Any(a => a.NpcId == cue.Speaker && Interactions(a.NpcId).Contains(cue.Bubble));
+        if (cue.Dismiss != 0) return cue.Chat == 0 && cue.Effect == 0 && cue.Npc == 0 && SceneUnit(cue.Dismiss);
+        // A walk: a unit the step shows, along a route that resolves.
+        if (cue.Walk != 0)
+            return cue.Chat == 0 && cue.Effect == 0 && cue.Npc == 0 && cue.Cast == 0
+                && step.Actors.Concat(step.Allies ?? []).Any(a => a.NpcId == cue.Walk)
+                && (cue.Path is { Count: > 0 } || (cue.Patrol != 0 && map.Patrols.ContainsKey(cue.Patrol)));
+        if (cue.Cast != 0) return cue.Chat == 0 && cue.Effect == 0 && cue.Npc == 0 && cue.Speaker != 0 && SkillConfig.Get(data, cue.Cast) != null;
+        if (cue.Burn < 0 || cue.Fuse < 0 || (cue.Burn > 0 && (!step.Fight.Any(f => f.NpcId == cue.Of)
+                || NPCConfig.Get(data, cue.Npc) is not { Skills: [> 0, ..] }))
+            || (cue.Fuse > 0 && !Effect(cue.Blast))) return false;
+        if (cue.Chat != 0)
+            return cue.Effect == 0 && cue.Npc == 0 && data.Row("ChatConfig", cue.Chat) != null
+                && (cue.Speaker == 0 || step.Actors.Any(a => a.NpcId == cue.Speaker));
+        if (cue.Effect != 0)
+            return cue.Npc == 0 && cue.EffectType is >= 0 and <= 10 && Effect(cue.Effect)
+                && (cue.Point == 0 || map.Points.ContainsKey(cue.Point));
+        return cue.Npc != 0 && SceneUnit(cue.Npc) && Placement(map, cue.Point, cue.Patrol, cue.Path) != null
+            && (cue.Riders ?? []).All(r => SceneUnit(r.NpcId));
+    }
 
     /// <summary>A scene-editor region (m_kRegins) of the scene's map.</summary>
     public MapRegion? SceneRegion(long scene, long region) =>

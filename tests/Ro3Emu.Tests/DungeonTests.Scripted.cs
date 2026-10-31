@@ -37,52 +37,101 @@ public sealed partial class DungeonTests
         Assert.Equal(plan.Waves.Select(w => w.Quest).Order(), plan.Waves.Select(w => w.Quest));
     }
 
-    // The chitchat's last bubble is still being read when it completes the step: the crew stays for the step's hold (13 s,
-    // 1.3 s at the tests' pace) instead of leaving with the same tick.
-    [ClientDataFact]
-    public async Task TheAirshipCrewStaysWhileTheLastChitchatBubbleIsRead()
-    {
-        const long scene = 1000501;
-        Service<IOptions<ServerOptions>>().Value.ScriptedScenePacePercent = 10;
-        await using var alice = await InWorld("Alice");
-        Assert.Equal(0, await Enter(alice, new EnterDungeonReq { SceneEntry = scene }));
-        await Load(alice, scene);
-        await Stage(alice, 1, quest: 1);
-        var started = System.Diagnostics.Stopwatch.StartNew();
-        await Gm(alice, "!actors use"); // the four bubbles complete the step
-        Assert.Equal(1, Session(alice).DungeonAttempt!.Wave + 1);
-        await Stage(alice, 2, quest: 2);
-        Assert.True(started.ElapsedMilliseconds >= 1000, $"the next step came after {started.ElapsedMilliseconds} ms");
-    }
-
-    // The airship's cannons (inferred): 'Board the Cannon' (5300006) on a Cannon fires 5365001 at the nearest enemy
-    // airship, three boardings a ship; sinking both (5300015 at point 24, 5300053 at 61) ends stage 2 and the boarders come.
+    // The airship (the scene's json says what is inferred; its timing follows the official video): a calm, then a shell
+    // bursts on the deck, the startled crew's bubbles play on the scene's clock and the pirates' ship comes alongside with
+    // its crew of four. Then three ships come up parallel to the deck east of the cannons, driven by the scene, their crews
+    // on deck. 'Board the Cannon' (5300006) puts the player on the Cannon in status 12 (UpperCannon); its leave button (28)
+    // takes it off again. A shot (template 61202) is one ball from the cannon at the ship aimed at, with its flash, and its
+    // hit with the blast when it lands; three sink a ship, which takes its crew down with it. Then the gunner is put back
+    // to Idle, the pirates leave their deck and the first three of the nine boarders drop in.
     [ClientDataFact]
     public async Task TheAirshipCannonsSinkTheEnemyShips()
     {
         const long scene = 1000501;
+        Service<IOptions<ServerOptions>>().Value.ScriptedScenePacePercent = 10;
         await using var alice = await InWorld("Alice");
         await Gm(alice, "!lvl 99");
         Assert.Equal(0, await Enter(alice, new EnterDungeonReq { SceneEntry = scene }));
         long instance = await Load(alice, scene);
-        await Stage(alice, 1, quest: 1);
-        await Gm(alice, "!actors use"); // the chitchat (all four)
-        await Stage(alice, 2, quest: 2);
+        await Stage(alice, 1, quest: 1); // the calm, on the scene's clock
+        await Stage(alice, 2, quest: 1); // the attack, on its own clock too
+        var chief = Assert.Single(await ActorsIn(alice, 1, a => a.NpcId == 5300065));
+        // "Whoa, I'm going to fall!": the reply of the startled Chief's bubble interaction, which nobody asked for.
+        await Next(alice, SceneService.NpcInteraction, NpcInteractionRsp.Parser,
+            r => r.Result == 0 && r.Req.NpcUid == chief.Uid && r.Req.InteractionId == 5300052);
+        await Next(alice, 1022, SystemBoardCastMsgNtf.Parser, m => m.ChatId == 5300550);
+        Task<int> Crew() => Service<GameLoop>().InvokeAsync(() =>
+            Task.FromResult(Session(alice).DungeonAttempt?.Riders.Values.Sum(c => c.Count(u => !u.Removed)) ?? 0));
+        for (int i = 0; i < 150 && await Crew() < 4; i++) await Task.Delay(20);
+        Assert.Equal(4, await Crew()); // the pirates' ship and its crew
+
+        await Stage(alice, 3, quest: 2);
         var cannons = await ActorsIn(alice, 3, a => a.NpcId == 5300022);
-        var ships = await WaveIn(instance, 2);
-        Assert.Equal([5300015, 5300053], ships.Select(m => m.Template.NpcId).Order());
+        var ships = await WaveIn(instance, 3); // the third comes up from astern 14 s in (1.4 s at this pace)
+        Assert.Equal([5300015, 5300015, 5300053], ships.Select(m => m.Template.NpcId).Order());
+        for (int i = 0; i < 150 && await Crew() < 9; i++) await Task.Delay(20);
+        Assert.Equal(9, await Crew());
+        // Each sails along the deck's heading (z) to lie parallel to it, east of the cannons.
+        Assert.All(ships, m => Assert.True(m.ScriptDriven && MathF.Abs(MathF.Sin(m.Face * MathF.PI / 180)) < 0.01f && m.X > 260));
         var cannon = cannons[0];
         await Gm(alice, "!actors 5300022");
-        int boardings = 0;
-        for (; boardings < 20 && ships.Any(m => !m.Dead); boardings++)
-        {
-            Assert.Equal(0, await Interact(alice, cannon, 5300006));
-            await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.SkillId == 5365001);
-            foreach (var ship in ships.Where(m => !m.Dead)) ship.Hp = ship.Template.MaxHp; // a far ship's leash reset
-        }
+        Task<InteractChangeNtf> Changed(InteractInfo.Types.EState state) =>
+            Next(alice, WorldInteractionService.Change, InteractChangeNtf.Parser, n => n.DataInfo.EType == state);
+
+        Assert.Equal(0, await Interact(alice, cannon, 5300006));
+        var boarded = await Changed(InteractInfo.Types.EState.UpperCannon);
+        Assert.Equal(12, boarded.DataInfo.StateId);
+        Assert.Equal(cannon.Uid, boarded.DataInfo.UpperCannonInfo.CannonGuId);
+        await alice.SendGameAsync(WorldInteractionService.Action, new UseInteractActionReq { ButtonId = 28 });
+        Assert.Equal(0, (await Next(alice, WorldInteractionService.Action, UseInteractActionRes.Parser)).Result);
+        await Changed(InteractInfo.Types.EState.Idle);
+        Assert.Equal(0, await Interact(alice, cannon, 5300006));
+        await Changed(InteractInfo.Types.EState.UpperCannon);
+
+        long me = Session(alice).Role!.Id;
+        foreach (var ship in ships)
+            for (int shot = 0; shot < 3; shot++) // three a ship, whatever its HP
+            {
+                await alice.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 5353001, TargetId = ship.Uid });
+                Assert.Equal(0, (await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser)).Result);
+                if (ship == ships[0] && shot == 0)
+                {
+                    Assert.Equal(cannon.Uid, (await Next(alice, CombatService.SkillEffect, SkillEffectDisplayNotify.Parser,
+                        e => e.EffectId == 6120104)).SourceId); // the flash
+                    var ball = await Next(alice, CombatService.SkillBullet, SkillFixTimeBulletNotify.Parser, b => b.EffectId == 6120105);
+                    Assert.Equal((cannon.Uid, me, ship.Uid), (ball.SourceId, ball.MasterId, ball.TargetId));
+                    Assert.InRange(ball.FixedTime, 100, 500); // 200 m/s over the distance
+                    var hit = await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.SkillId == 5353001);
+                    Assert.Equal(6120103, hit.ShowPoint); // the blast where it lands
+                    // The cannon's number, about 9.9 million (the official video's), though three hits still sink a ship.
+                    Assert.InRange(Assert.Single(hit.Dsts).Damage, 9_920_000 - CombatService.TurretShownSpread, 9_920_000 + CombatService.TurretShownSpread);
+                    // One ball for the shot, whatever else stands near the ship.
+                    Assert.Single(alice.Inbox.Snapshot(), e => e.IsGame(CombatService.SkillBullet));
+                }
+                await Task.Delay(600); // the fire skill's 0.5 s cooldown
+            }
+        for (int i = 0; i < 150 && ships.Any(m => !m.Dead); i++) await Task.Delay(20); // the last balls land
         Assert.All(ships, m => Assert.True(m.Dead));
-        Assert.InRange(boardings, 6, 8); // three a ship (a miss costs one more)
-        await Stage(alice, 3, quest: 3); // the boarding
+        await Next(alice, CombatService.SkillEffect, SkillEffectDisplayNotify.Parser, e => e.EffectId == 5353102); // a ship breaks up
+        for (int i = 0; i < 100 && await Crew() > 4; i++) await Task.Delay(20);
+        Assert.Equal(4, await Crew()); // the crews went down with their ships; the pirates' ship stays alongside
+        await Changed(InteractInfo.Types.EState.Idle);
+        await Stage(alice, 4, quest: 3); // the boarding, one fight of nine
+        var warriors = await WaveIn(instance, 5); // the five warriors first, the four archers later
+        Assert.Equal([5300016, 5300042, 5300043, 5300044, 5300045], warriors.Select(m => m.Template.NpcId).Order());
+        Assert.Equal(0, await Crew()); // they left their ship's deck
+        // Wule, Boya and the Eden Group Chief fight beside the player: a hit of theirs comes from their own units.
+        long[] allies = await Service<GameLoop>().InvokeAsync(() =>
+            Task.FromResult(Session(alice).DungeonAttempt!.Allies.Select(u => u.Uid).ToArray()));
+        Assert.Equal(3, allies.Length);
+        await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => allies.Contains(h.SrcID));
+        // Each drops in with its FallDown (its NPCConfig _kRespawnSkill).
+        await Next(alice, CombatService.UseInSkill, UseInSkillInfo.Parser, u => u.SkillID == 5364701);
+        // Right after landing, the boarding warriors open with their 3-stage deck dash (5350301): warning telegraph + dash.
+        await Next(alice, CombatService.UseInSkill, UseInSkillInfo.Parser, u => u.SkillID == 5350301);
+        var warn = await Next(alice, CombatService.SkillEffect, SkillEffectDisplayNotify.Parser, e => e.EffectId == 53503023);
+        Assert.Equal(6, warn.EffectType);
+        await Next(alice, CombatService.SkillMove, SkillStartMoveNotify.Parser, m => m.EffectId == 53503021);
     }
 
     // Moonlight Flower's hide-and-seek (inferred): standing in the open is found and the game starts over; a darkness

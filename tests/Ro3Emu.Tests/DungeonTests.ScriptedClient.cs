@@ -90,6 +90,8 @@ public sealed partial class DungeonTests
                             Assert.Equal(0, await Interact(alice, actor, (int)interaction));
                             break;
                         }
+                    case ReconstructedDungeons.TriggerKind.After:
+                        break; // the step's own clock completes it (paced down above)
                     case ReconstructedDungeons.TriggerKind.Plot:
                         await Story(alice, t.Id);
                         // 84012 (the plot's action 150 PlotActingTrigger) completes it as well as 84011 does.

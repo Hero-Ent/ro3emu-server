@@ -81,6 +81,8 @@ public sealed partial class CombatService
     private async Task CastCoreAsync(GameSession s, CastSkillReq request)
     {
         var req = request.Clone();
+        bool turret = TurretSkill?.Invoke(s, req.SkillId) == true;
+        if (turret) TurretAim?.Invoke(s, req);
         var row = EffectiveSkillRow(s, req.SkillId);
         var owned = req.OpUnitId == 0 || req.OpUnitId == s.Role?.Id ? null
             : s.SkillObjects.FirstOrDefault(u => u.Uid == req.OpUnitId && u.WorldScene == s.WorldScene && u.ExpiresMs > Now);
@@ -118,7 +120,7 @@ public sealed partial class CombatService
             else if (s.SkillCast is { Cancelled: false } activeSwing && Now < activeSwing.StartMs + activeSwing.ChantMs + activeSwing.ActionMs
                 && (!new SkillConfig(row.Value).CancelCast || SwingInFlight(activeSwing, row.Value, req))) error = ErrorCodes.SkillBusy;
             else error = ValidateTarget(s, row.Value, req, origin, owned == null ? WalkSlack(s) : 0,
-                _data.Row("SkillConfig", request.SkillId) is { } askedRow ? Range(askedRow) : 0);
+                _data.Row("SkillConfig", request.SkillId) is { } askedRow ? Range(askedRow) : 0, turret);
         }
         // GmUnlimit's "no consumption" (inferred): no HP, SP, item, buff pile or energy cost.
         bool unlimited = (s.GmCombat & GmCombatSwitches.Unlimited) != 0;
@@ -152,7 +154,9 @@ public sealed partial class CombatService
         await PayCostsAsync(s, costs);
         if (!unlimited) await _buffs.SpendEnergyAsync(s, row!.Value);
         int lead = owned == null && BeforeCast is { } before ? await before(s) : 0;
+        var shot = turret ? TurretFired?.Invoke(s, req) : null;
         await s.SendGameAsync(UseSkill, new CastSkillRsp { SessionId = id, IsAutoCast = req.IsAutoCast });
+        if (shot != null) await TurretMuzzleAsync(s, req, shot);
         var target = FindMonster(s.WorldScene, req.TargetId);
         var playerTarget = EventTarget(s, req.TargetId);
         // _iIfAutoAtk 2 (enum_AutoNormalAttackType.AutoNormalAttack) follows the cast with the career's normal attack
@@ -176,7 +180,33 @@ public sealed partial class CombatService
                 s.Position.X, s.Position.Z);
         if (own != null) await OwnSkillCast!(s, req.SkillId);
         else await StartCooldownAsync(s, row.Value, SkillConfig.Get(_data, request.SkillId) is { } asked ? (int)asked.Mode : null);
-        await StartCastAsync(s, row.Value, req, id, owned, lead);
+        await StartCastAsync(s, row.Value, req, id, owned, lead, turret: shot);
+    }
+
+    /// <summary>A skill template's m_kShows entry [effect, kind] of kind 2 is a Gfx point; enum_DisplayEffectType.Gfx is 2.</summary>
+    private const int ShowKindGfx = 2, ShowKindAudio = 3, ShowKindShake = 4, DisplayGfx = 2, DisplayShake = 3, DisplayAudio = 4;
+    /// <summary>How far a turret hit's shown number strays from TurretShot.Shown either way (the video's four hits:
+    /// 9,885,311 to 9,962,385).</summary>
+    internal const int TurretShownSpread = 45_000;
+
+    /// <summary>
+    /// A turret's fire as its template shows it (inferred: the cannon's fire row 5353001 plays the empty template 61098,
+    /// while its own template 53530 has the muzzle flash 5353004 in m_kShows, the ball 5353005 and the blast 5353003):
+    /// the template's first Gfx point plays from the turret unit (31119 SkillEffectDisplayNotify of type Gfx); a rapid
+    /// template's later flashes repeat the same prefab within 0.15 s, so one flash stands for them.
+    /// </summary>
+    private async Task TurretMuzzleAsync(GameSession s, CastSkillReq req, TurretShot shot)
+    {
+        if (s.Role == null || _data.SkillTemplate(shot.Show) is not { } template) return;
+        foreach (var (effect, kind, src) in SkillShows.ShowEffects(template, ShowKindGfx).Take(1).Select(e => (e, DisplayGfx, shot.SourceId))
+            .Concat(SkillShows.ShowEffects(template, ShowKindShake).Take(1).Select(e => (e, DisplayShake, s.Role.Id)))
+            .Concat(SkillShows.ShowEffects(template, ShowKindAudio).Take(1).Select(e => (e, DisplayAudio, shot.SourceId))))
+            await ToPlayerAndViewersAsync(s, SkillEffect, new SkillEffectDisplayNotify
+            {
+                SourceId = src, MasterId = s.Role.Id, TargetId = req.TargetId,
+                TargetPos = req.TargetPos?.Clone() ?? shot.Origin.Clone(), EffectId = effect, EffectType = kind,
+                SkillId = req.SkillId,
+            });
     }
 
     /// <summary>Cast item cost and frozen intent share one owner receipt; HP/SP/buffs remain runtime resources.
@@ -230,6 +260,7 @@ public sealed partial class CombatService
     {
         int id = (int)GameData.Int(row, "_iID");
         if (id == PublicSkill("WorldTreeSkillId")) return true; // paid item skill, LC_ReviveHelper.
+        if (TurretSkill?.Invoke(s, id) == true) return true; // the turret's fire button
         // A Survivor Battle career owns the match skill set (TimedBattleService.Chicken), not the job tree.
         if (MatchSkillRule?.Invoke(s, id) is { } granted) return granted;
         if (id == _skills.NormalAttack(s.Progress!.Career)) return true;
@@ -508,7 +539,8 @@ public sealed partial class CombatService
 
     /// <param name="leadMs">How long the cast waits before it starts (<see cref="BeforeCast"/>): its timeline is sent and its
     /// impact lands that much later, and an interrupt in between cancels it like any cast.</param>
-    private async Task StartCastAsync(GameSession s, JsonElement row, CastSkillReq req, long id, SkillObject? actor = null, int leadMs = 0, bool independent = false)
+    private async Task StartCastAsync(GameSession s, JsonElement row, CastSkillReq req, long id, SkillObject? actor = null, int leadMs = 0, bool independent = false,
+        TurretShot? turret = null)
     {
         var origin = actor?.Pos ?? s.Position.Clone();
         var target = FindMonster(s.WorldScene, req.TargetId);
@@ -518,7 +550,7 @@ public sealed partial class CombatService
             Id = id, OwnerId = s.Role!.Id, WorldScene = s.WorldScene, SceneGeneration = s.SceneGeneration,
             Attachment = s.Attachment, Request = req, Row = row, Origin = origin,
             StartMs = Now + leadMs, ChantMs = ChantMs(s, row), ActionMs = SkillMs(s, row), Operator = actor,
-            Independent = independent,
+            Independent = independent, Turret = turret,
         };
         if (!independent) s.SkillCast = action;
         // A chanted skill that may not be cast on the move (_bMovement 0 = enum_SkillLockMoveType.Lock) holds the caster

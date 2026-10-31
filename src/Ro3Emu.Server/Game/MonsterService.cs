@@ -549,7 +549,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
 
     private void Engage(MonsterUnit m, GameSession target, bool called)
     {
-        if (m.Dead || m.StaysOutOfBattle || m.WorldScene != target.WorldScene || TargetVisible?.Invoke(m, target) == false
+        if (m.Dead || m.StaysOutOfBattle || m.ScriptDriven || m.WorldScene != target.WorldScene || TargetVisible?.Invoke(m, target) == false
             || Spares?.Invoke(m, target) == true || m.Template.SpeedCm == 0 && m.Template.AttackRange <= 0) return;
         bool entering = m.Target == null;
         if (entering) m.NextSwingMs = NowMs + 300;

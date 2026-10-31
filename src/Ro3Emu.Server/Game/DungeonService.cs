@@ -102,6 +102,9 @@ public sealed partial class DungeonService
         combat.IncomingDamageAdjusters.Add((m, s, _, damage) => Task.FromResult(BondDamage(s, m, damage, incoming: true)));
         scene.Loaded.Add(LoadedAsync);
         scene.Leaving.Add(AbandonAsync);
+        combat.TurretSkill = CannonSkill;
+        combat.TurretAim = AimCannon;
+        combat.TurretFired = CannonFired;
         combat.Killed.Add(KilledAsync);
         combat.BeforeKilled.Insert(0, FreezeTerminalKillAsync);
         combat.PlayerDied.Add(PlayerDiedAsync);
@@ -127,8 +130,25 @@ public sealed partial class DungeonService
         public HashSet<long> Killed { get; } = new();
         /// <summary>The completing events a step with "all" has seen so far.</summary>
         public HashSet<(ReconstructedDungeons.TriggerKind Kind, long Id)> StepSeen { get; } = [];
-        /// <summary>A scripted step's strikes taken so far, by monster uid.</summary>
+        /// <summary>A scripted step's strikes, or a turret's shots, taken so far toward each monster's defeat, by monster uid
+        /// (DungeonService.Cannon).</summary>
         public Dictionary<long, int> Struck { get; } = [];
+        /// <summary>The participants sitting on a scripted step's cannons (DungeonService.Cannon).</summary>
+        internal Dictionary<GameSession, Gunner> Gunners { get; } = [];
+        /// <summary>A scripted fight's monsters still to come (a later arrival): the wave cannot end before they came.</summary>
+        public int Arriving { get; set; }
+        /// <summary>The units riding a scripted fight's monsters or a cue's units, by the carrier's uid (DungeonService.Cues).</summary>
+        internal Dictionary<long, List<SceneActorUnit>> Riders { get; } = [];
+        /// <summary>The units the steps' cues showed (DungeonService.Cues).</summary>
+        internal List<SceneActorUnit> CueUnits { get; } = [];
+        /// <summary>The scene units fighting beside the participants (DungeonService.Allies).</summary>
+        internal List<SceneActorUnit> Allies { get; } = [];
+        /// <summary>Until when (server ms) each ally is busy walking or swinging, by its uid.</summary>
+        internal Dictionary<long, long> AllyBusyUntil { get; } = [];
+        /// <summary>When (server ms) each ally may use its special skill again, by its uid.</summary>
+        internal Dictionary<long, long> AllySpecialAt { get; } = [];
+        /// <summary>The effects that show a scripted fight's monster's end, by its uid (DungeonService.Cues).</summary>
+        internal Dictionary<long, IReadOnlyList<int>> Sinks { get; } = [];
         /// <summary>A step's own timers' generation: each step (and each new hide-and-seek game) starts a new one, so a
         /// stale timer does nothing.</summary>
         public int StepGeneration { get; set; }
@@ -620,39 +640,70 @@ public sealed partial class DungeonService
         foreach (var spawn in a.Plan.Waves[a.Wave].Spawns)
         {
             if (a.Settled || a.Room.Closed) { a.Spawning = false; return; }
-            MonsterTemplate? waveTemplate = null;
-            if (a.Plan.SceneEntry == EggThiefDungeon && _monsters.Template(spawn.NpcId) is { } template)
+            if (spawn.Script is { AtMs: > 0 } later)
             {
-                // (inferred) The missing original encounter script sent these three portal waves toward the player. The
-                // reconstructed first-wave Pupa is immobile and all three authored portals lie outside its normal
-                // 20 m home leash, so ordinary field AI leaves two actors off-camera forever. Use the 550 cm/s pace
-                // already carried by this encounter's Boa/Willow waves and a room-sized leash for this scene only.
-                waveTemplate = template with
-                {
-                    SpeedCm = Math.Max(template.SpeedCm, EggThiefWaveSpeedCm),
-                    LeashDistance = Math.Max(template.LeashDistance, EggThiefWaveLeash),
-                };
+                // A scripted step's later arrival (the boarders after the ship came alongside): the wave waits for it.
+                a.Arriving++;
+                StepLater(a, a.StepGeneration, later.AtMs, () => ArriveAsync(a, spawn), whileFighting: true);
+                continue;
             }
-            var monster = await _instances.SpawnAsync(a.Room, spawn.NpcId, spawn.Point, customTemplate: waveTemplate);
-            if (a.Settled || a.Room.Closed)
-            {
-                a.Spawning = false;
-                await _instances.ClearMonstersAsync(a.Room);
-                return;
-            }
-            if (monster == null) { a.Spawning = false; await SettleAsync(a, false); return; }
-            a.Spawned++;
-            // Multi-bosses retain their AI instead of being ordered to attack on scene load. In Culvert the
-            // born point 15 is 15m from monster point 19; NPC 4300000/1 uses non-roaming AI 25000001 and
-            // RaidFive_Boss00[easy], whose server script is absent. Waiting for a player hit/taunt is an
-            // (inferred) fallback, not proof that its 100m view/leash means automatic entry aggro.
-            // No five-player preparation duration/start-button contract was recovered; GVE/Whale's
-            // DungeonStart preparation UI belongs to other gameplay types. Story-wave engagement is unchanged.
-            if (a.Plan.Multi == null && Present(a).FirstOrDefault(s => !s.Dead && !s.SceneLoading) is { } target)
-                _monsters.Engage(monster, target);
+            if (!await PlaceFightAsync(a, spawn)) return;
         }
         a.Spawning = false;
         await AdvanceAsync(a);
+    }
+
+    /// <summary>A scripted step's later arrival (DungeonCatalog.Spawn.Script.AtMs) joins the wave like the others.</summary>
+    private async Task ArriveAsync(Attempt a, DungeonCatalog.Spawn spawn)
+    {
+        // Still arriving until counted: a wave whose other monsters fall meanwhile does not end without it.
+        try { if (a.Settled || a.Room.Closed || !await PlaceFightAsync(a, spawn)) return; }
+        finally { a.Arriving--; }
+        await AdvanceAsync(a); // it may have fallen before it was counted as arrived
+    }
+
+    /// <summary>
+    /// (inferred) The missing original encounter script sent the Egg Thief's three portal waves toward the player. The
+    /// reconstructed first-wave Pupa is immobile and all three authored portals lie outside its normal 20 m home leash,
+    /// so ordinary field AI leaves two actors off-camera forever. Use the 550 cm/s pace already carried by this
+    /// encounter's Boa/Willow waves and a room-sized leash for this scene only.
+    /// </summary>
+    private MonsterTemplate? WaveTemplate(Attempt a, DungeonCatalog.Spawn spawn) =>
+        a.Plan.SceneEntry == EggThiefDungeon && _monsters.Template(spawn.NpcId) is { } template
+            ? template with
+            {
+                SpeedCm = Math.Max(template.SpeedCm, EggThiefWaveSpeedCm),
+                LeashDistance = Math.Max(template.LeashDistance, EggThiefWaveLeash),
+            }
+            : null;
+
+    /// <summary>
+    /// One monster of the wave: spawned and counted, seen from afar on a cannon step, its scripted extras
+    /// (DungeonService.Cues), then engaged. False when the run ended meanwhile or the spawn failed (a lost run).
+    /// </summary>
+    private async Task<bool> PlaceFightAsync(Attempt a, DungeonCatalog.Spawn spawn)
+    {
+        var monster = await _instances.SpawnAsync(a.Room, spawn.NpcId, spawn.Point, customTemplate: WaveTemplate(a, spawn));
+        if (a.Settled || a.Room.Closed)
+        {
+            a.Spawning = false;
+            await _instances.ClearMonstersAsync(a.Room);
+            return false;
+        }
+        if (monster == null) { a.Spawning = false; await SettleAsync(a, false); return false; }
+        if (spawn.Script is { Patrol: not 0 } or { Path.Count: > 0 }) monster.ScriptDriven = true; // before anything can hit it
+        a.Spawned++;
+        if (Step(a) is { Cannon: not null }) await _world.WidenSightAsync(monster, CannonTargetSight);
+        // Multi-bosses retain their AI instead of being ordered to attack on scene load. In Culvert the
+        // born point 15 is 15m from monster point 19; NPC 4300000/1 uses non-roaming AI 25000001 and
+        // RaidFive_Boss00[easy], whose server script is absent. Waiting for a player hit/taunt is an
+        // (inferred) fallback, not proof that its 100m view/leash means automatic entry aggro.
+        // No five-player preparation duration/start-button contract was recovered; GVE/Whale's
+        // DungeonStart preparation UI belongs to other gameplay types. Story-wave engagement is unchanged.
+        if (await FightArrivedAsync(a, monster, spawn) && a.Plan.Multi == null
+            && Present(a).FirstOrDefault(s => !s.Dead && !s.SceneLoading) is { } target)
+            _monsters.Engage(monster, target);
+        return true;
     }
 
     private async Task KilledAsync(GameSession s, MonsterUnit monster)
@@ -669,6 +720,7 @@ public sealed partial class DungeonService
                 stats.KillNpcData[monster.Template.NpcId] = count = new ExtraValueData();
             count.LongValue++;
         }
+        await FightEndedAsync(a, monster);
         // The tracker's "(done/total)" follows each kill of a wave that plays a known quest.
         if (!a.Settled && GoalParams(a) != null) // a precounted kill is already in Killed
             await BroadcastAsync(a, BaseInfo, Snapshot(a));
@@ -677,7 +729,8 @@ public sealed partial class DungeonService
 
     private async Task AdvanceAsync(Attempt a)
     {
-        if (a.Settled || a.Preparing || a.Spawning || a.Precounted.Count != 0 || a.Killed.Count != a.Spawned || a.Advancing) return;
+        if (a.Settled || a.Preparing || a.Spawning || a.Arriving > 0 || a.Precounted.Count != 0 || a.Killed.Count != a.Spawned
+            || a.Advancing) return;
         if (Step(a) != null && !a.StepDone) return;
         // A scripted step's hold: what it showed (a bubble being read, an enemy falling) is not cut by the next step or the
         // result. Only once per step, and not past the run's time limit.
@@ -765,6 +818,7 @@ public sealed partial class DungeonService
         if (delay > 0) a.AutoReviveAt.TryAdd(s.Role!.Id, _clock.GetUtcNow().ToUnixTimeSeconds() + delay);
         await SendReviveInfoAsync(s, a);
         if (Defeated(a)) await SettleAsync(a, false);
+        await DismountAsync(a, s, interrupt: true); // the settlement already did, if the death ended the run
     }
 
     /// <summary>
@@ -872,6 +926,7 @@ public sealed partial class DungeonService
         if (_pending.TryGetValue(s, out var p)) await CancelAsync(p, ErrorCodes.MemberLeft, s.Role?.Id ?? 0);
         if (s.DungeonAttempt is not { } a) return;
         s.DungeonAttempt = null; s.Attack = null;
+        await DismountAsync(a, s, interrupt: true);
         if (a.Dracula is { } dracula) await dracula.Owner.LeftAsync(a, s);
         await ClearBondsAsync(s, a);
         await _instances.AbandonAsync(s);
@@ -923,6 +978,7 @@ public sealed partial class DungeonService
         int steps = a.Plan.Waves.Count, step = Math.Min(a.Wave + 1, steps);
         LogSettled(_log, scene, instance, won, step, steps);
         var participants = Present(a).Where(a.Loaded.Contains).Select(s => (Session: s, Role: s.Role!.Id)).ToArray();
+        await DismountAllAsync(a, interrupt: false); // off the cannons before the room's actors go
         var notifications = new List<Func<Task>>();
         var auctionAwards = new List<ItemBaseInfo>();
         // A scripted scene's defeated enemies keep their bodies for their own remain time instead of vanishing with the result

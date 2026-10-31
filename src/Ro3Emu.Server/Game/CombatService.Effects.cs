@@ -396,7 +396,10 @@ public sealed partial class CombatService
                             catch (Exception ex) { _log.LogError(ex, "Monster damage callback failed for {Uid}", target.Uid); }
                         }
                     long extraShown = doubles.Where(d => d.Target == target).Sum(d => d.Amount);
-                    hit.Dsts.Add(new DamageInfo { DstID = target.Uid, Damage = amount - extraShown, HitResult = result, DstElement = target.Template.Element, IsDead = target.Hp == 0 && extraShown == 0 });
+                    // A turret's hit may show a number of its own (the airship's cannon: about 9.9 million in the official video).
+                    long shownDamage = action.Turret is { Shown: > 0 } turretShot
+                        ? turretShot.Shown - TurretShownSpread + Rolls.Proc(2 * TurretShownSpread + 1) : amount - extraShown;
+                    hit.Dsts.Add(new DamageInfo { DstID = target.Uid, Damage = shownDamage, HitResult = result, DstElement = target.Template.Element, IsDead = target.Hp == 0 && extraShown == 0 });
                 }
                 if (CanApplyMoreEffects())
                     foreach (var tuple in Tuples(row, "_kBuff2"))
@@ -472,7 +475,7 @@ public sealed partial class CombatService
                 if (CurrentCaster() && hit.Dsts.Any(d => d.HitResult != DamageHitResult.Miss)) await _buffs.RecoverEnergyOnHitAsync(s, row);
                 var sourceViewers = CurrentCaster() ? _world.Viewers(s).Append(s) : Enumerable.Empty<GameSession>();
                 var hitViewers = processed.SelectMany(t => t.Viewers).Concat(sourceViewers).Distinct().ToArray();
-                await SendHitBulletsAsync(hitViewers, row, hit, castingRole.Id);
+                await SendHitBulletsAsync(hitViewers, row, hit, castingRole.Id, action.Turret);
                 foreach (var viewer in hitViewers) await viewer.SendGameAsync(SkillHit, hit);
                 if (doubles.Count > 0)
                 {
