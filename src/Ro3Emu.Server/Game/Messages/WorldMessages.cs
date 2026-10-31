@@ -61,7 +61,7 @@ public sealed class WorldMessages(Maps.World world, CombatService combat, SceneS
         {
             var action = UseInteractActionReq.Parser.ParseFrom(body.Span);
             // A scripted scene's cannon (DungeonService.Cannon) answers its own gunner's buttons.
-            await interaction.UseActionAsync(session, action);
+            if (!await DungeonService.TryCannonActionAsync(session, action)) await interaction.UseActionAsync(session, action);
         });
         routes.Map(32708, "interaction", async (session, msgId, body) =>
         {

@@ -267,6 +267,19 @@ public sealed partial class CombatService : IGameTicker
     /// <summary>A match owner decides which skills a participant may cast (true/false), or defers (null).</summary>
     public Func<GameSession, int, bool?>? MatchSkillRule { get; set; }
     /// <summary>
+    /// A turret the participant sits on (GameplayStatusConfig type 10 UpperCannon, DungeonService.Cannon): true for the
+    /// skill of its fire button, which the participant may then cast without owning it.
+    /// </summary>
+    public Func<GameSession, int, bool>? TurretSkill { get; set; }
+    /// <summary>
+    /// Called with a turret skill's request before it is validated: the turret owner may aim it (a shot fired at nothing
+    /// in particular goes to the nearest target of its fight).
+    /// </summary>
+    public Action<GameSession, CastSkillReq>? TurretAim { get; set; }
+    /// <summary>Called once a turret skill's cast is admitted (paid, about to start), with its validated request; the
+    /// turret owner answers how the shot is shown (null: as any cast of the skill).</summary>
+    public Func<GameSession, CastSkillReq, TurretShot?>? TurretFired { get; set; }
+    /// <summary>
     /// A skill a feature owns outright (the war commander's): null for any other skill, else 0 to cast it or the refusal.
     /// Such a cast skips the job-tree check and the SkillConfig cooldowns; <see cref="OwnSkillCast"/> runs in their place
     /// once the cast is accepted, and <see cref="OwnSkillLanded"/> resolves it instead of the generic effects.

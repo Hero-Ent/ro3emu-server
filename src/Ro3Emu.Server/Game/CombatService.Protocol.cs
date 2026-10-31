@@ -209,11 +209,13 @@ public sealed partial class CombatService
     /// 31120 for each damaged target of a hit whose skill flies a bullet, sent just before the 31101 to the same viewers.
     /// One notify launches <c>split</c> bullets m_fBulletHatchInterval apart (LC_BulletEmit_Mgr.Update), so Fire Bolt
     /// Lv. 5 drops five. (inferred) one notify per target per hit, timed at the hit; fixedTime (unread by the client)
-    /// carries the bullet's configured life time.
+    /// carries the bullet's configured life time. A turret's shot (DungeonService.Cannon) flies its own template's bullet
+    /// from the turret unit.
     /// </summary>
-    private async Task SendHitBulletsAsync(IEnumerable<GameSession> viewers, JsonElement row, SkillHitInfo hit, long masterId)
+    private async Task SendHitBulletsAsync(IEnumerable<GameSession> viewers, JsonElement row, SkillHitInfo hit, long masterId,
+        TurretShot? turret = null)
     {
-        int effect = BulletEffect(GameData.Int(row, "_iScriptShow"));
+        int effect = BulletEffect(turret?.Show ?? GameData.Int(row, "_iScriptShow"));
         if (effect == 0 || hit.Dsts.Count == 0) return;
         var recipients = viewers.ToArray();
         long now = Now;
@@ -222,9 +224,10 @@ public sealed partial class CombatService
             if (dst.DamageType is DamageType.Heal or DamageType.HealMana) continue;
             var bullet = new SkillFixTimeBulletNotify
             {
-                SourceId = hit.SrcID, TargetId = dst.DstID, EffectId = effect, FixedTime = BulletLifeTime(effect),
+                SourceId = turret?.SourceId ?? hit.SrcID, TargetId = dst.DstID, EffectId = effect, FixedTime = BulletLifeTime(effect),
                 Split = Math.Max(1, hit.Split), SkillConfigId = hit.SkillId, MasterId = masterId, StartTimestampMs = now,
             };
+            if (turret != null) bullet.SourcePosition = turret.Origin.Clone();
             foreach (var viewer in recipients) await viewer.SendGameAsync(SkillBullet, bullet);
         }
     }
