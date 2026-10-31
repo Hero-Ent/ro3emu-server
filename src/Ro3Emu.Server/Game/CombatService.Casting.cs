@@ -84,6 +84,7 @@ public sealed partial class CombatService
         bool turret = TurretSkill?.Invoke(s, req.SkillId) == true;
         if (turret) TurretAim?.Invoke(s, req);
         var row = EffectiveSkillRow(s, req.SkillId);
+        if (row is { } trapRow && SceneTrap(s, req, trapRow)) return; // CombatService.SceneTraps: the passage's ant eggs
         var owned = req.OpUnitId == 0 || req.OpUnitId == s.Role?.Id ? null
             : s.SkillObjects.FirstOrDefault(u => u.Uid == req.OpUnitId && u.WorldScene == s.WorldScene && u.ExpiresMs > Now);
         int error = s.Role == null || s.Progress == null || s.Dead || s.SceneLoading ? ErrorCodes.SkillBadState

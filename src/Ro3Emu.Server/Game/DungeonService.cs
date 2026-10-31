@@ -132,6 +132,15 @@ public sealed partial class DungeonService
         public HashSet<(ReconstructedDungeons.TriggerKind Kind, long Id)> StepSeen { get; } = [];
         /// <summary>A scripted step's strikes, or a turret's shots, taken so far toward each monster's defeat, by monster uid
         /// (DungeonService.Cannon).</summary>
+        /// <summary>The current step's region cues already played (their index in the step's cues).</summary>
+        internal HashSet<int> FiredCues { get; } = [];
+        /// <summary>Participants seated on a scene actor that is a vehicle (DungeonService.Story).</summary>
+        internal Dictionary<GameSession, SceneActorUnit> Riding { get; } = [];
+        /// <summary>Participants sliding down the step's slope (DungeonService.Story).</summary>
+        internal HashSet<GameSession> Sliding { get; } = [];
+        /// <summary>The longest fall a completed step started, in ms: the next scene waits for the landing.</summary>
+        internal int FallMs { get; set; }
+        internal bool Continued { get; set; }
         public Dictionary<long, int> Struck { get; } = [];
         /// <summary>The participants sitting on a scripted step's cannons (DungeonService.Cannon).</summary>
         internal Dictionary<GameSession, Gunner> Gunners { get; } = [];
@@ -816,6 +825,9 @@ public sealed partial class DungeonService
         if (Active(s) is not { } a) return;
         int delay = AutoReviveDelay(a);
         if (delay > 0) a.AutoReviveAt.TryAdd(s.Role!.Id, _clock.GetUtcNow().ToUnixTimeSeconds() + delay);
+        await EndStoryStateAsync(a, s);
+        // A scene that starts over on a death (DungeonService.Story); its own settlement still runs below.
+        if (_catalog.Scripted(a.Plan.SceneEntry) is { RestartOnDeath: true }) ScheduleRestart(a, s);
         await SendReviveInfoAsync(s, a);
         if (Defeated(a)) await SettleAsync(a, false);
         await DismountAsync(a, s, interrupt: true); // the settlement already did, if the death ended the run
@@ -927,6 +939,7 @@ public sealed partial class DungeonService
         if (s.DungeonAttempt is not { } a) return;
         s.DungeonAttempt = null; s.Attack = null;
         await DismountAsync(a, s, interrupt: true);
+        await EndStoryStateAsync(a, s);
         if (a.Dracula is { } dracula) await dracula.Owner.LeftAsync(a, s);
         await ClearBondsAsync(s, a);
         await _instances.AbandonAsync(s);
@@ -979,6 +992,7 @@ public sealed partial class DungeonService
         LogSettled(_log, scene, instance, won, step, steps);
         var participants = Present(a).Where(a.Loaded.Contains).Select(s => (Session: s, Role: s.Role!.Id)).ToArray();
         await DismountAllAsync(a, interrupt: false); // off the cannons before the room's actors go
+        await EndStoryStateAsync(a); // nobody stays sliding or riding (DungeonService.Story)
         var notifications = new List<Func<Task>>();
         var auctionAwards = new List<ItemBaseInfo>();
         // A scripted scene's defeated enemies keep their bodies for their own remain time instead of vanishing with the result
@@ -1090,5 +1104,28 @@ public sealed partial class DungeonService
         }
         // A disconnected member's channel must never prevent another participant's committed award.
         foreach (var notify in notifications) await notify();
+        if (won && GameData.Int(a.Plan.Config, "_iGamePlayType") == StoryGamePlayType)
+        {
+            // A scene of a chain goes on into the next one (DungeonService.Story); any other returns its participants.
+            if (_catalog.Scripted(a.Plan.SceneEntry) is { Next: > 0 } chained) ScheduleNextScene(a, chained.Next);
+            else ScheduleStoryExit(a);
+        }
     }
+
+    /// <summary>DungeonConfig _iGamePlayType 6: the main and branch story scenes.</summary>
+    private const int StoryGamePlayType = 6;
+    /// <summary>(inferred) How long a won story scene keeps its participants after the result, for its win banner.</summary>
+    private const int StoryExitDelayMs = 5000;
+
+    /// <summary>
+    /// A won story scene returns its participants where they came from, as their own 30402 exit would: its DungeonConfig
+    /// has no _iExitAction, the client shows the result banner (LC_DunGeon_Base: SettleAccountsWodget) but no exit
+    /// countdown, and nothing is left to do in the room (inferred; players had to relog or press exit).
+    /// </summary>
+    private void ScheduleStoryExit(Attempt a) =>
+        _loop.ScheduleLegacy(TimeSpan.FromMilliseconds(StoryExitDelayMs), async () =>
+        {
+            if (a.Room.Closed || a.Continued) return;
+            foreach (var s in Present(a).Where(m => !m.SceneLoading && !Preparing(m))) await LeaveAsync(s);
+        });
 }

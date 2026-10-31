@@ -16,6 +16,7 @@ public readonly partial record struct DungeonConfig(JsonElement Row)
     [ConfigField("_iName")] public partial long[] Name { get; }
     [ConfigField("_iPerformanceForbidden")] public partial long PerformanceForbidden { get; }
     [ConfigField("_iPlaneMapID")] public partial long PlaneMapId { get; }
+    [ConfigField("_iRecoveryRes")] public partial long RecoveryRes { get; }
     [ConfigField("_iRoleCntLimit")] public partial long RoleCntLimit { get; }
     [ConfigField("_kAdventureGroupWhitelist")] public partial long[] AdventureGroupWhitelist { get; }
     [ConfigField("_kGuildWhitelist")] public partial long[] GuildWhitelist { get; }

@@ -273,11 +273,32 @@ public sealed partial class DungeonTests
     {
         var data = Service<GameData>();
         var units = new Dictionary<ulong, EntityBase>();
-        foreach (var e in bot.Inbox.Snapshot().Where(e => e.IsGame(GameAoiSink.SyncAoiView)))
+        foreach (var e in bot.Inbox.Snapshot())
         {
-            var view = AoIViewChangeData.Parser.ParseFrom(e.Body);
-            foreach (var gone in view.LeaveAoi) units.Remove(gone);
-            foreach (var b in view.Bases) units[b.Uuid] = b;
+            if (e.IsGame(GameAoiSink.SyncAoiView))
+            {
+                var view = AoIViewChangeData.Parser.ParseFrom(e.Body);
+                foreach (var gone in view.LeaveAoi) units.Remove(gone);
+                foreach (var b in view.Bases) units[b.Uuid] = b;
+            }
+            else if (e.IsGame(GameAoiSink.MovementChange) && MovementChangeNtf.Parser.ParseFrom(e.Body) is { } move
+                && units.TryGetValue((ulong)move.Uid, out var moved) && move.MovementInfo is { Pos: { } pos } info)
+            {
+                // A walking actor (a scene actor's crawl): the client plays the walk from its facing and speed
+                // (MovementWalk) for the time gone since its server time, up to its duration.
+                var to = pos.Clone();
+                if (info.MoveType == MovementType.MoveTypeWalk && info.MovementWalk is { } walk && info.MoveDuration > 0)
+                {
+                    float t = Math.Clamp((MonsterService.NowMs - info.ServerTime) / (float)info.MoveDuration, 0f, 1f);
+                    float rad = walk.Dir * MathF.PI / 180f, distance = walk.Speed * info.MoveDuration / 1000f * t;
+                    to.X += MathF.Sin(rad) * distance;
+                    to.Z += MathF.Cos(rad) * distance;
+                    to.Y += (walk.EndHeight - to.Y) * t;
+                }
+                var unit = moved.Clone();
+                unit.MovementInfo = new MovementInfo { Pos = to };
+                units[unit.Uuid] = unit;
+            }
         }
         var inRange = units.Values.Select(u => (Unit: u, Npc: data.Row("NPCConfig", (long)u.EntityTemplateID)))
             .Where(u => u.Unit.EntityType is 1 or 2 && u.Npc is { } n && n.TryGetProperty("_iInteractID", out var ids)

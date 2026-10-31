@@ -211,9 +211,11 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
   not sent.
 - Five story dungeons that were monster waves (or bare point respawns) now play their scripted stages around the
   fights, each with its evidence and guessed parts in the file:
-  - Maya's nest (1000401): Maya, then 'Find the Professor' (within 10 m of the egg point), 'Free the Ant Egg' (5300056,
-    interaction 5300021, message 5300022), 'Help the Professor Up' (5300026, message 5300023) and the chest (5300052,
-    message 5300024), each interaction opened by buff group 53014.
+  - Maya's nest (1000401): Maya, then 'Find the Professor' (dialogue region 28 or within 10 m of the egg point), 'Free
+    the Ant Egg' (5300056, interaction 5300021, message 5300022), 'Help the Professor Up' (5300026, message 5300023) and
+    the chest (5300052, message 5300024), each interaction opened by buff group 53014. Bobo's lines (ChatConfig
+    5300501-5300511, 5300602-5300607) play at the start, at 59 % and 24 % of Maya's HP (where Bobo's Bubble Shield
+    5366101 protects the player from the sandstorm, inferred) and in the dialogue regions 30, 29 and 28.
   - The airship (1000501), rebuilt from the official video (Ragnarok 3 Genesis, 33:05-37:05; the scene loads at about
     33:19). Stage 1 runs on the scene's clock (`after`): 13 s of calm with the crew (5300031-5300035, their gated bubbles
     open) and the Captain's 5300540/5300541; then a shell bursts on the deck at mark 59 (blast 5300037, shake 5353201,
@@ -293,6 +295,28 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
   player fights him, so the solo tuning counts them as always in reach.
 
 
+- The Ant Queen's Nest is one chain (`DungeonService.Story`, 2026-10 rebuild from the official run "Ragnarok 3
+  Genesis First 1 Hour Gameplay", 50:23-54:08): a won scene with `next` goes straight into the next one (1000201 →
+  1000301 → 1000401; DungeonConfig 1000301 `_iSameDupLoadingType` 2 from 1000201 is the client's own loading for it).
+  1000201: Bobo flies along patrol 26 into the vortex and is sucked in (5361001 BoboSuck, cue `remove`); the jump
+  (5362001, 2067 ms) plays out before the teleport (`after.delay`); the passage is a slide (step `slide`): the
+  player's custom data Player_SlideViewMode/CameraId/Speed/State (5400004/5400005/5400003/5400001) put
+  LC_Movement_Controller_Slide in the Locked view (camera 14, A/D to steer) at the official run's speed (inferred:
+  32 m/s downhill, 10 m/s to the side; the client's Locked preset of 10 and 6 m/s is about four times too slow); state 0
+  ends it at region 22 or the drop point 27, the player's unit plays 5363201 MainStory_Falldown (`after.show`) and falls
+  to point 27 (`after.fall`: a 31081 MoveTransFallDown, the client's "Fall" position animation of
+  PublicParamConfig.FallDownData); the next scene loads once it has landed. The ant eggs are client units
+  (MainStoryAntEggExploseParam) that send
+  5363101 MainStory_AntEggBomb on the player as an extra skill: CombatService.SceneTraps takes a third of the maximum
+  HP per egg (inferred), and the scene's `restartOnDeath` starts it over after a death. 1000301 is the reverse dungeon
+  (PublicParamConfig NoviceDungeonReverseDungeonID): every unit moves on the surfaces (LC_UnitBase m_bReverseMode), so
+  a server walk, a straight line, cannot climb its walls. The crawling ant is NPC 5300029 (NoviceDungeonBornPatrolNPCID):
+  born after Bobo's "Something's crawling toward us!", the client crawls it along patrol 25 by itself
+  (LC_State_Unit_Born: StartLocalPatrol, SetMoveOnSurface, 10 s); the Deniro then stands at its point 29, where the
+  guides 33 and 35 lead (inferred timing).
+  "Try to Ride" is 5300008 (gate 53651) and "Ride the Deniro" 5300005 (gate 53654, GameplayStatusConfig 3) seats the
+  player as the Deniro's driver (32702 Vehicle, 32704 3C 9) until the end region 31; lines play in regions 38, 37 and
+  31 (cue `region`). Not reproduced: the original's camera pans and Maya's grab with its Struggle button.
 - The last three main-story blockers of the story walk: the ant nest vortex and egg passage (1000201, task 10104290),
   Bobo and the Deniro (1000301, task 10104300) and Louie's game in the Culvert (3120402, task 10106270). The original
   scene script is not in the client; each scene is rebuilt as steps, one per stage, every decision with its evidence

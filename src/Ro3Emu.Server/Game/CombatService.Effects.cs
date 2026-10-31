@@ -304,6 +304,37 @@ public sealed partial class CombatService
                     alreadySlowed, castingRole.Id, CanApplyMoreEffects);
         }
         if (!CanApplyMoreEffects()) return; // player publication can yield before any monster hit is committed
+        int bulletEffect = BulletEffect(show);
+        bool highLevel = GameData.Int(row, "_iSkillEffectLevel") > 0;
+        int skillConfigId = (int)GameData.Int(row, "_iID");
+        // A Falcon-track "bullet" is the owner's falcon flying to the target and back (CombatService.Falcon).
+        if (bulletEffect > 0 && field == null && FalconFlightMs(bulletEffect, 0) != null)
+        {
+            if (!await FalconFlightAsync(s, action, skillConfigId, highLevel, bulletEffect, targets, playerTargets, CanApplyMoreEffects)) return;
+        }
+        else if (bulletEffect > 0 && field == null && WolfRunMs(bulletEffect, 0) != null)
+        {
+            // A Wolf-track "bullet" (m_eBulletType 8) is the owner's Wolf pendant charging (verified in the client:
+            // LC_PerformEffect_Mgr.PlayPendantShow -> LC_Pendant_Manager.PendantPerform -> LC_Pendant_Wolf Perform). It is a
+            // SkillEffectDisplayNotify of type 5 (enum_DisplayEffectType.PendantShow); as a SkillFixTimeBulletNotify it
+            // drew nothing (Wolf has no bullet track), so unmounted Warg Strike showed no wolf running to the target.
+            int run = 0;
+            foreach (var target in targets)
+            {
+                await SendSkillEffectAsync(s, new SkillEffectDisplayNotify
+                {
+                    SourceId = s.Role.Id, MasterId = s.Role.Id, TargetId = target.Uid, TargetPos = target.Pos.Clone(),
+                    EffectId = bulletEffect, EffectType = 5, SkillId = skillConfigId,
+                }, highLevel);
+                run = Math.Max(run, WolfRunMs(bulletEffect, Distance(s.Position, target.Pos)) ?? 0);
+            }
+            // The damage lands when the wolf reaches the target (inferred from m_kBulletWolf's speed/time).
+            if (run > 50 && targets.Count > 0)
+            {
+                await Task.Delay(Math.Min(run, 1000));
+                if (!CanApplyMoreEffects()) return;
+            }
+        }
         // Allies a caller chose (a talent heal's proc row has no selector template) make the cast friendly.
         bool friendly = chosenAllies != null || Relation(row, true, true) || Relation(row, true);
         var allies = new List<GameSession>();

@@ -16,8 +16,9 @@ public sealed partial class ReconstructedDungeons
 {
     public enum TriggerKind { Interaction, Message, Region, Point, Plot, After }
 
-    /// <summary>A client event that completes (or, under "ignore", deliberately does not complete) a step.</summary>
-    public sealed record StepTrigger(TriggerKind Kind, long Id, float Radius = 0);
+    /// <summary>A client event that completes (or, under "ignore", deliberately does not complete) a step. An ignored
+    /// event may answer with a ChatConfig line (<paramref name="Chat"/>, sent as 1022): Louis's "Sorry, wrong guess!".</summary>
+    public sealed record StepTrigger(TriggerKind Kind, long Id, float Radius = 0, int Chat = 0);
 
     /// <summary>A scene actor: an NPCConfig id at a scene-editor point, with the buffs (BuffConfig ids) it carries.
     /// <paramref name="Dx"/>/<paramref name="Dz"/> (metres) place it beside the point when the scene has no point of its own
@@ -27,6 +28,15 @@ public sealed partial class ReconstructedDungeons
     /// <summary>
     /// One scripted step. <paramref name="Story"/> is a PlotInterpretation id the client plays at the step's start
     /// (0: none); <paramref name="TeleportAfter"/> a scene-editor point the participants are moved to when it
+    /// completes (0: none). <paramref name="Goal"/> is the tracker's "(done/total)" while the step runs.
+    /// <paramref name="Fight"/> are monsters spawned at the step's start: the step also waits until every one is
+    /// defeated (a story dungeon that mixes fights with scripted parts). <paramref name="All"/>: every completing event
+    /// is needed, not any one ("Have a Chitchat with them"). <paramref name="Strikes"/>: an interaction of an actor that
+    /// casts a skill at the nearest monster of the step's fight; with Shots above 0, that many strikes defeat a monster
+    /// whatever the skill's damage. <paramref name="Seek"/>: the step is a hide-and-seek game
+    /// whose hiding places are its Point triggers; walking there does not complete it, winning the game does.
+    /// <summary>
+    /// A scripted step of a reconstructed story scene. <paramref name="Story"/> is a StoryConfig id played when the step
     /// completes (0: none). <paramref name="Goal"/> is the tracker's "(done/total)" while the step runs.
     /// <paramref name="Fight"/> are monsters spawned at the step's start: the step also waits until every one is
     /// defeated (a story dungeon that mixes fights with scripted parts). <paramref name="All"/>: every completing event
@@ -61,7 +71,19 @@ public sealed partial class ReconstructedDungeons
         public Cannon? Cannon { get; init; }
         public IReadOnlyList<Cue> Cues { get; init; } = [];
         public IReadOnlyList<SceneActor>? Allies { get; init; }
+        public Slide? Slide { get; init; }
+        public int ShowAfter { get; init; }
+        public long FallAfter { get; init; }
+        public int AfterMs { get; init; }
     }
+
+    /// <summary>
+    /// The player's slide (LC_Movement_Controller_Slide, driven by the player's custom data Player_SlideState 5400001 ..
+    /// Player_SlideCameraId 5400005, Lua_CustomDataDefine): <paramref name="ViewMode"/> is enum_SlideViewMode (1 Free,
+    /// 2 Locked, 3 ConfigLocked), <paramref name="CameraId"/> the camera, <paramref name="SideCm"/> and
+    /// <paramref name="DownCm"/> the steering and downhill speeds in cm/s (the client divides by 100).
+    /// </summary>
+    public sealed record Slide(int ViewMode, int CameraId, int SideCm, int DownCm);
 
     /// <summary>
     /// A step's reactions (inferred, Louie's 3120703 shell game: his lines and the right/wrong Bell effects are client rows
@@ -107,10 +129,14 @@ public sealed partial class ReconstructedDungeons
     /// the fight monster <paramref name="Of"/> while that one lives, and it can blow up, playing <paramref name="Blast"/>
     /// and leaving, when a fighting monster or a participant comes within <paramref name="Fuse"/> metres of it.
     /// </summary>
+    /// A cue with <paramref name="Region"/> waits for a participant to walk into that scene-editor region, then
+    /// <paramref name="AtMs"/> more, once per step. A cue can also take a shown actor away (<paramref name="Remove"/>, its NPC
+    /// id), give every participant a buff (<paramref name="Buff"/>, a BuffConfig row, for <paramref name="BuffMs"/>) or make
+    /// every participant's own unit play a skill's show (<paramref name="PlayerCast"/>).
     public sealed record Cue(int AtMs, int EveryMs, int Chat, int Speaker, int Effect, int EffectType, int Npc, long Point,
         long Patrol, int LifeMs, bool Vanish, float Sight, int Bubble = 0, int Dismiss = 0, IReadOnlyList<MapPoint>? Path = null,
         IReadOnlyList<Rider>? Riders = null, int HpBelow = 0, int Of = 0, int Walk = 0, int Cast = 0, float Burn = 0,
-        float Fuse = 0, int Blast = 0);
+        float Fuse = 0, int Blast = 0, long Region = 0, int Remove = 0, int Buff = 0, int BuffMs = 0, int PlayerCast = 0);
 
     /// <summary>
     /// A turret the player boards (the airship's cannons): <paramref name="Interaction"/> is the actor's NPCInteractConfig
@@ -148,9 +174,11 @@ public sealed partial class ReconstructedDungeons
     /// <summary>
     /// A scene. <paramref name="Unplayed"/> are DungeonQuestConfig quests of the scene that no step shows: the branch
     /// that shows them cannot be reached in the reconstruction (each has its reason in the json, "unplayed").
+    /// <paramref name="Next"/>: the scene a won run goes on to at once, instead of returning its participants (0: none).
+    /// <paramref name="RestartOnDeath"/>: a participant's death starts the scene over from its beginning.
     /// </summary>
     public sealed record ScriptedScene(long Scene, string Name, string Confidence, IReadOnlyList<ScriptedStep> Steps,
-        IReadOnlyList<int> Unplayed);
+        IReadOnlyList<int> Unplayed, long Next = 0, bool RestartOnDeath = false);
 
     private readonly Dictionary<long, ScriptedScene> _scripted = new();
 
@@ -172,7 +200,9 @@ public sealed partial class ReconstructedDungeons
             var unplayed = entry.Value.TryGetProperty("unplayed", out var u)
                 ? u.EnumerateArray().Select(q => q.GetProperty("quest").GetInt32()).ToArray() : [];
             _scripted[scene] = new ScriptedScene(scene, entry.Value.GetProperty("name").GetString() ?? "",
-                entry.Value.GetProperty("confidence").GetString() ?? "", steps, unplayed);
+                entry.Value.GetProperty("confidence").GetString() ?? "", steps, unplayed,
+                entry.Value.TryGetProperty("next", out var next) ? next.GetInt64() : 0,
+                entry.Value.TryGetProperty("restartOnDeath", out var restart) && restart.GetBoolean());
         }
     }
 
@@ -218,6 +248,13 @@ public sealed partial class ReconstructedDungeons
                 : null,
             Cues = s.TryGetProperty("cues", out var cues) ? [.. cues.EnumerateArray().Select(CueOf)] : [],
             Allies = s.TryGetProperty("allies", out var allies) ? [.. allies.EnumerateArray().Select(Actor)] : null,
+            Slide = s.TryGetProperty("slide", out var slide)
+                ? new Slide(slide.GetProperty("viewMode").GetInt32(), slide.GetProperty("cameraId").GetInt32(),
+                    slide.GetProperty("side").GetInt32(), slide.GetProperty("down").GetInt32())
+                : null,
+            ShowAfter = s.TryGetProperty("after", out var afterStep) && afterStep.TryGetProperty("show", out var afterShow) ? afterShow.GetInt32() : 0,
+            FallAfter = s.TryGetProperty("after", out var afterFall) && afterFall.TryGetProperty("fall", out var fall) ? fall.GetInt64() : 0,
+            AfterMs = s.TryGetProperty("after", out var afterDelay) && afterDelay.TryGetProperty("delay", out var delay) ? delay.GetInt32() : 0,
         };
     }
 
@@ -260,7 +297,8 @@ public sealed partial class ReconstructedDungeons
         PathOf(c), c.TryGetProperty("riders", out var riders) ? [.. riders.EnumerateArray().Select(RiderOf)] : null,
         OptionalInt(c, "hpBelow"), OptionalInt(c, "of"), OptionalInt(c, "walk"), OptionalInt(c, "cast"),
         c.TryGetProperty("burn", out var burn) ? burn.GetSingle() : 0, c.TryGetProperty("fuse", out var fuse) ? fuse.GetSingle() : 0,
-        OptionalInt(c, "blast"));
+        OptionalInt(c, "blast"), c.TryGetProperty("region", out var region) ? region.GetInt64() : 0, OptionalInt(c, "remove"),
+        OptionalInt(c, "buff"), OptionalInt(c, "buffMs"), OptionalInt(c, "playerCast"));
 
     private static int OptionalInt(JsonElement e, string field) => e.TryGetProperty(field, out var v) ? v.GetInt32() : 0;
 
@@ -274,7 +312,7 @@ public sealed partial class ReconstructedDungeons
             if (kinds.Length != 1) throw new InvalidOperationException($"A scripted trigger names {kinds.Length} kinds: {t}");
             var kind = kinds[0];
             triggers.Add(new StepTrigger(kind, t.GetProperty(kind.ToString().ToLowerInvariant()).GetInt64(),
-                t.TryGetProperty("radius", out var r) ? r.GetSingle() : 0));
+                t.TryGetProperty("radius", out var r) ? r.GetSingle() : 0, t.TryGetProperty("chat", out var chat) ? chat.GetInt32() : 0));
         }
         return triggers;
     }

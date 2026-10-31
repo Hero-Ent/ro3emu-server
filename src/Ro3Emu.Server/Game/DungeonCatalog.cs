@@ -378,7 +378,7 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
                     ReconstructedDungeons.TriggerKind.After => t.Id > 0,
                     _ => false,
                 };
-                if (!known) return [];
+                if (!known || (t.Chat != 0 && data.Row("ChatConfig", t.Chat) == null)) return [];
             }
             if (step.Seek is { } seek && (step.Actors.Count == 0 || seek.Rounds <= 0 || seek.SearchedRadius < 0
                     || step.Complete.Count == 0 || step.Complete.Any(t => t.Kind != ReconstructedDungeons.TriggerKind.Point)
@@ -392,6 +392,9 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
                 if (step.Fight.Count == 0 || shots < 0 || data.Row("SkillConfig", skill) == null
                     || !step.Actors.Any(a => Interactions(a.NpcId).Contains(interaction))) return [];
             if (step.Cannon is { } cannon && !CannonResolves(step, cannon)) return [];
+            if (step.Slide is { } slide && (slide.ViewMode is < 1 or > 3 || slide.CameraId < 0 || slide.SideCm < 0 || slide.DownCm <= 0)) return [];
+            if (step.ShowAfter != 0 && SkillConfig.Get(data, step.ShowAfter) == null) return [];
+            if ((step.FallAfter != 0 && !map.Points.ContainsKey(step.FallAfter)) || step.AfterMs < 0) return [];
             if (!(step.Cues ?? []).All(cue => CueResolves(step, cue, map))) return [];
             // A later arrival waits on the step's clock, which a hide-and-seek game restarts.
             if (step.Seek != null && step.Fight.Any(f => f.AtMs > 0)) return [];
@@ -405,6 +408,7 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
             }
             waves.Add(new Wave(waves.Count + 1, fight, step.Quest, step));
         }
+        if (scene.Next != 0 && (scene.Next == scene.Scene || data.Row("DungeonConfig", scene.Next) == null)) return [];
         // An unplayed quest is one of the scene's own quests that no step shows.
         if (scene.Unplayed.Any(q => scene.Steps.Any(s => s.Quest == q) || !data.Table("DungeonQuestConfig").Values.Any(r =>
                 GameData.Int(r, "_iDungeonID") == scene.Scene && GameData.Int(r, "_iQuestID") == q))) return [];
@@ -549,6 +553,14 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
     {
         if (cue.AtMs < 0 || cue.EveryMs < 0 || cue.LifeMs < 0 || cue.Sight < 0 || cue.HpBelow is < 0 or > 100
             || (cue.HpBelow > 0 && !step.Fight.Any(f => f.NpcId == cue.Of))) return false;
+        // A cue waiting for a region plays once: it cannot also repeat or wait for a share of HP.
+        if (cue.Region != 0 && (!map.Regions.ContainsKey(cue.Region) || cue.EveryMs > 0 || cue.HpBelow > 0)) return false;
+        if (cue.Remove != 0)
+            return cue.Chat == 0 && cue.Effect == 0 && cue.Npc == 0 && cue.Cast == 0 && step.Actors.Any(a => a.NpcId == cue.Remove);
+        if (cue.Buff != 0)
+            return cue.Chat == 0 && cue.Effect == 0 && cue.Npc == 0 && cue.Cast == 0 && cue.BuffMs > 0
+                && BuffConfig.Get(data, cue.Buff) is { BuffId: > 0 } && (cue.PlayerCast == 0 || SkillConfig.Get(data, cue.PlayerCast) != null);
+        if (cue.PlayerCast != 0) return cue.Chat == 0 && cue.Effect == 0 && cue.Npc == 0 && cue.Cast == 0 && SkillConfig.Get(data, cue.PlayerCast) != null;
         if (cue.Bubble != 0)
             return cue.Chat == 0 && cue.Effect == 0 && cue.Npc == 0 && cue.Dismiss == 0
                 && step.Actors.Any(a => a.NpcId == cue.Speaker && Interactions(a.NpcId).Contains(cue.Bubble));
@@ -571,6 +583,9 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
         return cue.Npc != 0 && SceneUnit(cue.Npc) && Placement(map, cue.Point, cue.Patrol, cue.Path) != null
             && (cue.Riders ?? []).All(r => SceneUnit(r.NpcId));
     }
+
+    /// <summary>The scripted reconstruction of a scene (ReconstructedDungeons.Scripted), when there is one.</summary>
+    public ReconstructedDungeons.ScriptedScene? Scripted(long scene) => reconstructed?.Scripted(scene);
 
     /// <summary>A scene-editor region (m_kRegins) of the scene's map.</summary>
     public MapRegion? SceneRegion(long scene, long region) =>

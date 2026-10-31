@@ -93,7 +93,9 @@ public sealed class CardPackSyncTests : IAsyncLifetime
         var saved = items.Load(role).Single(i => i.Entry == Fragment);
         Assert.Equal(1, saved.Pack);
         Assert.Equal(1, full.PackInfo[1].All.Items.Values.Count(i => i.ItemEntry == Fragment));
-        Assert.Equal(saved.Sort, full.PackInfo[1].All.SortedIndex[saved.Guid]);
+        // sortedIndex is the rank in the pack (CharacterService.FullPack): 1..n without gaps.
+        Assert.Equal(Enumerable.Range(1, full.PackInfo[1].All.SortedIndex.Count).Select(i => (long)i),
+            full.PackInfo[1].All.SortedIndex.Values.Order());
         Assert.Equal(full.PackInfo[1].All.SortedIndex.Count, full.PackInfo[1].All.SortedIndex.Values.Distinct().Count());
     }
 

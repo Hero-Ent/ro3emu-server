@@ -13,30 +13,57 @@
     "1000201": {
       "name": "Ant Queen's Nest: the vortex and the egg passage",
       "confidence": "medium",
+      "next": 1000301,
+      "restartOnDeath": true,
       "evidence": [
         "DungeonQuestConfig 5300008-5300010: 1 Explore ahead (Head deeper into Maya's lair), 2 Bobo was sucked into the vortex (Jump into the vortex), 3 The Passage Beneath the Vortex (Avoid the ant eggs and reach the end of the passage).",
-        "Editor sc_plot_yhcx_001_dg01: guide point 24 runs from the born point to (98.8, 82.3) at the corridor, guide point 38 from there to (99.2, 99.8) beside region 20; region 20 is a 5 m circle (regionType 2) at (100.5, 102.3), region 22 a 30 x 5 m rectangle (regionType 2, triggerType 1) at the bottom of the passage (z 624.9), region 25 the 40 x 10 m corridor in front of the vortex.",
-        "NPC 5300030 is the empty model 70010 with interaction 5300030: AutoInteractWhenInRange, interaction skill 5362001 'Jump into the Cave'.",
-        "Nav sc_plot_yhcx_001: the passage is one continuous walkable ramp from z 238 (y 253) to z 622 (y 31); point 21 (100.0, 235.9, 267.5) lies on it near its top; point 27 'final drop position' is below it, off the nav.",
-        "Points 29-33 are client-only Ant Eggs (monsterType 1, clientMonsterConfigKey MainStoryAntEggExploseParam, npc 5300036, not created on scene init)."
+        "Editor sc_plot_yhcx_001_dg01: guide point 24 runs from the born point to (98.8, 82.3) at the corridor, guide point 38 from there to (99.2, 99.8) beside region 20; region 20 is a 5 m circle (regionType 2) at (100.5, 102.3), region 22 a 30 x 5 m rectangle (regionType 2, triggerType 1) at the bottom of the passage (z 624.9), region 25 the 40 x 10 m corridor in front of the vortex; patrol 26 runs from Bobo's point 26 into the vortex.",
+        "NPC 5300030 is the empty model 70010 with interaction 5300030: AutoInteractWhenInRange, interaction skill 5362001 'Jump into the Cave' (MainStory_JumpOff). 5361001 MainStory_BoboSuck (1767 ms) is Bobo being sucked in; 5363201 MainStory_Falldown (1500 ms) the fall at the passage's end.",
+        "Nav sc_plot_yhcx_001: the passage is one continuous walkable ramp from z 238 (y 253) to z 622 (y 31); point 21 (100.0, 235.9, 267.5) lies on it near its top; point 27 'final drop position' (掉落的最终位置) is below its end, off the nav.",
+        "The passage is a slide: LC_Movement_Controller_Slide runs on the player's custom data Player_SlideState/Dir/Speed/ViewMode/CameraId (Lua_CustomDataDefine 5400001-5400005). ClientConfig Movement.SlideCamera.Presets.Locked is viewMode 2, cameraId 14, speed 10, sideSpeed 6; the official run shows that locked camera behind the player, steered with A and D (ChatConfig 5300306 'Use the movement wheel or the A and D keys to steer. Be careful to avoid the ant eggs.').",
+        "Points 29-33 are client-only Ant Eggs (monsterType 1, clientMonsterConfigKey MainStoryAntEggExploseParam, npc 5300036) that LC_DunGeon_Base.InitModules creates; their hit is CombatService.SceneTraps.",
+        "ChatConfig 5300301-5300310 are this scene's lines: 5300301 Bobo 'I heard Maya's minions built an underground kingdom...', 5300307 'There's a big pit up ahead. I'll go check it out!', 5300308 'There seems to be a huge pit up ahead...', 5300309 'Ah! Why is the sand moving?! ... I'm being sucked in!!!' (type 2, over Bobo), 5300306 the steering tip, 5300303 '(Cries echo from nearby) Waaah! ... are you there?!'.",
+        "DungeonConfig 1000301 _iSameDupLoadingType 2 with _kSameDupLoadingTypeParam [1000201]: 1000301 is entered from inside 1000201."
       ],
       "guessed": [
         "Step 1 completes in region 25 (the corridor where guide 24 ends): region 25 is regionType 1, not one of the explicit server regions.",
-        "Bobo (5300027) stands at point 26 (the anchor of patrol 26, which runs into the vortex) during step 1 and is gone in step 2; the run into the vortex itself is not animated.",
-        "The jump is a teleport to point 21 at the top of the passage; the original fall/slide (and its camera) is not reproduced.",
-        "Region 20 does not end step 2: a player inside it before the auto interaction came had the step done, the vortex gone and the interaction refused (801), so the client never jumped and stayed above the abyss (#181).",
-        "The exploding ant eggs are not reproduced: their creation trigger is not in the client data.",
-        "The original continued seamlessly into 1000301 (DungeonConfig 1000301 _iSameDupLoadingType 2 from 1000201); here the player leaves and enters 1000301 from the quest tracker (action 3000)."
+        "The order and timing of the lines, Bobo's flight along patrol 26 and his BoboSuck show follow the official run (inferred timing).",
+        "The jump is a teleport to point 21 at the top of the passage, where the slide starts, once the jump (5362001 'Jump into the Cave', _iActionTime 2067 ms) has played.",
+        "The slide's speeds follow the official run, not the client's Locked preset (10 m/s down, 6 m/s side, about four times too slow there): the run takes about 11 s from point 21 to region 22, 357 m ahead, so down 32 m/s; the steering 10 m/s.",
+        "The passage ends in region 22 or within 25 m of the drop point 27, whichever the client reports first; the player then falls to point 27 (MainStory_Falldown's server part as a MoveTransFallDown) and the next scene loads once it has landed.",
+        "Three eggs end the run, which starts over from the beginning (CombatService.SceneTraps, ScriptedScene.RestartOnDeath)."
       ],
       "steps": [
         {
           "quest": 1,
           "stage": "Explore ahead: head deeper into Maya's lair",
           "actors": [
-            { "npc": 5300027, "point": 26, "why": "Bobo (NPCConfig 5300027, no interaction) at patrol 26's point beside the vortex; quest 2 says he was sucked into it" }
+            { "npc": 5300027, "point": 26, "why": "Bobo (NPCConfig 5300027, no interaction) at patrol 26's point beside the vortex" }
+          ],
+          "cues": [
+            { "at": 1000, "chat": 5300301, "why": "Bobo: Maya's minions built an underground kingdom" }
           ],
           "complete": [
             { "region": 25, "why": "guide point 24 ends in this corridor in front of the vortex" }
+          ]
+        },
+        {
+          "quest": 1,
+          "goal": [1, 1],
+          "stage": "Explore ahead: Bobo flies to the pit and is sucked in",
+          "actors": [
+            { "npc": 5300027, "point": 26, "why": "Bobo, who flies ahead" }
+          ],
+          "cues": [
+            { "at": 0, "chat": 5300307, "why": "Bobo: I'll go check it out" },
+            { "at": 0, "walk": 5300027, "patrol": 26, "why": "Bobo flies into the vortex along patrol 26" },
+            { "at": 1500, "chat": 5300308, "why": "a huge pit up ahead" },
+            { "at": 2500, "cast": 5361001, "speaker": 5300027, "why": "MainStory_BoboSuck: the sand sucks Bobo in" },
+            { "at": 2500, "chat": 5300309, "speaker": 5300027, "why": "Bobo, over his head: I'm being sucked in" },
+            { "at": 4300, "remove": 5300027, "why": "Bobo is gone into the vortex" }
+          ],
+          "complete": [
+            { "after": 4500, "why": "once Bobo is gone (inferred timing)" }
           ]
         },
         {
@@ -48,54 +75,85 @@
           "complete": [
             { "interaction": 5300030, "why": "the client sends it when the player walks into the vortex's interaction range; only its success plays the jump (skill 5362001) in the client, so region 20 (the vortex's 5 m server region, reached first) must not end the step: issue #181" }
           ],
-          "after": { "teleport": 21, "why": "the passage beneath the vortex: point 21 lies on the walkable ramp near its top" }
+          "after": { "teleport": 21, "delay": 2067, "why": "the passage beneath the vortex: point 21 lies on the walkable ramp near its top; after the jump's 2067 ms (skill 5362001)" }
         },
         {
           "quest": 3,
-          "stage": "The passage beneath the vortex: reach the end of the passage",
+          "stage": "The passage beneath the vortex: slide down, avoid the ant eggs",
+          "slide": { "viewMode": 2, "cameraId": 14, "side": 1000, "down": 3200, "why": "the Locked view and camera (ClientConfig Movement.SlideCamera.Presets.Locked) at the official run's speed" },
+          "cues": [
+            { "at": 0, "chat": 5300306, "why": "the steering tip (type 5)" },
+            { "at": 2500, "chat": 5300303, "why": "Bobo's cries echo from below" }
+          ],
           "complete": [
-            { "region": 22, "why": "the server region (regionType 2, triggerType 1) at the bottom of the ramp" }
-          ]
+            { "region": 22, "why": "the server region (regionType 2, triggerType 1) at the bottom of the passage" },
+            { "point": 27, "radius": 25, "why": "the final drop position below the passage's end" }
+          ],
+          "after": { "show": 5363201, "fall": 27, "why": "MainStory_Falldown: the player falls into the hole, down to the final drop position 27" }
         }
       ]
     },
     "1000301": {
       "name": "Ant Queen's Nest: Bobo and the Deniro",
       "confidence": "medium",
+      "next": 1000401,
       "evidence": [
-        "DungeonQuestConfig 5300011-5300015: 1 Help Bobo up, 2 Ride the Deniro, 3 Collect the fluorescent substance, 4 Feed the Deniro, 5 Ride the Deniro to the depths of the Ant Hell.",
-        "Editor sc_plot_yhcx_002_dg01 labels: point 23 'Bobo position', 29 'soldier ant (Deniro) position', 27 'fluorescent substance position'; guide points 26 'rescue Bobo', 33 'interact with the ant', 34 'collect the fluorescent substance', 35 'ride the soldier ant', 36 'riding' (down the ramp to region 31 'end region').",
-        "Bobo 5300041 has interaction 5300028 (skill 5362101 'Rescue Bobo', message 5300028, NPC condition buff 53014). Deniro 5300005 has 5300005 (skill 'Ride', vehicle status 3, message 5300005, buff 53654), 5300009 (skill 'Feed', message 5300009, buff 53653) and 5300008 (skill 'Ride', message 5300008, buff 53651). NPC 5300055 (collect-light model 100144) has 5300010 (skill 'Collect', message 5300010, buff 53652).",
-        "Each interaction is gated by its own buff (BuffConfig 5301401, 5365401, 5365201, 5365301, 5365101), so exactly one of them is open at a time: the step order is the quest order."
+        "DungeonQuestConfig 5300011-5300015: 1 Help Bobo up, 2 Try to Ride the Deniro, 3 Collect the fluorescent substance, 4 Feed the Deniro, 5 Ride the Deniro to the depths of the Ant Hell.",
+        "Editor sc_plot_yhcx_002_dg01 labels: point 23 'Bobo position', 29 'soldier ant (Deniro) position', 27 'fluorescent substance position', 22 'spawn point' at the far side; patrol 25 runs over the ceiling between them; guide points 26 'rescue Bobo', 33 'interact with the ant', 34 'collect', 35 'ride the soldier ant', 36 'riding' (to region 31 'end region' through regions 38 'first trigger region' and 37 'midway region').",
+        "Deniro 5300005 (NPCConfig _iNPCSubType 103, VehicleConfig 5300005 _iMoveOnSurface 1, seat 5300005 _iChange3C 9) offers 5300008 'Try to Ride the Deniro' (skill 5362901, gate buff group 53651), 5300009 'Feed' (53653), 5300005 'Ride the Deniro' (skill 5362501, GameplayStatusConfig 3 'vehicle driver', gate 53654 and a free seat). NPC 5300055 (collect-light model) has 5300010 'Collect' (53652). Bobo 5300041 has 5300028 'Rescue Bobo' (53014).",
+        "PublicParamConfig NoviceDungeonBornPatrolNPCID 5300029, NoviceDungeonBornPatrolID 25 and NoviceDungeonMoveOnSurfaceDungeonsID 1000301: LC_State_Unit_Born makes NPC 5300029 (the Deniro's name, a monster-type unit with no interaction, speed 8.5 m/s) crawl patrol 25 on the surfaces by itself when it is born in this scene (StartLocalPatrol from the patrol's first point, SetMoveOnSurface, 'Walking', 10 s). Every unit of this reverse dungeon moves on the surfaces (LC_UnitBase m_bReverseMode); a server walk is a straight line the client cannot lay on a wall.",
+        "Guide 33 'interact with the ant' ends at point 29, guide 34 'collect' at point 27 and guide 35 'ride the soldier ant' starts at point 29: the Deniro stands at its point 29 for the interactions.",
+        "GuideStepConfig 50010-50050 follow that order: 50020 'Press the Interaction key to try riding the Deniro.' on skill 5362901, 50030 collect (5362801), 50040 feed (5362701), 50050 'Try riding the Deniro again.' on 5362501.",
+        "ChatConfig 5300401-5300410 and 5300608 are this scene's Bobo lines ('You're finally here!', 'Ugh, I'm filthy!', 'Where are we?', 'It's a dead end... Something's crawling toward us!', 'It seems to know exactly where it's going', 'It seems to like those glowing things...', 'This should be enough...', 'Great! Our bribe worked!', 'Ooh, what does riding a giant ant feel like?', 'It's so big, but surprisingly Agile!', 'It's too narrow here for the ant. Should we squeeze through?')."
       ],
       "guessed": [
-        "Bobo stays where he was helped up for the rest of the scene; patrol 28 (his short walk) is not animated.",
-        "Step 2 seats the player on the Deniro (NPCInteractConfig 5300005, vehicle status 3, VehicleSeatConfig 5300005) and the Deniro puts them down 2 s later or when the exit button (action 5004) asks: the quest that follows ('Find a way to earn Deniro's Faith') says the first ride fails, but nothing says how long the rider stays on.",
-        "Collecting the fluorescent substance grants no item: no item is named by the client data.",
-        "The ride to the depths walks guide 36 (down the ramp through regions 38, 37 and 31): the Deniro goes along its 14 points at its UnitConfig speed (5.25 m/s) and the player is moved with it in 100 ms forced-position steps, ending at region 31's centre. The client has no ride rule: the speed, the missing mount and the camera prefab mianstorybingyicamera (not played) are guesses.",
-        "Step 5's second Ride (5300008, no gameplay status) does not seat the player on the Deniro: the player slides beside it."
+        "The crawling ant 5300029 is born after 'Something's crawling toward us!' and leaves after its 10 s crawl; the Deniro then stands at its point 29 (inferred timing; the official run shows one ant crawling in, which the client data does not let the server reproduce on the walls).",
+        "Trying to ride (5300008) does not seat the player; Bobo's next line says the ant wants the glowing things.",
+        "The last ride seats the player as the Deniro's driver; it ends in the end region 31 (or after 60 s), and the run goes on into Maya's nest 1000401.",
+        "The lines along the ride play in regions 38, 37 and 31; the camera of the ride is the client's own (MainStoryAntNestNewbieCamera, mianstorybingyicamera).",
+        "Collecting the fluorescent substance grants no item: no item is named by the client data."
       ],
       "steps": [
         {
           "quest": 1,
           "stage": "Find Bobo: help Bobo up",
           "actors": [
-            { "npc": 5300041, "point": 23, "buffs": [5301401], "why": "Bobo at 'Bobo position'; buff group 53014 opens 'Rescue Bobo' (5300028)" },
-            { "npc": 5300005, "point": 29, "why": "the Deniro at 'soldier ant position', not yet interactable" }
+            { "npc": 5300041, "point": 23, "buffs": [5301401], "why": "Bobo at 'Bobo position'; buff group 53014 opens 'Rescue Bobo' (5300028)" }
+          ],
+          "cues": [
+            { "at": 1500, "chat": 5300401, "why": "Bobo: You're finally here!" }
           ],
           "complete": [
             { "message": 5300028, "why": "interaction 5300028 'Rescue Bobo' sends dungeon message 5300028" }
           ]
         },
         {
+          "quest": 1,
+          "goal": [1, 1],
+          "stage": "Find Bobo: the Deniro crawls in",
+          "actors": [
+            { "npc": 5300041, "point": 23, "why": "Bobo, helped up" }
+          ],
+          "cues": [
+            { "at": 500, "chat": 5300402, "why": "Ugh, I'm filthy!" },
+            { "at": 3500, "chat": 5300403, "why": "Where are we?" },
+            { "at": 6500, "chat": 5300404, "why": "It's a dead end... Something's crawling toward us!" },
+            { "at": 6500, "npc": 5300029, "point": 22, "life": 10500, "sight": 120, "why": "the crawling ant: born, the client crawls it along patrol 25 on the surfaces (NoviceDungeonBornPatrolNPCID); seen from the whole cave" },
+            { "at": 15500, "chat": 5300408, "why": "It seems to know exactly where it's going" }
+          ],
+          "complete": [
+            { "after": 17000, "why": "once the Deniro has arrived (inferred timing)" }
+          ]
+        },
+        {
           "quest": 2,
           "stage": "Try to ride the Deniro",
           "actors": [
-            { "npc": 5300041, "point": 23, "why": "Bobo, helped up" },
-            { "npc": 5300005, "point": 29, "buffs": [5365401], "why": "buff group 53654 opens 'Ride' (5300005)" }
+            { "npc": 5300041, "point": 23, "why": "Bobo" },
+            { "npc": 5300005, "point": 29, "buffs": [5365101], "why": "buff group 53651 opens 'Try to Ride the Deniro' (5300008)" }
           ],
           "complete": [
-            { "message": 5300005, "why": "interaction 5300005 'Ride' sends dungeon message 5300005" }
+            { "message": 5300008, "why": "interaction 5300008 sends dungeon message 5300008" }
           ]
         },
         {
@@ -104,7 +162,10 @@
           "actors": [
             { "npc": 5300041, "point": 23, "why": "Bobo" },
             { "npc": 5300005, "point": 29, "why": "the Deniro" },
-            { "npc": 5300055, "point": 27, "buffs": [5365201], "why": "the fluorescent substance (collect-light model) at its labelled point; buff group 53652 opens 'Collect' (5300010)" }
+            { "npc": 5300055, "point": 27, "buffs": [5365201], "why": "the fluorescent substance at its labelled point; buff group 53652 opens 'Collect' (5300010)" }
+          ],
+          "cues": [
+            { "at": 500, "chat": 5300405, "why": "It seems to like those glowing things..." }
           ],
           "complete": [
             { "message": 5300010, "why": "interaction 5300010 'Collect' sends dungeon message 5300010" }
@@ -117,6 +178,9 @@
             { "npc": 5300041, "point": 23, "why": "Bobo" },
             { "npc": 5300005, "point": 29, "buffs": [5365301], "why": "buff group 53653 opens 'Feed' (5300009)" }
           ],
+          "cues": [
+            { "at": 0, "chat": 5300409, "why": "This should be enough. Let's go find that giant ant!" }
+          ],
           "complete": [
             { "message": 5300009, "why": "interaction 5300009 'Feed' sends dungeon message 5300009" }
           ]
@@ -126,10 +190,15 @@
           "stage": "Ride the Deniro to the depths of the Ant Hell",
           "actors": [
             { "npc": 5300041, "point": 23, "why": "Bobo" },
-            { "npc": 5300005, "point": 29, "buffs": [5365101], "why": "buff group 53651 opens the second 'Ride' (5300008)" }
+            { "npc": 5300005, "point": 29, "buffs": [5365401], "why": "buff group 53654 opens 'Ride the Deniro' (5300005), the vehicle driver's seat" }
+          ],
+          "cues": [
+            { "at": 0, "chat": 5300410, "why": "Great! Our bribe worked!" },
+            { "region": 38, "chat": 5300608, "why": "the first trigger region of the ride" },
+            { "region": 37, "chat": 5300406, "why": "the midway region of the ride" },
+            { "region": 31, "chat": 5300407, "why": "the end region: too narrow for the ant" }
           ],
           "complete": [
-            { "message": 5300008, "why": "interaction 5300008 'Ride' sends dungeon message 5300008" },
             { "region": 31, "why": "the 'end region' (regionType 2) where the riding guide 36 ends" }
           ],
           "after": { "ride": 36, "teleport": 31, "why": "the Deniro carries the player down guide 36 (the riding route) at its own walking speed, then the player stands at the end region" }
@@ -139,14 +208,34 @@
     "1000401": {
       "name": "Maya's nest: Maya, the Professor in the ant egg and the treasure",
       "confidence": "medium",
-      "evidence": ["DungeonQuestConfig 5300016-5300020: 1 'Encounter Maya' [5,0,1] 'Defeat Maya'; 2 'Find the Professor' 'Venture deeper into the cave to find the Professor'; 3 'Free the Ant Egg' 'Rescue the Professor from the ant egg'; 4 'Help the Professor Up' 'Help the Weak Professor walk'; 5 \"Maya's Secret Treasure\" 'Open the treasured chest'. Tasks 105103 and 10104310 'Venture Deeper into the Ant Queen's Nest': 'Enter Maya's Nest and rescue the Professor.'", "Editor sc_plot_yhcx_003_dg01: points 21 蚁后刷怪点 (ant queen spawn), 26 教授刷新点 (professor spawn), 32 教授卵刷新点 (professor egg spawn), 34 宝箱刷怪点 (treasure chest spawn); guide 25 蚁卵引导点 (ant egg guide) leads from the born point toward the eggs; dialogue regions 28-30 (regionType 1, client) lie along the way, region 28 about 10 m before point 32.", "NPCInteractConfig 5300021 'Free the Ant Egg' (skill 5362201) on 5300051 and 5300056 sends dungeon message 5300022; 5300022 'Help the Professor Up' (skill 5362301: 'Help the fallen Professor to their feet') on 5300026 Professor sends 5300023; 5300023 'Open' (skill 5362401: 'Open the Treasure in Maya's Nest') on 5300052 Precious Treasure Chest sends 5300024. All three are gated by LC_ConditionList 7100022-7100024: [1004, 53014] CheckHaveBuff group 53014, the gate 1000301's 'Rescue Bobo' uses (BuffConfig 5301401).", "5300056 (unit 5300017, next to the Ant Egg 5300036 unit 5300014) is the egg with the Professor; 5300051 offers the same interaction on unit 70010, the invisible helper model."],
-      "guessed": ["Stage 2 completes within 10 m of the egg point 32 (where dialogue region 28 begins); the original likely used a dialogue region, which the client handles itself.", "The egg holding the Professor is 5300056 (its model is next to the Ant Egg model); 5300051 would show nothing.", "Each step gives its actor buff 5301401 (group 53014) to open its interaction, as in 1000301; the original set the buff from its script.", "The chest's _iNormalDrop 330052 is not dropped: the engine gives no loot; the dungeon's own settlement rewards stand."],
+      "evidence": [
+        "DungeonQuestConfig 5300016-5300020: 1 'Encounter Maya' [5,0,1] 'Defeat Maya'; 2 'Find the Professor' 'Venture deeper into the cave to find the Professor'; 3 'Free the Ant Egg' 'Rescue the Professor from the ant egg'; 4 'Help the Professor Up' 'Help the Weak Professor walk'; 5 \"Maya's Secret Treasure\" 'Open the treasured chest'. Tasks 105103 and 10104310 'Venture Deeper into the Ant Queen's Nest': 'Enter Maya's Nest and rescue the Professor.'",
+        "Editor sc_plot_yhcx_003_dg01: points 21 蚁后刷怪点 (ant queen spawn), 26 教授刷新点 (professor spawn), 32 教授卵刷新点 (professor egg spawn), 34 宝箱刷怪点 (treasure chest spawn); guide 25 蚁卵引导点 (ant egg guide) leads from the born point toward the eggs; dialogue regions 30, 29 and 28 (对话区域1-3) lie along the way, region 28 about 10 m before point 32.",
+        "NPCInteractConfig 5300021 'Free the Ant Egg' (skill 5362201) on 5300051 and 5300056 sends dungeon message 5300022; 5300022 'Help the Professor Up' (skill 5362301: 'Help the fallen Professor to their feet') on 5300026 Professor sends 5300023; 5300023 'Open' (skill 5362401: 'Open the Treasure in Maya's Nest') on 5300052 Precious Treasure Chest sends 5300024. All three are gated by LC_ConditionList 7100022-7100024: [1004, 53014] CheckHaveBuff group 53014, the gate 1000301's 'Rescue Bobo' uses (BuffConfig 5301401).",
+        "5300056 (unit 5300017, next to the Ant Egg 5300036 unit 5300014) is the egg with the Professor; 5300051 offers the same interaction on unit 70010, the invisible helper model.",
+        "ChatConfig 5300501-5300511 and 5300602-5300607 are this scene's lines: 'Ah, it's Maya!', 'Whatever! Let's defeat her first!', 'Waaaah! It's a huge Sandstorm! We can't dodge it! I'll help You!', 'Is that... a tornado?! Run!', 'Hmph! Maya wasn't so tough!...', 'There's a path up ahead!', 'Do you think the Professor is still alive...?', '(Shakes head) No, no, no!...', 'Help me... Help me...' (type 2), 'That's the professor's voice!', '(Clutches lower back) Owww...' (type 2), 'Look! There's a treasure chest up ahead!', 'We're rich! What a haul! Hehe!'.",
+        "Skill 5365301 'Bobo Bubble' (MainStory_BoBo, buff 5366101 'Bubble Shield' 2 s) and 5365501 'Bobo Bubble Animation' are Bobo's help in this fight."
+      ],
+      "guessed": [
+        "The fight's lines play at the start and at 59% and 24% of Maya's HP, where the official run shows the sandstorm and the tornadoes; at the sandstorm Bobo shields the player (Bubble Shield, its animation on the player).",
+        "Stage 2 completes in dialogue region 28 (or within 10 m of the egg point 32), where the official run hears the Professor; the lines play in regions 30, 29 and 28.",
+        "The egg holding the Professor is 5300056 (its model is next to the Ant Egg model); 5300051 would show nothing.",
+        "Each step gives its actor buff 5301401 (group 53014) to open its interaction, as in 1000301; the original set the buff from its script.",
+        "The chest's _iNormalDrop 330052 is not dropped: the engine gives no loot; the dungeon's own settlement rewards stand."
+      ],
       "steps": [
         {
           "quest": 1,
           "stage": "Encounter Maya: defeat Maya",
           "fight": [
             { "point": 21, "npc": 5300006, "why": "label 蚁后刷怪点 'ant queen spawn point' and stage 1 'Defeat Maya'; story Maya template 5300006 (L30)" }
+          ],
+          "cues": [
+            { "at": 1500, "chat": 5300501, "why": "Ah, it's Maya!" },
+            { "at": 5000, "chat": 5300502, "why": "Whatever! Let's defeat her first!" },
+            { "hpBelow": 59, "of": 5300006, "at": 0, "chat": 5300606, "why": "the sandstorm" },
+            { "hpBelow": 59, "of": 5300006, "at": 1000, "buff": 5366101, "buffMs": 3000, "playerCast": 5365501, "why": "Bobo Bubble: Bobo shields the player from the sandstorm" },
+            { "hpBelow": 24, "of": 5300006, "at": 0, "chat": 5300607, "why": "the tornadoes" }
           ]
         },
         {
@@ -155,7 +244,15 @@
           "actors": [
             { "npc": 5300056, "point": 32, "why": "the egg with the Professor at 教授卵刷新点, not yet open" }
           ],
+          "cues": [
+            { "at": 1500, "chat": 5300503, "why": "Hmph! Maya wasn't so tough!" },
+            { "region": 30, "chat": 5300505, "why": "dialogue region 1: There's a path up ahead!" },
+            { "region": 29, "chat": 5300506, "why": "dialogue region 2: Do you think the Professor is still alive...?" },
+            { "region": 29, "at": 3000, "chat": 5300507, "why": "(Shakes head) No, no, no!" },
+            { "region": 28, "chat": 5300509, "speaker": 5300056, "why": "dialogue region 3: Help me... Help me... over the egg" }
+          ],
           "complete": [
+            { "region": 28, "why": "dialogue region 3, where the Professor's voice is heard" },
             { "point": 32, "radius": 10, "why": "walked within 10 m of the egg (inferred)" }
           ]
         },
@@ -164,6 +261,9 @@
           "stage": "Free the Ant Egg",
           "actors": [
             { "npc": 5300056, "point": 32, "buffs": [5301401], "why": "buff group 53014 opens 'Free the Ant Egg' (5300021)" }
+          ],
+          "cues": [
+            { "at": 1000, "chat": 5300510, "why": "That's the professor's voice!" }
           ],
           "complete": [
             { "message": 5300022, "why": "interaction 5300021 'Free the Ant Egg' sends dungeon message 5300022" }
@@ -174,6 +274,9 @@
           "stage": "Help the Professor Up",
           "actors": [
             { "npc": 5300026, "point": 26, "buffs": [5301401], "why": "the Professor at 教授刷新点; buff group 53014 opens 'Help the Professor Up' (5300022)" }
+          ],
+          "cues": [
+            { "at": 500, "chat": 5300511, "speaker": 5300026, "why": "(Clutches lower back) Owww... over the Professor" }
           ],
           "complete": [
             { "message": 5300023, "why": "interaction 5300022 sends dungeon message 5300023" }
@@ -186,8 +289,26 @@
             { "npc": 5300026, "point": 26, "why": "the Professor, helped up" },
             { "npc": 5300052, "point": 34, "buffs": [5301401], "why": "the Precious Treasure Chest at 宝箱刷怪点; buff group 53014 opens 'Open' (5300023)" }
           ],
+          "cues": [
+            { "at": 0, "chat": 5300602, "why": "Look! There's a treasure chest up ahead!" }
+          ],
           "complete": [
             { "message": 5300024, "why": "interaction 5300023 'Open' sends dungeon message 5300024" }
+          ]
+        },
+        {
+          "quest": 5,
+          "goal": [1, 1],
+          "stage": "Maya's Secret Treasure: the haul",
+          "actors": [
+            { "npc": 5300026, "point": 26, "why": "the Professor" },
+            { "npc": 5300052, "point": 34, "why": "the opened chest" }
+          ],
+          "cues": [
+            { "at": 0, "chat": 5300603, "why": "We're rich! What a haul! Hehe!" }
+          ],
+          "complete": [
+            { "after": 3000, "why": "Bobo's line, then the scene's clear (inferred timing)" }
           ]
         }
       ]
@@ -661,7 +782,7 @@
             { "message": 11, "why": "the one choice that sends a different message: interaction 5300040 of ring 400134" }
           ],
           "ignore": [
-            { "message": 12, "why": "the two other rings: a wrong guess, the game goes on" }
+            { "message": 12, "chat": 5310004, "why": "the two other rings: a wrong guess, the game goes on" }
           ]
         },
         {

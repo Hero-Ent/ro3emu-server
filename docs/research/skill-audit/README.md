@@ -76,6 +76,9 @@ Still open after phase 2: Death Bound (it reflects a % of the damage taken, and 
   Warg Strike makes the pendant wolf run to the target (SkillEffectDisplayNotify type 5, PendantShow); mounted Warg
   Charge dashes; Warg Hunt releases its melee / ranged row (`dispatch`), which carry the three wolves; Warg Charge and
   Warg Hunt reset Swift Warg. Still open: King of the Wargs' extra companions, Wolf's Fang, Wolf Taming's howl.
+- Hunter falcon: Blitz Beat (13102, auto-cast row 13110, show 13102) sends the falcon pendant to the target and
+  back (effect 13102200, m_eBulletType 3 Falcon: SkillEffectDisplayNotify type 5, PendantShow, not a
+  SkillFixTimeBulletNotify); the hit lands after m_kBulletFalcon.m_iToTargetTime (CombatService.Falcon).
 - Thief: Double Attack procs on dagger basic attacks; Cloaking / Enhance Cloaking hide from monsters and end after
   their hits. Hiding (15003) is only a speed buff in RO3's data.
 

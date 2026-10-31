@@ -14,7 +14,7 @@ namespace Ro3Emu.Server.Game;
 /// (lua-src Logic/Asset/LC_DAL_Valhalla.lua). The statue is role blob "heroic_spirit" (DBOdinStatue).
 /// Not done: the statue's attribute 4008 "Field Auto-Battle EXP Bonus" has no consumer in this server.
 /// </summary>
-public sealed class ValhallaService
+public sealed partial class ValhallaService
 {
     public const uint Sync = 5046, Challenge = 83490, Pray = 83491;
     public const int Function = 96;
@@ -31,11 +31,12 @@ public sealed class ValhallaService
     private readonly RoleStore _roles;
 
     public ValhallaService(GameData data, DungeonCatalog catalog, DungeonService dungeons, CharacterService character,
-        FunctionService functions, TaskService tasks, RoleStore roles)
+        FunctionService functions, TaskService tasks, RoleStore roles, SceneService scene)
     {
         this._data = data; this._catalog = catalog; this._dungeons = dungeons; this._character = character;
         this._functions = functions; this._tasks = tasks; this._roles = roles;
         dungeons.Completed.Add(ClearedAsync);
+        scene.Leaving.Add(RecoverOnLeaveAsync);
     }
 
     /// <summary>PublicParamConfig HeroSpiritItemId (Einherjar Coin 2000001) and HeroSpiritItemExp (statue EXP per coin, 2).</summary>

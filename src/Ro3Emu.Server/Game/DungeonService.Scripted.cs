@@ -121,6 +121,7 @@ public sealed partial class DungeonService
         await DismountAllAsync(a, interrupt: false); // the previous step's cannons leave with it
         a.StepSeen.Clear();
         a.StepHeld = a.StepHoldOver = false;
+        a.FiredCues.Clear();
         // A fight-only step has no client event to wait for: its kills complete it.
         a.StepDone = step.Complete.Count == 0;
         await SyncSceneActorsAsync(a, step.Actors);
@@ -139,6 +140,7 @@ public sealed partial class DungeonService
                 StageNum = a.Wave + 1, LevelNum = 1, Vars = { new DungeonVar { VarId = StoryVar, Vi64 = { step.Story } } },
             });
         StartCues(a, step);
+        if (step.Slide is { } slide) await StartSlideAsync(a, slide);
         // A step that lasts a while on its own clock (After): it completes when the time is up, like a client event.
         foreach (var timer in step.Complete.Where(c => c.Kind == Kind.After))
             StepLater(a, a.StepGeneration, (int)timer.Id, () => StepEventAsync(a, null, [(Kind.After, timer.Id)]));
@@ -254,6 +256,7 @@ public sealed partial class DungeonService
         await StrikeAsync(a!, s, actor!, req.InteractionId);
         await SeatRiderAsync(a!, s, actor!, (int)req.InteractionId);
         await BoardCannonAsync(a!, s, actor!, req.InteractionId);
+        await TryRideAsync(a!, s, actor!, req.InteractionId); // a vehicle's driver seat (DungeonService.Story)
         var events = new List<(Kind, long)> { (Kind.Interaction, req.InteractionId) };
         if (_catalog.DungeonMessage(req.InteractionId) is { } message) events.Add((Kind.Message, message));
         await StepEventAsync(a!, s, events, actor);
@@ -356,6 +359,7 @@ public sealed partial class DungeonService
     public async Task PlayerMovedAsync(GameSession s)
     {
         if (s.DungeonAttempt == null || Active(s) is not { } a || Step(a) is not { } step || a.StepDone) return;
+        await RegionCuesAsync(a, s, step); // before the completion: a cue of the step's end region still plays
         if (step.Seek != null) return; // a hiding place counts when the seeker looks (DungeonService.HideAndSeek)
         foreach (var t in step.Complete)
         {
@@ -383,6 +387,8 @@ public sealed partial class DungeonService
             _log.LogInformation("Scripted scene {Scene} step {Step}: {Role} sent {Events}, which does not advance it",
                 a.Plan.SceneEntry, a.Wave + 1, s?.Role?.Id, string.Join(", ", events));
             await RespondAsync(a, step.React, step.React?.Ignored, used);
+            foreach (var answer in step.Ignore.Where(t => t.Chat != 0 && Matches(t)))
+                await BroadcastAsync(a, SystemBroadcast, new SystemBoardCastMsgNtf { Source = MsgSource.Npc, ChatId = answer.Chat });
             return;
         }
         if (step.All)
@@ -404,6 +410,7 @@ public sealed partial class DungeonService
             if (step.TeleportAfter != 0 && _catalog.ScenePoint(a.Plan.SceneEntry, step.TeleportAfter) is { } to)
                 foreach (var member in Present(a).Where(m => a.Loaded.Contains(m) && !m.SceneLoading))
                     await _scenes.TeleportInMapAsync(member, to);
+            await EndStepAsync(a, step); // its slide and ride stop, its show and fall play (DungeonService.Story)
             // The next step or the settlement runs in its own owner scope, like the room's timers: the message that
             // completed the step (a walk, an interaction, a plot end) reserves only what its own route needs. A completing
             // reaction's line is read first (inferred).
@@ -411,7 +418,7 @@ public sealed partial class DungeonService
                 _loop.ScheduleLegacy(Paced(hold), () => a.Room.Closed ? Task.CompletedTask : AdvanceAsync(a), "dungeon scripted step");
             else _loop.PostLegacy(() => AdvanceAsync(a), "dungeon scripted step");
         }
-        // A step with a ride first walks it; the teleport and the next step follow its arrival.
-        if (!TryStartRide(a, step, used, FinishAsync)) await FinishAsync();
+        if (step.AfterMs > 0) StepLater(a, a.StepGeneration, step.AfterMs, () => FinishAsync(), whileFighting: true);
+        else if (!TryStartRide(a, step, used, FinishAsync)) await FinishAsync();
     }
 }
