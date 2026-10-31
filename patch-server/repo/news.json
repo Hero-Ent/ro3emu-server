@@ -1,6 +1,13 @@
 {
   "items": [
     {
+      "tag": "PATCH 1.1.4",
+      "color": "green",
+      "title": "Patch Notes v1.1.4 - Aeroplano de volta e melhorias",
+      "text": "• Aeroplano (história): a dungeon volta a ser a versão completa, com a explosão no convés, os navios piratas, os canhões, a abordagem com Wule, Boya e o Chefe do Grupo Éden lutando ao seu lado, o Chefe Maligno com seus golpes telegrafados e o capitão no final.\n• Nível máximo do servidor: o rastreador de missões e o painel do personagem mostram o limite de nível que o servidor realmente aplica.\n• Links de recarga e passe mensal do jogo não abrem mais a loja da publicadora original.\n• Dungeons de história: companheiros de combate (Boya e Wule contra o Eddga na Floresta de Payon), montaria no Deniro e setas-guia nas dungeons de plano.\n• Melhorias de combate, IA de monstros, Guerra de Território e painel do jogador vindas da atualização do emulador.\n• Atualizador 1.1.4: espera o jogo fechar na bandeja do sistema.",
+      "date": "2026-10-31"
+    },
+    {
       "tag": "PATCH 1.1.3",
       "color": "green",
       "title": "Patch Notes v1.1.3 - Novo logo, combate e correções",
