@@ -164,9 +164,13 @@ public sealed partial class EquipmentService
             }
             levels = session.EquipLevels;
             _log.LogInformation("{Name} refines grid {Grid} +{Level}: {Result}", session.Role!.Name, grid, level, error?.Why ?? (success ? "success" : $"failed, now +{levels.Refine.GetValueOrDefault(grid)}"));
+            // LC_DAL_Equipment._processRefineEquipments plays the success settlement (its animation and sound) for a
+            // refineLv above the stored level and the failure one only when refineLv is absent; a failed roll therefore
+            // leaves refineLv unset (0), and the client keeps its level until the 5007 grid sync that follows.
             await session.SendGameAsync(Refine, new RefineEquipmentRsp
             {
-                Result = error?.Code ?? 0, EquipPos = req.EquipPos, RefineLv = levels.Refine.GetValueOrDefault(grid),
+                Result = error?.Code ?? 0, EquipPos = req.EquipPos,
+                RefineLv = error == null && !success ? 0 : levels.Refine.GetValueOrDefault(grid),
                 RefineEffectLv = _character.Resonance(session, "RefiningEffectTable"), RefineLuckyAdd = levels.Luck.GetValueOrDefault(grid),
             });
             await AfterUpgradeAsync(session, error == null);
@@ -188,6 +192,28 @@ public sealed partial class EquipmentService
         if (!paid) return;
         await _character.ItemsChangedAsync(session, stats: false);
         await _character.EquipLevelsChangedAsync(session, persist: false);
+    }
+
+    /// <summary>
+    /// GM panel 4 GmOpStrengthen / 5 GmOpRefine: the grids' strengthen or refine level set outright, with no materials,
+    /// chance or luck, then 5007 and properties as after a paid upgrade. (inferred) No 31404/31405 reply: the panel
+    /// asked nothing of the upgrade widget; a set refine level clears the grid's luck as a success does.
+    /// </summary>
+    internal async Task<string?> GmSetLevelAsync(GameSession session, IReadOnlyList<int> grids, int level, bool refine)
+    {
+        using var gate = await CharacterService.Lock(session);
+        foreach (int grid in grids)
+            if (level < 0 || level > 0 && (refine ? _character.RefineRow(grid, level) : _character.StrengthenRow(grid, level)) == null)
+                return null;
+        var next = CopyLevels(session.EquipLevels);
+        foreach (int grid in grids)
+        {
+            (refine ? next.Refine : next.Strength)[grid] = level;
+            if (refine) next.Luck.Remove(grid);
+        }
+        session.EquipLevels = next;
+        await _character.EquipLevelsChangedAsync(session);
+        return $"{(refine ? "Refine" : "Strengthen")} +{level} on grids {string.Join(',', grids)}.";
     }
 
     private static EquipLevels CopyLevels(EquipLevels source) => new()

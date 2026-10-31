@@ -32,6 +32,14 @@ public sealed class WorldMessages(Maps.World world, CombatService combat, SceneS
         routes.Intercept("territory/battle", DungeonStatistics, territory.SharedAsync);
         routes.Intercept("escort/actors", id => id is 32287 || NpcInteraction(id), escort.HandleSharedAsync); // guild goods, cargo NPCs
         routes.Intercept("territory/world", NpcInteraction, territory.WorldSharedAsync);
+        // A siege cannon is an NPC of the siege room; its operator's buttons are 32703.
+        routes.Intercept("territory/cannon", id => NpcInteraction(id) || id == WorldInteractionService.Action,
+            territory.CannonSharedAsync);
+        // So are the siege's bag NPCs, which open the war bag.
+        routes.Intercept("territory/siege-bag", NpcInteraction, territory.SiegeBagSharedAsync);
+        // A war vehicle is an NPC of the siege room too; its riders' buttons, seat changes and facing follow it.
+        routes.Intercept("territory/vehicle", id => NpcInteraction(id) || id is WorldInteractionService.Action
+            or WorldInteractionService.SeatChange or WorldInteractionService.VehicleSync, territory.VehicleSharedAsync);
 
         routes.Map(1031, "common", async (session, msgId, body) =>
         {
@@ -53,7 +61,7 @@ public sealed class WorldMessages(Maps.World world, CombatService combat, SceneS
         {
             var action = UseInteractActionReq.Parser.ParseFrom(body.Span);
             // A scripted scene's cannon (DungeonService.Cannon) answers its own gunner's buttons.
-            if (!await DungeonService.TryCannonActionAsync(session, action)) await interaction.UseActionAsync(session, action);
+            await interaction.UseActionAsync(session, action);
         });
         routes.Map(32708, "interaction", async (session, msgId, body) =>
         {

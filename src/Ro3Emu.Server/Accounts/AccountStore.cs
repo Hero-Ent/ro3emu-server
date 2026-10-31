@@ -9,8 +9,8 @@ using Ro3Emu.Server.Economy;
 namespace Ro3Emu.Server.Accounts;
 
 /// <summary>
-/// Accounts and login tokens in SQLite. An unknown identity is registered on its first login (research server,
-/// no sign-up page).
+/// Accounts and login tokens in SQLite. An unknown identity is registered on its first login (research server), or on
+/// the web panel's sign-up page through the same code (<see cref="RegisterAsync"/>).
 /// </summary>
 public sealed partial class AccountStore : IDisposable
 {
@@ -150,6 +150,7 @@ public sealed partial class AccountStore : IDisposable
         catch { db.Dispose(); throw; }
     }
 
+    /// <summary>Banned: the credential matched (or registered the name) but the account has an active ban.</summary>
     public enum LoginResult { Ok, Registered, BadPassword, Banned, Unverified, NotFound }
 
     private bool OnLoop => _loop?.IsOnLoop == true || _metrics != null && ReferenceEquals(ServerMetrics.LoopOwner, _metrics);
@@ -478,11 +479,12 @@ public sealed partial class AccountStore : IDisposable
     }
     public async Task<bool> VerifyAsync(string name, string password) => await VerifiedAccountAsync(name, password).ConfigureAwait(false) != null;
 
-    /// <summary>The account's stored name when the password matches, else null.</summary>
+    /// <summary>The account's stored name when the password matches and the account is not banned, else null.</summary>
     public async Task<string?> VerifiedAccountAsync(string name, string password)
     {
         var credentials = await ReadAsync<AccountCredentials?>(new AccountCredentialsRead(name)).ConfigureAwait(false);
-        return credentials != null && await MatchesAsync(password, credentials).ConfigureAwait(false) ? credentials.Name : null;
+        return credentials != null && await MatchesAsync(password, credentials).ConfigureAwait(false)
+            ? await UnlessBannedAsync(credentials.Name, "password").ConfigureAwait(false) : null;
     }
 
     public LoginResult Login(string name, string password)
@@ -495,15 +497,11 @@ public sealed partial class AccountStore : IDisposable
 
     /// <summary>
     /// Login or first-time registration. <see cref="SignIn.Account"/> is the account's stored name, which can differ
-    /// from <paramref name="name"/> in letter case; tokens and sessions must carry it, never the typed spelling.
+    /// from <paramref name="name"/> in letter case; tokens and sessions must carry it, never the typed spelling. The ban
+    /// is checked only once the password matched, so a wrong password answers the same whether or not the account is
+    /// banned; a name that has no account but a ban row is refused before it is registered.
     /// </summary>
-    /// <summary>Registers an account explicitly (used by admin CLI or external website registration).</summary>
-    public async Task<bool> RegisterAsync(string name, string password)
-    {
-        byte[] salt = RandomNumberGenerator.GetBytes(16);
-        byte[] hash = await Task.Run(() => AccountHash.Hash(password, salt)).ConfigureAwait(false);
-        return await WriteAsync<bool>(new AccountRegisterPlan(name, hash, salt, DateTime.UtcNow.ToString("O"))).ConfigureAwait(false);
-    }
+
 
     /// <summary>Whether an account with this name exists (any letter case).</summary>
     public async Task<bool> ExistsAsync(string name) =>
@@ -511,13 +509,22 @@ public sealed partial class AccountStore : IDisposable
 
     public async Task<SignIn> SignInAsync(string name, string password, bool allowRegister = true)
     {
+        var signIn = await CheckOrRegisterAsync(name, password, allowRegister).ConfigureAwait(false);
+        if (signIn.Result is LoginResult.BadPassword or LoginResult.Banned) return signIn;
+        return await UnlessBannedAsync(signIn.Account, "sign-in").ConfigureAwait(false) == null
+            ? signIn with { Result = LoginResult.Banned } : signIn;
+    }
+
+    private async Task<SignIn> CheckOrRegisterAsync(string name, string password, bool allowRegister = true)
+    {
         var existing = await ReadAsync<AccountCredentials?>(new AccountCredentialsRead(name)).ConfigureAwait(false);
         if (existing != null) return await Check(existing).ConfigureAwait(false);
         if (!allowRegister) return new(LoginResult.NotFound, name);
-        byte[] salt = RandomNumberGenerator.GetBytes(16);
-        byte[] hash = await Task.Run(() => AccountHash.Hash(password, salt)).ConfigureAwait(false);
-        if (await WriteAsync<bool>(new AccountRegisterPlan(name, hash, salt, DateTime.UtcNow.ToString("O"))).ConfigureAwait(false))
-            return new(LoginResult.Registered, name);
+        switch (await TryRegisterAsync(name, password).ConfigureAwait(false))
+        {
+            case Registration.Banned: return new(LoginResult.Banned, name);
+            case Registration.Created: return new(LoginResult.Registered, name);
+        }
         // A concurrent registration won the unique-name constraint; compare against its committed credentials.
         existing = await ReadAsync<AccountCredentials?>(new AccountCredentialsRead(name)).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Account registration collision did not leave a visible account.");
@@ -528,7 +535,7 @@ public sealed partial class AccountStore : IDisposable
             if (!await MatchesAsync(password, credentials).ConfigureAwait(false))
                 return new(LoginResult.BadPassword, credentials.Name);
 
-            var ban = await ReadAsync<AccountBanInfo?>(new AccountBanRead(credentials.Name)).ConfigureAwait(false);
+            var ban = await ReadAsync<AccountBanInfo?>(new WebAccountBanRead(credentials.Name)).ConfigureAwait(false);
             if (ban is { IsBanned: true })
                 return new(LoginResult.Banned, credentials.Name);
             if (ban is { IsUnverified: true })
@@ -538,22 +545,45 @@ public sealed partial class AccountStore : IDisposable
         }
     }
 
-    public async Task<bool> IsBannedAsync(string account)
-    {
-        var ban = await ReadAsync<AccountBanInfo?>(new AccountBanRead(account)).ConfigureAwait(false);
-        return ban is { IsBanned: true };
-    }
 
-    public bool IsBanned(string account)
-    {
-        var ban = ReadSync<AccountBanInfo?>(new AccountBanRead(account));
-        return ban is { IsBanned: true };
-    }
 
     /// <summary>The account's website group (web_account_meta.group_id), 0 when it has none.</summary>
     public int GroupId(string account) => ReadSync<int>(new AccountGroupRead(account));
 
     public readonly record struct SignIn(LoginResult Result, string Account);
+
+    public enum Registration { Created, Taken, Banned }
+
+    /// <summary>
+    /// Creates the account the game's first login would create for this name and password (the panel's sign-up):
+    /// the same row, the same hash, the same ban check. Taken when the name exists in any letter case.
+    /// </summary>
+    public async Task<Registration> RegisterAsync(string name, string password) =>
+        await ReadAsync<AccountCredentials?>(new AccountCredentialsRead(name)).ConfigureAwait(false) != null
+            ? Registration.Taken : await TryRegisterAsync(name, password).ConfigureAwait(false);
+
+    private async Task<Registration> TryRegisterAsync(string name, string password)
+    {
+        // A ban outlives its account (deleting an account keeps its ban row), so a banned name is refused before it is
+        // registered again.
+        if (await UnlessBannedForRegistrationAsync(name).ConfigureAwait(false) == null) return Registration.Banned;
+        byte[] salt = RandomNumberGenerator.GetBytes(16);
+        byte[] hash = await Task.Run(() => AccountHash.Hash(password, salt)).ConfigureAwait(false);
+        return await WriteAsync<bool>(new AccountRegisterPlan(name, hash, salt, DateTime.UtcNow.ToString("O"))).ConfigureAwait(false)
+            ? Registration.Created : Registration.Taken;
+    }
+
+    /// <summary>
+    /// Sets <paramref name="replacement"/> as the password once <paramref name="current"/> matched (a banned account cannot),
+    /// and drops the account's login tokens, so a client still holding one signs in again with the new password.
+    /// </summary>
+    public async Task<bool> ChangePasswordAsync(string name, string current, string replacement)
+    {
+        if (await VerifiedAccountAsync(name, current).ConfigureAwait(false) is not { } account) return false;
+        byte[] salt = RandomNumberGenerator.GetBytes(16);
+        byte[] hash = await Task.Run(() => AccountHash.Hash(replacement, salt)).ConfigureAwait(false);
+        return await WriteAsync<bool>(new AccountPasswordPlan(account, hash, salt)).ConfigureAwait(false);
+    }
     private static Task<bool> MatchesAsync(string password, AccountCredentials existing)
         => Task.Run(() => CryptographicOperations.FixedTimeEquals(existing.Hash, AccountHash.Hash(password, existing.Salt)));
 
@@ -588,10 +618,14 @@ public sealed partial class AccountStore : IDisposable
         return WriteAsync<string>(new AccountTokenPlan(kind, account, token, now, now + 86400));
     }
 
+    /// <summary>The token's account, or null when the token is unknown or expired or the account is banned.</summary>
     private string? ResolveToken(string kind, string? token)
-        => string.IsNullOrEmpty(token) ? null : ReadSync<string?>(new AccountTokenRead(kind, token, DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
-    private Task<string?> ResolveTokenAsync(string kind, string? token)
-        => string.IsNullOrEmpty(token) ? Task.FromResult<string?>(null) : ReadAsync<string?>(new AccountTokenRead(kind, token, DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
+        => string.IsNullOrEmpty(token) ? null
+            : UnlessBanned(ReadSync<string?>(new AccountTokenRead(kind, token, DateTimeOffset.UtcNow.ToUnixTimeSeconds())), kind + " token");
+    private async Task<string?> ResolveTokenAsync(string kind, string? token)
+        => string.IsNullOrEmpty(token) ? null
+            : await UnlessBannedAsync(await ReadAsync<string?>(new AccountTokenRead(kind, token, DateTimeOffset.UtcNow.ToUnixTimeSeconds()))
+                .ConfigureAwait(false), kind + " token").ConfigureAwait(false);
 
     public void Dispose()
     {

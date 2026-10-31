@@ -14,7 +14,7 @@ namespace Ro3Emu.Server.Game;
 /// ServerOptions.GmOpenWhenEmpty is false (a Production host, docs/guide/gm-access.md). The loopback HTTP /ro3emu/gm keeps
 /// "empty = everyone" (<see cref="Allowed(ServerOptions, string?, bool)"/>).
 /// </summary>
-public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, SessionRegistry sessions, CharacterService character, SceneService scene, TaskService tasks, IServiceProvider services, ILogger<GmCommands> log)
+public sealed partial class GmCommands(IOptions<ServerOptions> options, GameData data, SessionRegistry sessions, CharacterService character, SceneService scene, TaskService tasks, IServiceProvider services, ILogger<GmCommands> log)
 {
     public const uint BroadcastNotify = 83270;
     public const uint GeneralProcGm = 30300;
@@ -109,21 +109,29 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
             services.GetRequiredService<GameLoop>().TrackRuntimeDetached("GM", () => RunAsync(session, line, loopbackTool));
             return Task.CompletedTask;
         }
-        return RunAdmittedAsync(session, line, loopbackTool);
+        return RunAdmittedAsync(session, line, loopbackTool, panelAdmin: false);
     }
 
-    private Task RunAdmittedAsync(GameSession session, string line, bool loopbackTool)
+    /// <summary>
+    /// The web panel's GM console (docs/guide/panel.md): an admin the panel signed in (an account of GmAccounts) runs
+    /// <paramref name="line"/> for <paramref name="session"/>, which may be any player's, so the session's own account
+    /// is not checked. Call it on the loop.
+    /// </summary>
+    internal Task RunForPanelAdminAsync(GameSession session, string line) =>
+        RunAdmittedAsync(session, line, loopbackTool: false, panelAdmin: true);
+
+    private Task RunAdmittedAsync(GameSession session, string line, bool loopbackTool, bool panelAdmin)
         => session.Owners is { } owners
             ? IsEventOwnerCommand(line)
-                ? owners.RunEconomicRequestAsync(session, () => RunCoreAsync(session, line, loopbackTool))
+                ? owners.RunEconomicRequestAsync(session, () => RunCoreAsync(session, line, loopbackTool, panelAdmin))
                 : IsRoleScopedCommand(line) && session.Role is { } role
-                    ? owners.RunSessionAsync("GM", [Ownership.ReservationKey.Role(role.Id)], session, () => RunCoreAsync(session, line, loopbackTool))
-                    : owners.RunSessionAsync("GM", [Ownership.ReservationKey.Realm], session, () => RunCoreAsync(session, line, loopbackTool))
-            : RunCoreAsync(session, line, loopbackTool);
+                    ? owners.RunSessionAsync("GM", [Ownership.ReservationKey.Role(role.Id)], session, () => RunCoreAsync(session, line, loopbackTool, panelAdmin))
+                    : owners.RunSessionAsync("GM", [Ownership.ReservationKey.Realm], session, () => RunCoreAsync(session, line, loopbackTool, panelAdmin))
+            : RunCoreAsync(session, line, loopbackTool, panelAdmin);
 
-    private async Task RunCoreAsync(GameSession session, string line, bool loopbackTool)
+    private async Task RunCoreAsync(GameSession session, string line, bool loopbackTool, bool panelAdmin)
     {
-        if (!Allowed(session.Account, loopbackTool))
+        if (!panelAdmin && !Allowed(session.Account, loopbackTool))
         {
             log.LogInformation("GM refused for account {Account}: {Line}", session.Account, line);
             await ReplyAsync(session, "GM commands are not enabled for this account.");
@@ -173,7 +181,7 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
             }
             catch (Exception e) when (e is FormatException or IndexOutOfRangeException or ArgumentException or OverflowException)
             {
-                reply = $"Bad parameters for op {(int)req.GmType}: {e.Message}";
+                reply = $"Bad parameters for op {OpLabel((int)req.GmType)}: {e.Message}";
             }
         }
         await session.SendGameAsync(GeneralProcGm, new GeneralGMProcRsp { Result = 0, ErrInfo = reply });
@@ -186,30 +194,57 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
             || script.ValueKind != JsonValueKind.Array)
             return $"No preset {listId}.";
         var results = new List<string>();
+        var skipped = new List<string>();
+        int steps = 0;
         foreach (var step in script.EnumerateArray())
         {
             if (step.ValueKind != JsonValueKind.Array || step.GetArrayLength() == 0) continue;
-            string name = step[0].GetString() ?? "";
+            steps++;
+            string name = step[0].ValueKind == JsonValueKind.String ? step[0].GetString()! : step[0].ToString();
             var args = step.EnumerateArray().Skip(1).Select(a => a.ValueKind == JsonValueKind.String ? a.GetString()! : a.ToString()).ToArray();
+            if (OpNumber(name) is not { } op)
+            {
+                skipped.Add($"{name} (unknown op)");
+                continue;
+            }
             try
             {
-                results.Add(OpNumber(name) is { } op ? await OpAsync(session, op, args) : $"{name}: unknown op");
+                if (await HandledOpAsync(session, op, args) is { } reply) results.Add(reply);
+                else skipped.Add(OpLabel(op));
             }
-            catch (ArgumentException e)
+            catch (Exception e) when (e is FormatException or IndexOutOfRangeException or ArgumentException or OverflowException)
             {
-                results.Add($"{name} {string.Join(',', args)}: {e.Message}");
+                results.Add($"{OpLabel(op)} {string.Join(',', args)}: {e.Message}");
             }
         }
+        if (skipped.Count > 0)
+            results.Add($"Preset {listId}: {steps - skipped.Count} of {steps} steps run. Not implemented: "
+                + string.Join(", ", skipped.GroupBy(n => n).Select(g => g.Count() > 1 ? $"{g.Key} x{g.Count()}" : g.Key)) + ".");
         return string.Join("\n", results);
     }
 
-    /// <summary>GmOpEnum value by its proto name, case-insensitively ("GmOpAddItem", "GmSetLevel"...).</summary>
-    private static int? OpNumber(string name) =>
-        GeneralGMProcReq.Descriptor.FindFieldByName("gm_type").EnumType.Values
-            .FirstOrDefault(v => string.Equals(v.Name, name, StringComparison.OrdinalIgnoreCase))?.Number;
+    /// <summary>
+    /// GmOpEnum value by its proto name, case-insensitively ("GmOpAddItem", "GmSetLevel"...), or by its number: one
+    /// preset step names its op "251".
+    /// </summary>
+    internal static int? OpNumber(string name)
+    {
+        var values = GeneralGMProcReq.Descriptor.FindFieldByName("gm_type").EnumType.Values;
+        return int.TryParse(name, NumberStyles.None, CultureInfo.InvariantCulture, out int number)
+            ? values.Any(v => v.Number == number) ? number : null
+            : values.FirstOrDefault(v => string.Equals(v.Name, name, StringComparison.OrdinalIgnoreCase))?.Number;
+    }
+
+    /// <summary>"4 GmOpStrengthen": the op number with its GmOpEnum proto name, for replies.</summary>
+    internal static string OpLabel(int op) =>
+        GeneralGMProcReq.Descriptor.FindFieldByName("gm_type").EnumType.FindValueByNumber(op) is { } value ? $"{op} {value.Name}" : $"{op}";
 
     /// <summary>One GM operation with the panel's comma-separated parameters.</summary>
-    private async Task<string> OpAsync(GameSession s, int op, string[] args)
+    private async Task<string> OpAsync(GameSession s, int op, string[] args) =>
+        await HandledOpAsync(s, op, args) ?? $"GM op {OpLabel(op)} is not implemented by the emulator.";
+
+    /// <summary>The reply of an op the emulator implements, or null when it does not.</summary>
+    private async Task<string?> HandledOpAsync(GameSession s, int op, string[] args)
     {
         switch (op)
         {
@@ -232,16 +267,20 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
             case OpClearPack:
                 return await character.ClearBagAsync(s);
             case OpFullHpMp:
-                return "HP and SP are always full (no combat yet).";
+                await character.SetHpSpAsync(s, long.MaxValue, long.MaxValue);
+                return "HP and SP full.";
             case OpSetJob:
                 return await character.SetJobAsync(s, I(args[0]));
             default:
-                return $"GM op {op} is not implemented by the emulator.";
+                return await CharacterOpAsync(s, op, args) ?? await CombatOpAsync(s, op, args) ?? await PresetOpAsync(s, op, args);
         }
     }
 
-    public static Task ReplyAsync(GameSession session, string text) =>
-        session.SendGameAsync(BroadcastNotify, new BroadCastNotify { Content = text });
+    public static Task ReplyAsync(GameSession session, string text)
+    {
+        session.GmReplies?.Add(text);
+        return session.SendGameAsync(BroadcastNotify, new BroadCastNotify { Content = text });
+    }
 
     private Dictionary<string, (string Usage, Command Run)> Commands() => _commands ??= new()
     {
@@ -342,6 +381,20 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
         ["job"] = ("<jobId>", (s, a) => Op(s, OpSetJob, a)),
         ["clearbag"] = ("", (s, a) => Op(s, OpClearPack, a)),
         ["client"] = ("<find name>", ClientDiagnostics),
+        ["fieldexp"] = ("[set <minLevel> <maxLevel> <percent> [...] | clear | reset] (in memory, until the next start)", async (s, a) =>
+        {
+            // FieldExpRates (inferred): the operator's rate for open-field kills, changed here without a restart.
+            var rewards = services.GetRequiredService<RewardService>();
+            string sub = a.Length == 0 ? "" : a[0].ToLowerInvariant();
+            if (sub == "set") rewards.SetFieldExpRules(FieldExpRates.Parse(a[1..]));
+            else if (sub == "clear") rewards.SetFieldExpRules([]);
+            else if (sub == "reset") rewards.ResetFieldExpRules();
+            else if (a.Length != 0) throw new ArgumentException("set | clear | reset");
+            await ReplyAsync(s, "Field EXP rates: " + FieldExpRates.Describe(rewards.FieldExpRules));
+        }
+        ),
+        // Ro3Emu:Testing (TEST AIDS, not original): To-Do activities open at any hour, rewards that never run out.
+        ["testing"] = ("[alwaysopen on|off | unlimited on|off | reset] (test aids, in memory until the next start)", TestingAsync),
         ["speed"] = ("<speed, 0 = normal>", async (s, a) => await ReplyAsync(s, await character.SetSpeedAsync(s, L(a[0])))),
         ["quest"] = ("[accept|finish|done <taskId> | reset]", async (s, a) => await ReplyAsync(s, a.Length == 0
             ? "Quests: " + tasks.Describe(s)
@@ -376,7 +429,7 @@ public sealed class GmCommands(IOptions<ServerOptions> options, GameData data, S
                 : await seasons.SetPlayBookAsync(I(a[0])));
         }
         ),
-        ["siege"] = ("open|close|state|seed <city> <attackGuild> <defenseGuild> (test aid)", async (s, a) =>
+        ["siege"] = ("open|close|state|prepare|objects|seed <city> <attackGuild> <defenseGuild> (test aid)", async (s, a) =>
             await ReplyAsync(s, await services.GetRequiredService<TerritoryWarsService>().SiegeGmAsync(a))),
         ["twpoint"] = ("<point> unready|ready|complete [readySeconds] [owner|self] (test aid: 30129 stronghold gameplay point)", async (s, a) =>
             await ReplyAsync(s, await services.GetRequiredService<TerritoryWarsService>().ScenePointGmAsync(s, a))),

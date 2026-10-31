@@ -408,6 +408,30 @@ public sealed class ActivitiesMessages(PraiseService praise, CasualBattleService
         {
             await dungeons.ClaimHonorAsync(session, MultiDungeonClaimHonorAwardReq.Parser.ParseFrom(body.Span));
         });
+        routes.Map(CasualBattleService.Transfer, "dungeons", async (session, msgId, body) =>
+        {
+            await casual.TransferAsync(session, DungeonTeamTransferReq.Parser.ParseFrom(body.Span));
+        });
+        routes.Map(CasualBattleService.Follow, "dungeons", async (session, msgId, body) =>
+        {
+            await casual.FollowAsync(session, DungeonTeamFollowReq.Parser.ParseFrom(body.Span));
+        });
+        routes.Map(CasualBattleService.SwapPosition, "dungeons", async (session, msgId, body) =>
+        {
+            await casual.SwapPositionAsync(session, DungeonTeamSwapPositionReq.Parser.ParseFrom(body.Span));
+        });
+        routes.Map(CasualBattleService.SetFlag, "dungeons", async (session, msgId, body) =>
+        {
+            await casual.SetFlagAsync(session, DungeonTeamSetFlagReq.Parser.ParseFrom(body.Span));
+        });
+        routes.Map(CasualBattleService.Rally, "dungeons", async (session, msgId, body) =>
+        {
+            await casual.RallyAsync(session, DungeonTeamRallyReq.Parser.ParseFrom(body.Span));
+        });
+        routes.Map(CasualBattleService.RallyReply, "dungeons", async (session, msgId, body) =>
+        {
+            await casual.RallyReplyAsync(session, DungeonTeamRallyReplyReq.Parser.ParseFrom(body.Span));
+        });
         routes.Map(PraiseService.Praise, "praise", async (session, msgId, body) =>
         {
             await praise.PraiseAsync(session, MultiDungeonPraiseReq.Parser.ParseFrom(body.Span));

@@ -29,7 +29,8 @@ public static class SdkEndpoints
     {
         app.MapGet(GateKeyPath, (Net.GateCrypto crypto) => Results.Text(crypto.PublicKeyPem, "application/x-pem-file"));
 
-        app.MapPost(LoginPath, async (HttpRequest request, CredentialLimiter limiter, AccountStore accounts, IOptions<ServerOptions> options, ILogger<AccountStore> log) =>
+        app.MapPost(LoginPath, async (HttpRequest request, CredentialLimiter limiter, AccountStore accounts, Ro3Emu.Panel.IPanelOperations panel, IOptions<ServerOptions> options,
+            ILogger<AccountStore> log) =>
         {
             if (!limiter.TryAcquire(request.HttpContext.Connection.RemoteIpAddress)) return Results.StatusCode(StatusCodes.Status429TooManyRequests);
             var form = await request.ReadFormAsync();
@@ -45,7 +46,8 @@ public static class SdkEndpoints
                 return Results.Json(new { code = 404, msg = "Conta não encontrada. Crie sua conta pelo nosso site.", message = "Conta não encontrada. Crie sua conta pelo nosso site." });
             }
             log.LogInformation("SDK login {Identity}: {Result}", account, result);
-            if (result == AccountStore.LoginResult.BadPassword)
+            // A banned account answers like a wrong password (inferred: the client has no ban code we know).
+            if (result is AccountStore.LoginResult.BadPassword or AccountStore.LoginResult.Banned)
             {
                 return Results.Json(new { code = 401, msg = "Senha incorreta.", message = "Senha incorreta." });
             }
@@ -57,6 +59,8 @@ public static class SdkEndpoints
             {
                 return Results.Json(new { code = 403, msg = "Por favor, verifique seu e-mail antes de entrar no jogo.", message = "Por favor, verifique seu e-mail antes de entrar no jogo." });
             }
+            // The account's login history on the web panel (the address only where the operator keeps addresses).
+            await panel.RecordLoginAsync(account, "game", request.HttpContext.Connection.RemoteIpAddress);
             return Results.Json(new { code = 0, data = new { token = await accounts.IssueSdkTokenAsync(account) } });
         });
 

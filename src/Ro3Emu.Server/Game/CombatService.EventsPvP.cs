@@ -85,15 +85,16 @@ public sealed partial class CombatService
                 }
                 var hit = new SkillHitInfo
                 {
-                    SrcID = attackerRole.Id, SkillId = skillId, ShowPoint = show,
-                    SessionId = session, SrcElement = 1, Split = HitSplit(row),
+                    SrcID = attackerRole.Id, SkillId = skillId, ShowPoint = show, Split = HitSplit(row),
+                    SessionId = session, SrcElement = AttackElement(source, row),
                     Dsts = { new DamageInfo { DstID = targetRole.Id, Damage = damage, SheildDamage = shieldDamage, HitResult = result,
                     DstElement = 1, IsDead = hp == 0 } }
                 };
                 var sourceViewers = CurrentPlayerHit(source, target, attackerRole, targetRole, sceneId)
                     ? _world.Viewers(source).Append(source) : Enumerable.Empty<GameSession>();
-                foreach (var viewer in sourceViewers.Concat(_world.Viewers(target)).Append(target).Distinct())
-                    await viewer.SendGameAsync(SkillHit, hit);
+                var hitViewers = sourceViewers.Concat(_world.Viewers(target)).Append(target).Distinct().ToArray();
+                await SendHitBulletsAsync(hitViewers, row, hit, attackerRole.Id);
+                foreach (var viewer in hitViewers) await viewer.SendGameAsync(SkillHit, hit);
                 if (!ReferenceEquals(target.Role, targetRole)) continue;
                 await _character.SetHpSpAsync(target, null, null); // publish current HP after the serialized reservation
                 if (!ReferenceEquals(target.Role, targetRole)) continue;
@@ -154,10 +155,16 @@ public sealed partial class CombatService
     {
         var attack = _character.Stats(source); var defend = _character.Stats(target);
         var a = new Fighter(attack[AttributeId.Atk], attack[AttributeId.Matk], attack[AttributeId.Hit], attack[AttributeId.Cri],
-            source.Progress!.Level, 1)
-        { Stats = attack };
+            source.Progress!.Level, AttackElement(source, row))
+        {
+            Stats = attack,
+            FixedDamage = (source.GmCombat & GmCombatSwitches.FixedDamage) != 0,
+        };
         var b = new Fighter(0, 0, 0, 0, target.Progress!.Level, 1)
-        { Def = defend[AttributeId.Def], Mdef = defend[AttributeId.Mdef], Flee = defend[AttributeId.Flee], ResCri = defend[AttributeId.ResCri] };
+        {
+            Def = defend[AttributeId.Def], Mdef = defend[AttributeId.Mdef], Flee = defend[AttributeId.Flee], ResCri = defend[AttributeId.ResCri],
+            FixedDamage = (target.GmCombat & GmCombatSwitches.FixedDamage) != 0,
+        };
         var (damage, result) = Damage(a, b, row, bonusCrit: GuardianPetRules.CriticalChance(row),
             forceCrit: GuardianPetRules.CriticalAtHp(row, defend[AttributeId.Hp], defend[AttributeId.MaxHp]));
         damage = GuardianPetRules.DirectDamage(row, damage);

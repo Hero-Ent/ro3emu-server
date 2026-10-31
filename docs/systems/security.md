@@ -14,6 +14,7 @@ address (local play), and to every interface otherwise (`ServerOptions.ListenAdd
 | Micro gate (20000) | Phonest frames | the client's login services (role list, friends, mail, ranks...) |
 | Game gate (33100) | Phonest frames | the game itself |
 | Voice (off; `Ro3Emu:Voice:Port`) | the voice relay's own frames | team voice |
+| Web panel (5381; `Ro3Emu:Panel`) | plain HTTP (Kestrel), its own pages and `/api/` only | players and admins in a browser; see [web panel](../guide/panel.md) for its sessions, CSRF, headers and the https proxy setup |
 
 ### HTTP endpoints
 
@@ -23,6 +24,7 @@ address (local play), and to every interface otherwise (`ServerOptions.ListenAdd
 | `GET` server list, `GET /ro3emu/gate-key.pem` | public | the gate's RSA public key |
 | `GET /ro3emu/status` | public | the player count only, from the loop's census |
 | `POST /ro3emu/account/delete-role` | public, rate limited | needs the account's password; refuses a role that is in the world |
+| `POST /gift-card/use/v2` | public, rate limited | the client's gift-code redemption; needs the account's engine sign (the micro-gate login token); see [gift codes](gift-codes.md) |
 | `/ro3emu/gm`, `/ro3emu/metrics*`, `/ro3emu/online`, `/ro3emu/reports`, `/ro3emu/shutdown` | loopback only | answer 404 to any other address |
 
 A reverse proxy on the same machine makes every request arrive from loopback. Do not forward the loopback-only paths.
@@ -35,6 +37,9 @@ A reverse proxy on the same machine makes every request arrive from loopback. Do
   set. Behind a reverse proxy every player shares the proxy's address, so raise the limit there.
 - `/sdk/login` returns a token. The client presents it to `LoginService.verifySdk` on the micro gate, which binds
   the account to that connection.
+- A banned account cannot sign in. The web panel bans through the server, which closes the account's game session at
+  once; the server reads the `account_ban` table on every password, token and gate-bind check, and a ban is refused
+  like a wrong credential. See [account bans](account-bans.md).
 - The client sends the password over the HTTP port. That is plain HTTP unless the client was patched with an
   `https://` server address and a TLS-terminating proxy stands in front of the server. Tell players not to reuse a
   password they use elsewhere.
@@ -67,6 +72,11 @@ Every client is untrusted:
 - **Every request** is validated against the client's configuration and refused with an `ErrorCodes` value.
   Game state changes only on the game loop.
 
+The web panel's admin area has its own staff roles (Moderator, GM, Admin: `Ro3Emu:Panel:Roles`, `GmAccounts` as
+Admin, or given on the panel by an Admin); every API route checks its role. GM and Admin accounts must use two-factor
+authentication when the panel listens on a public address (`Ro3Emu:Panel:RequireAdmin2FA`). See
+[web panel](../guide/panel.md#staff-roles).
+
 GM commands (`!` chat lines, the GM panel, 1031/1034) are limited to `Ro3Emu:GmAccounts`. An empty list means
 everyone outside Production. See [GM access](../guide/gm-access.md), and set the list on any public server.
 
@@ -74,7 +84,7 @@ everyone outside Production. See [GM access](../guide/gm-access.md), and set the
 
 `DataDir` holds:
 
-- `ro3emu.db`: accounts, password hashes and every role;
+- `ro3emu.db`: accounts, password hashes and every role, and the panel's two-factor secrets;
 - `gate_rsa_private.pem`: the gate key;
 - the logs. With `Ro3Emu:TrafficLog` on, these include the game traffic of the listed accounts.
 

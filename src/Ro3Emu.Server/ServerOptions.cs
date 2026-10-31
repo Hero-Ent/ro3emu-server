@@ -31,6 +31,17 @@ public sealed class ServerOptions
     /// Reconstructed/dungeon-monsters.json (inferred, marked "odtworzone"); off refuses them as before.</summary>
     public bool ReconstructedDungeons { get; set; } = true;
 
+    /// <summary>Field monsters whose Ragnarok Online 1 counterpart is aggressive (rAthena pre-renewal mob_db, listed in
+    /// Reconstructed/ro1-aggressive-monsters.json) attack on sight like the client's AIConfig 20000004 monsters. An RO1
+    /// reference, not client evidence (inferred); on by default as a trial (owner's decision, 28.10), off changes nothing.</summary>
+    public bool Ro1AggressiveMonsters { get; set; } = true;
+
+    /// <summary>Monsters whose Ragnarok Online 1 counterpart is much tougher than the client makes them get the RO1 HP
+    /// (Reconstructed/ro1-monster-hp.json: the Pupa, 4 HP in the client, 427 here). An RO1 reference, not
+    /// client evidence (inferred). Off by default: the client cuts their HP on purpose (_kAttriScale), so the 1:1 server
+    /// keeps it; an operator who wants the RO1 feel turns it on.</summary>
+    public bool Ro1MonsterHp { get; set; }
+
     /// <summary>Game-message JSON log (data/logs/traffic-*.jsonl): "off", "on" or a comma-separated account list.
     /// Formatting and writes run off the game loop; keep it off for load tests and production.</summary>
     public string TrafficLog { get; set; } = "off";
@@ -97,6 +108,9 @@ public sealed class ServerOptions
     /// </summary>
     public bool? GmOpenWhenEmpty { get; set; }
 
+    /// <summary>The web control panel on its own port (docs/guide/panel.md).</summary>
+    public Ro3Emu.Panel.PanelOptions Panel { get; set; } = new();
+
     /// <summary>
     /// Website group that also grants GM in game: an account whose web_account_meta.group_id is at least this value is a
     /// GM even when it is not in <see cref="GmAccounts"/> (the site's own scale: 10 = Game Master, 99 = Administrator).
@@ -116,6 +130,12 @@ public sealed class ServerOptions
     /// <summary>In-game bug reports (FeedbackService, docs/guide/feedback.md).</summary>
     public FeedbackOptions Feedback { get; set; } = new();
 
+    /// <summary>Database copies in DataDir/backups (DatabaseBackup).</summary>
+    public BackupOptions Backup { get; set; } = new();
+
+    /// <summary>How long economic receipts keep their payload and outcome bytes (ReceiptRetention).</summary>
+    public ReceiptRetentionOptions ReceiptRetention { get; set; } = new();
+
     /// <summary>
     /// Credential checks (SDK login, character deletion) one remote address may make per minute; past it the server
     /// answers 429 without hashing. Each check costs a 100 000-round PBKDF2 hash, and logins register accounts.
@@ -124,7 +144,7 @@ public sealed class ServerOptions
     /// </summary>
     public int LoginAttemptsPerMinute { get; set; } = 20;
 
-    /// <summary>Tests: the credential limit applies to loopback too.</summary>
+    /// <summary>Tests: the credential limit and the gift code address limit apply to loopback too.</summary>
     public bool LoginLimitIncludesLoopback { get; set; }
 
     /// <summary>
@@ -132,6 +152,14 @@ public sealed class ServerOptions
     /// When null, ServerHost decides: false for the real server, true for test hosts.
     /// </summary>
     public bool? AllowInGameRegistration { get; set; }
+
+    /// <summary>
+    /// Gift code attempts (POST /gift-card/use/v2, docs/systems/gift-codes.md) one remote address, and separately one
+    /// account, may make per minute; past it the server answers the refusal code GiftCardRateLimited without looking
+    /// the code up. Loopback is exempt from the address budget, as for <see cref="LoginAttemptsPerMinute"/>, but not
+    /// from the account budget. Behind a reverse proxy every player shares the proxy's address, so raise this there.
+    /// </summary>
+    public int GiftCodeAttemptsPerMinute { get; set; } = 10;
 
     /// <summary>Team voice relay proof of concept (Voice/, docs TBD). Off until a port is set.</summary>
     public VoiceOptions Voice { get; set; } = new();
@@ -181,6 +209,21 @@ public sealed class ServerOptions
     public int ScriptedScenePacePercent { get; set; } = 100;
 
     /// <summary>
+    /// Fewer of one monster on one map (Ro3Emu:SpawnLimits). Empty by default: every spawn pool group creates as many as the
+    /// client's own scene data says (docs/systems/monster-ai.md). A rule only lowers the count a pool group rolls for its NPC
+    /// at the first spawn of a map line; respawns replace each defeated monster one for one.
+    /// </summary>
+    public List<SpawnLimitRule> SpawnLimits { get; set; } = [];
+
+    /// <summary>
+    /// More (or less) EXP from the monsters of the open field, by the killer's base level (Ro3Emu:FieldExpRates). Empty by
+    /// default: a kill pays what the client's drop tables say (docs/systems/monster-ai.md). The first rule whose level range
+    /// holds the killer's level scales that kill's Base EXP, and the Job EXP that equals it, by its percent. (inferred: the
+    /// original had no such knob.)
+    /// </summary>
+    public List<FieldExpRule> FieldExpRates { get; set; } = [];
+
+    /// <summary>
     /// (inferred) Star Cores drop for roles with the Astral Level open (ParagonService.StarCoreDrops). The client data gives
     /// them no source; false turns the reconstructed drop off.
     /// </summary>
@@ -207,6 +250,28 @@ public sealed class ServerOptions
 
     /// <summary>Boss special skills (BossSkillSets, MonsterService.BossSkills): the scheduler's inferred numbers.</summary>
     public BossSkillOptions BossSkills { get; set; } = new();
+
+    /// <summary>
+    /// TEST AIDS, not original behaviour (Ro3Emu:Testing, docs/guide/hosting.md): To-Do activities open at any hour and
+    /// rewards that never run out, so testers need not wait for a weekday or a weekly reset. All off by default; GM
+    /// "!testing" changes them in memory.
+    /// </summary>
+    public TestingOptions Testing { get; set; } = new();
+}
+
+/// <summary>
+/// Switches for test realms (Game/TestingSwitches.cs). None of them is the original game's behaviour; the server logs a
+/// warning at startup while one is on.
+/// </summary>
+public sealed class TestingOptions
+{
+    /// <summary>Every To-Do activity (DailyActivityConfig) counts as open now, any weekday and hour: its occurrence repeats
+    /// back to back with its own length, phases included. The Guild League and Territory Wars rows keep their calendars.</summary>
+    public bool AlwaysOpen { get; set; }
+
+    /// <summary>Reward allowances and attempt counters never run out: dungeon reward counts (Realm of the Gods, Phantom
+    /// Realm), MVP daily reward counts, the Commendation Vault extra awards and Dodo's Request.</summary>
+    public bool UnlimitedRewards { get; set; }
 }
 
 /// <summary>
@@ -251,6 +316,24 @@ public sealed class BossSkillOptions
 
     /// <summary>Life of a summoned minion without a self-destruct born buff.</summary>
     public int SummonLifeMs { get; set; } = 30000;
+}
+
+/// <summary>
+/// Compaction of old economic receipts (Accounts/ReceiptRetention.cs, docs/guide/hosting.md). Every row, hash, child
+/// receipt, revision, ledger leg and source claim stays; only the payload and outcome bytes of receipts older than
+/// <see cref="Days"/> are dropped.
+/// </summary>
+public sealed class ReceiptRetentionOptions
+{
+    /// <summary>Age in days after which a receipt is compacted; 0 keeps every receipt whole. A compacted receipt still
+    /// replays (by its intent hash), so the window only bounds how far back the offline audit re-checks intents.</summary>
+    public int Days { get; set; } = 2;
+
+    /// <summary>Receipts compacted per writer transaction.</summary>
+    public int BatchSize { get; set; } = 500;
+
+    /// <summary>Minutes between compaction runs (the first runs a few minutes after startup).</summary>
+    public int IntervalMinutes { get; set; } = 60;
 }
 
 /// <summary>In-game bug reports: the menu's Feedback button and "/bug" in chat (FeedbackService).</summary>
@@ -305,6 +388,30 @@ public sealed class FeedbackOptions
 
     /// <summary>Minimum seconds between two reports of one account.</summary>
     public int CooldownSeconds { get; set; } = 5;
+
+    /// <summary>
+    /// A Discord channel webhook (https://discord.com/api/webhooks/...): each stored report is also posted there. Unset
+    /// keeps reports in the file only. The URL lets anyone post to that channel, so keep it out of committed config.
+    /// </summary>
+    public string? DiscordWebhookUrl { get; set; }
+}
+
+/// <summary>
+/// Database copies (DatabaseBackup): one at start and one every <see cref="IntervalHours"/>. The receipt tables make the
+/// database grow with play, and every copy is a whole database, so all but the newest <see cref="Uncompressed"/> are
+/// gzip-compressed (about a quarter of the size).
+/// </summary>
+public sealed class BackupOptions
+{
+    /// <summary>Copies kept, compressed or not; older ones are deleted.</summary>
+    public int Keep { get; set; } = 20;
+
+    /// <summary>Hours between two copies.</summary>
+    public double IntervalHours { get; set; } = 6;
+
+    /// <summary>Newest copies left as plain .db files, ready to restore or open; at least 1. Set it to
+    /// <see cref="Keep"/> to compress nothing.</summary>
+    public int Uncompressed { get; set; } = 2;
 }
 
 /// <summary>
@@ -434,4 +541,22 @@ public sealed class OpenContentOptions
     public bool ForcesActivity(long activityId) => Enabled && Activities.Contains(activityId);
     public bool OpensStageActivities => Enabled && SeasonStageActivities;
     public bool ServerDayFree => Enabled && IgnoreServerDay;
+}
+
+/// <summary>One <see cref="ServerOptions.SpawnLimits"/> rule: on the map <see cref="Scene"/>, at most <see cref="Max"/> of the
+/// NPC <see cref="Npc"/> spawn from its pool group (a group that rolls fewer keeps its count).</summary>
+public sealed class SpawnLimitRule
+{
+    public long Scene { get; set; }
+    public int Npc { get; set; }
+    public int Max { get; set; }
+}
+
+/// <summary>One <see cref="ServerOptions.FieldExpRates"/> rule: killers of base level <see cref="MinLevel"/> to
+/// <see cref="MaxLevel"/> get <see cref="Percent"/> percent of the EXP a field monster pays (100 leaves it as it is).</summary>
+public sealed class FieldExpRule
+{
+    public int MinLevel { get; set; }
+    public int MaxLevel { get; set; }
+    public int Percent { get; set; } = 100;
 }

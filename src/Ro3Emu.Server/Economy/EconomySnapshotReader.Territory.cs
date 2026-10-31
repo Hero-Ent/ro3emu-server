@@ -11,7 +11,11 @@ public static partial class EconomySnapshotReader
     {
         private void ReadTerritoryRole(JsonElement state, long role, string key)
         {
-            Fields(state, "Epoch Seasons Camp LastCampChange Honor Valor Fatigue FatigueKills LastFatigue Donated Donations WorldLandClaims Pending Paid");
+            Fields(state, "Epoch Seasons Camp LastCampChange Honor Valor Fatigue FatigueKills LastFatigue Donated Donations WorldLandClaims Pending Paid Glory GlorySeasons");
+            // Battle Merit: counters and claimed rank markers only; its points are currency 15 in the purse.
+            if (Try(state, "Glory", out var glory)) Fields(glory, "Epoch Points Rank Claimed Day DayGain Counts");
+            if (Try(state, "GlorySeasons", out var glorySeasons))
+                foreach (var season in Properties(glorySeasons)) Fields(season.Value, "Epoch Points Rank Claimed Day DayGain Counts");
             if (!Try(state, "Pending", out var pending)) return;
             foreach (var grantSet in Properties(pending))
             {
@@ -65,7 +69,7 @@ public static partial class EconomySnapshotReader
         private readonly HashSet<string> _activeWarsEpochs = [];
         private void DecodeWarsWorld(JsonElement state, string key, bool archived)
         {
-            Fields(state, "Epoch LastStage Owners Rounds Battles Results SiegeHistory SiegeRuns Donations RuleResults WorldDrops NextWorldDropId WorldActivityRespawns WorldActivityOccurrences WorldPickupOccurrences");
+            Fields(state, "Epoch LastStage Owners Rounds Battles Results SiegeHistory SiegeRuns Donations RuleResults WorldDrops NextWorldDropId WorldActivityRespawns WorldActivityOccurrences WorldPickupOccurrences GlorySettle");
             string epoch = String(state, "Epoch");
             if (archived && (epoch.Length == 0 || _activeWarsEpochs.Contains(epoch)))
             { Issue(EconomyIssueKind.Coverage, key, "Archive epoch absent or duplicates active state."); return; }

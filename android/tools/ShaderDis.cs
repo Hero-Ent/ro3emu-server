@@ -42,7 +42,7 @@ foreach (var file in files)
             Console.WriteLine($"{r,5}: {Convert.ToHexString(e.AsSpan(r, Math.Min(32, e.Length - r)))}  {new string(e.AsSpan(r, Math.Min(32, e.Length - r)).ToArray().Select(c => c >= 32 && c < 127 ? (char)c : '.').ToArray())}");
         return;
     }
-    var keywordNames =Regex.Matches(Regex.Match(text, @"m_KeywordNames:\s*\n((?:\s*- .*\n)+)").Groups[1].Value, @"- (.*)").Select(m => m.Groups[1].Value.Trim()).ToList();
+    var keywordNames = Regex.Matches(Regex.Match(text, @"m_KeywordNames:\s*\n((?:\s*- .*\n)+)").Groups[1].Value, @"- (.*)").Select(m => m.Groups[1].Value.Trim()).ToList();
     var dir = Path.Combine(outDir, Regex.Replace(name, @"[^\w.-]+", "_"));
     Directory.CreateDirectory(dir);
     var index = new StringBuilder($"# {name}: {count} blob entries\n");

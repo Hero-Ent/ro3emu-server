@@ -101,6 +101,41 @@ public sealed partial class CombatService
             await DashAsync(s, action);
             if (!CurrentCastMap(s, action)) return;
         }
+        if (OwnSkillLanded != null && OwnSkillAdmit?.Invoke(s, action.Request.SkillId) != null)
+        {
+            await OwnSkillLanded(s, row);
+            return;
+        }
+        if (Script(row) == "Resurrection")
+        {
+            var target = FindPlayer(s, action.Request.TargetId, dead: true);
+            if (target == null || target.SceneLoading || _buffs.HasForbidden(target, ForbiddenState.Revive)
+                || s.WorldState.ResurrectionCastId != action.Id
+                || Distance(s.Position, target.Position) > Range(row) + 1.5f) return;
+            s.WorldState.ResurrectionCastId = 0;
+            if (action.Request.SkillId == PublicSkill("WorldTreeSkillId"))
+            {
+                if (ReviveItemSkill != null && await ReviveItemSkill(s, target, row))
+                    await _buffs.NotifyWorldTreeReviveAsync(s, target.Role!.Name);
+            }
+            else if (ReviveOffer != null) await ReviveOffer(s, target, row);
+            return;
+        }
+        if (await CreateSkillObjectAsync(s, action))
+        {
+            // A field resolves its effects later; "After using [Meteor Storm] ..." talent procs centre on its target point.
+            if (!action.Request.IsExtraSkill)
+                foreach (var handler in CastResolved)
+                {
+                    if (!CurrentCastMap(s, action)) break;
+                    await handler(s, action, [], new SkillHitInfo());
+                }
+            return;
+        }
+        if (!CurrentCastMap(s, action)) return;
+        // SkillConfig._bMovement is enum_SkillLockMoveType (may the caster walk while casting), not a displacement.
+        await MoveCasterAsync(s, action);
+        if (!CurrentCastMap(s, action)) return;
         var center = impact?.AtCaster == true ? s.Position.Clone() : action.Request.TargetPos ?? action.Origin;
         await ApplyEffectsAsync(s, action, center, impact: impact);
         if (impact is not { First: false } && SkillMechanics.For(row) is { ResetCooldown: { Count: > 0 } resets } && CurrentCastMap(s, action))
@@ -269,79 +304,6 @@ public sealed partial class CombatService
                     alreadySlowed, castingRole.Id, CanApplyMoreEffects);
         }
         if (!CanApplyMoreEffects()) return; // player publication can yield before any monster hit is committed
-        int bulletEffect = BulletEffect(show);
-        if (bulletEffect > 0 && field == null && WolfRunMs(bulletEffect, 0) != null)
-        {
-            // A Wolf-track "bullet" (m_eBulletType 8) is the owner's Wolf pendant charging (verified in the client:
-            // LC_PerformEffect_Mgr.PlayPendantShow -> LC_Pendant_Manager.PendantPerform -> LC_Pendant_Wolf Perform). It is a
-            // SkillEffectDisplayNotify of type 5 (enum_DisplayEffectType.PendantShow); as a SkillFixTimeBulletNotify it
-            // drew nothing (Wolf has no bullet track), so unmounted Warg Strike showed no wolf running to the target.
-            bool highLevel = GameData.Int(row, "_iSkillEffectLevel") > 0;
-            int run = 0;
-            foreach (var target in targets)
-            {
-                await SendSkillEffectAsync(s, new SkillEffectDisplayNotify
-                {
-                    SourceId = s.Role.Id, MasterId = s.Role.Id, TargetId = target.Uid, TargetPos = target.Pos.Clone(),
-                    EffectId = bulletEffect, EffectType = 5, SkillId = (int)GameData.Int(row, "_iID"),
-                }, highLevel);
-                run = Math.Max(run, WolfRunMs(bulletEffect, Distance(s.Position, target.Pos)) ?? 0);
-            }
-            // The damage lands when the wolf reaches the target (inferred from m_kBulletWolf's speed/time).
-            if (run > 50 && targets.Count > 0)
-            {
-                await Task.Delay(Math.Min(run, 1000));
-                if (!CanApplyMoreEffects()) return;
-            }
-        }
-        else if (bulletEffect > 0 && field == null)
-        {
-            var origin = action.Turret?.Origin ?? action.Origin;
-            float maxDist = targets.Select(t => Distance(origin, t.Pos))
-                .Concat(playerTargets.Select(p => Distance(origin, p.Position)))
-                .DefaultIfEmpty(10f).Max();
-            int flyTime = BulletLifeTime(bulletEffect, maxDist);
-            bool highLevel = GameData.Int(row, "_iSkillEffectLevel") > 0;
-            foreach (var target in targets)
-            {
-                var bullet = new SkillFixTimeBulletNotify
-                {
-                    SourceId = action.Turret?.SourceId ?? action.SourceId,
-                    TargetId = target.Uid,
-                    EffectId = bulletEffect,
-                    FixedTime = flyTime,
-                    Split = split,
-                    TargetPosition = target.Pos,
-                    SkillConfigId = (int)GameData.Int(row, "_iID"),
-                    MasterId = action.SourceId,
-                    SourcePosition = action.Turret?.Origin ?? action.Origin,
-                    StartTimestampMs = Now,
-                };
-                await SendSkillBulletAsync(s, bullet, highLevel: highLevel);
-            }
-            foreach (var pTarget in playerTargets)
-            {
-                var bullet = new SkillFixTimeBulletNotify
-                {
-                    SourceId = action.Turret?.SourceId ?? action.SourceId,
-                    TargetId = pTarget.Role!.Id,
-                    EffectId = bulletEffect,
-                    FixedTime = flyTime,
-                    Split = split,
-                    TargetPosition = pTarget.Position,
-                    SkillConfigId = (int)GameData.Int(row, "_iID"),
-                    MasterId = action.SourceId,
-                    SourcePosition = action.Turret?.Origin ?? action.Origin,
-                    StartTimestampMs = Now,
-                };
-                await SendSkillBulletAsync(s, bullet, highLevel: highLevel);
-            }
-            if (flyTime > 50 && (targets.Count > 0 || playerTargets.Length > 0))
-            {
-                await Task.Delay(flyTime);
-                if (!CanApplyMoreEffects()) return;
-            }
-        }
         // Allies a caller chose (a talent heal's proc row has no selector template) make the cast friendly.
         bool friendly = chosenAllies != null || Relation(row, true, true) || Relation(row, true);
         var allies = new List<GameSession>();
@@ -363,14 +325,19 @@ public sealed partial class CombatService
             }
         }
         var stats = _character.Stats(s);
-        var attacker = new Fighter(stats[103], stats[104], stats[109], stats[111], s.Progress!.Level, 1) { Stats = stats };
+        int attackElement = AttackElement(s, row);
+        var attacker = new Fighter(stats[103], stats[104], stats[109], stats[111], s.Progress!.Level, attackElement)
+        {
+            Stats = stats,
+            FixedDamage = (s.GmCombat & GmCombatSwitches.FixedDamage) != 0,
+        };
         var hit = new SkillHitInfo
         {
             SrcID = field?.Uid ?? action.SourceId, SkillId = action.Request.SkillId, SessionId = action.Id,
-            RootCtxGuid = action.Id, ComboIndex = action.Request.ComboIndex, ShowPoint = HitEffect(show),
-            SrcElement = (int)Math.Max(1, GameData.Int(row, "_iEleType")),
+            RootCtxGuid = action.Id, ComboIndex = action.Request.ComboIndex, ShowPoint = HitEffect(GameData.Int(row, "_iScriptShow")),
             // Heals on allies are one number; damage segments only when an enemy is hit.
-            Split = targets.Count > 0 ? split : 1,
+            Split = targets.Count > 0 ? HitSplit(row) : 1,
+            SrcElement = attackElement,
         };
         var killed = new List<MonsterUnit>();
         var doubles = new List<(MonsterUnit Target, long Amount, DamageHitResult Result)>();
@@ -429,10 +396,7 @@ public sealed partial class CombatService
                             catch (Exception ex) { _log.LogError(ex, "Monster damage callback failed for {Uid}", target.Uid); }
                         }
                     long extraShown = doubles.Where(d => d.Target == target).Sum(d => d.Amount);
-                    // A turret's hit may show a number of its own (the airship's cannon: about 9.9 million in the official video).
-                    long shownDamage = action.Turret is { Shown: > 0 } turretShot
-                        ? turretShot.Shown - TurretShownSpread + Rolls.Proc(2 * TurretShownSpread + 1) : amount - extraShown;
-                    hit.Dsts.Add(new DamageInfo { DstID = target.Uid, Damage = shownDamage, HitResult = result, DstElement = target.Template.Element, IsDead = target.Hp == 0 && extraShown == 0 });
+                    hit.Dsts.Add(new DamageInfo { DstID = target.Uid, Damage = amount - extraShown, HitResult = result, DstElement = target.Template.Element, IsDead = target.Hp == 0 && extraShown == 0 });
                 }
                 if (CanApplyMoreEffects())
                     foreach (var tuple in Tuples(row, "_kBuff2"))
@@ -507,7 +471,9 @@ public sealed partial class CombatService
                 }
                 if (CurrentCaster() && hit.Dsts.Any(d => d.HitResult != DamageHitResult.Miss)) await _buffs.RecoverEnergyOnHitAsync(s, row);
                 var sourceViewers = CurrentCaster() ? _world.Viewers(s).Append(s) : Enumerable.Empty<GameSession>();
-                foreach (var viewer in processed.SelectMany(t => t.Viewers).Concat(sourceViewers).Distinct()) await viewer.SendGameAsync(SkillHit, hit);
+                var hitViewers = processed.SelectMany(t => t.Viewers).Concat(sourceViewers).Distinct().ToArray();
+                await SendHitBulletsAsync(hitViewers, row, hit, castingRole.Id);
+                foreach (var viewer in hitViewers) await viewer.SendGameAsync(SkillHit, hit);
                 if (doubles.Count > 0)
                 {
                     // The Double Attack hit: the same swing's message again, its own number in the basic attack's font.
@@ -516,7 +482,7 @@ public sealed partial class CombatService
                     twice.Split = 1;
                     foreach (var (target, extraAmount, extraResult) in doubles)
                         twice.Dsts.Add(new DamageInfo { DstID = target.Uid, Damage = extraAmount, HitResult = extraResult, DstElement = target.Template.Element, IsDead = target.Hp == 0 });
-                    foreach (var viewer in processed.SelectMany(t => t.Viewers).Concat(sourceViewers).Distinct()) await viewer.SendGameAsync(SkillHit, twice);
+                    foreach (var viewer in hitViewers) await viewer.SendGameAsync(SkillHit, twice);
                 }
                 if (CurrentCaster() && field?.Trap == true)
                     await ToPlayerAndViewersAsync(s, TrapDamage, new TrapDamageNtf { SkillConfigId = action.Request.SkillId, DamageValue = hit.Dsts.Sum(d => d.Damage), Pos = center.Clone() });

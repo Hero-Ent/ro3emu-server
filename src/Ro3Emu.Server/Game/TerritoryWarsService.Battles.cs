@@ -41,6 +41,16 @@ public sealed partial class TerritoryWarsService
         public long Healed { get; set; }
         public long Score { get; set; }
         public int Kills { get; set; }
+        /// <summary>Siege assists (TerritoryWarsService.QuestTargets.cs).</summary>
+        public int Assists { get; set; }
+        /// <summary>Siege: an attacker's damage to the castle's objects (AttackCityValue, TerritoryWarsService.SiegeObjects.cs).</summary>
+        public long CityDamage { get; set; }
+        /// <summary>Siege: a defender's damage to the attackers' ram and ladders (DefenseValue,
+        /// TerritoryWarsService.SiegeUnits.cs).</summary>
+        public long DefenseValue { get; set; }
+        /// <summary>Damage dealt to and kills of the other side's war machines (TerritoryWarsService.MachineDamage.cs).</summary>
+        public long MachineDamage { get; set; }
+        public int MachineKills { get; set; }
         public int Deaths { get; set; }
         public long DeadUntil { get; set; }
         public long Joined { get; set; }
@@ -75,8 +85,12 @@ public sealed partial class TerritoryWarsService
             : owner.state.Epoch == Epoch && owner.state.Battles.TryGetValue(Key, out var current) ? current
               : throw new InvalidOperationException("Territory battle has no active or retiring epoch state.");
         internal Dictionary<int, MonsterUnit> Actors { get; } = new();
+        internal CommandBoard Command { get; } = new();
         internal HashSet<long> CapturedActors { get; } = new();
         internal Dictionary<int, ScenePointUnit> ScenePointActors { get; } = new();
+        /// <summary>The SummonPlatforms' rings and the vehicles they raised, by platform point (TerritoryWarsService.SummonPlatforms.cs).</summary>
+        internal Dictionary<int, PlatformRing> PlatformRings { get; } = [];
+        internal Dictionary<int, VehicleUnit> PlatformVehicles { get; } = [];
         internal bool Spawning;
     }
     private sealed class QueueEntry
@@ -320,6 +334,8 @@ public sealed partial class TerritoryWarsService
             return SiegeCanHit(s, m, siege);
         if (s.TerritoryBattle is not { } b || m.InstanceId != b.Room.Id) return true;
         if (!Active(b) || !Member(s, b)) return false;
+        // A war machine of another guild only: the territory relation is the guild's (TerritoryWarsService.WarRooms).
+        if (MachineGuild(m) is { } guild) return guild != b.State.Players[s.Role!.Id].Guild;
         var point = b.Actors.FirstOrDefault(x => x.Value == m);
         return point.Value == null || b.State.Points[point.Key].Owner != Own(s)!.Id;
     }
@@ -335,6 +351,7 @@ public sealed partial class TerritoryWarsService
         await SendScenePointsAsync(s, b);
         await SyncSiegeAsync(s);
         await SendMarkersAsync(s);
+        await SendCommandBoardAsync(s);
         await UpdateFieldBuffsAsync(b);
     }
     private DungeonBaseInfoNotify BaseInfo(Battle b)
@@ -606,6 +623,7 @@ public sealed partial class TerritoryWarsService
             { if (!s.SceneLoading && s.TerritoryBattle == b && !Member(s, b)) await _instances.LeaveAsync(s); });
             await SpawnObjectivesAsync(b);
             await SpawnScenePointsAsync(b);
+            await PlatformClockAsync(b, elapsed);
             foreach (var p in r.Points.Values.Where(p => !p.Crystal && _clock.Now >= p.GuardUntil))
             {
                 var groups = b.Room.ActiveMembers.Select(m => m.Session).Where(s => !s.Dead && Member(s, b)

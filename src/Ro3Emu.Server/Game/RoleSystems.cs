@@ -172,6 +172,8 @@ public sealed class RoleSystems(Maps.World world, ChatService chat, CharacterSer
     internal async Task MovedAsync(GameSession session, WalkReq walk)
     {
         await world.MoveAsync(session, walk);
+        await territory.VehicleMovedAsync(session, walk); // a driver's walk is its vehicle's
+        await territory.PlatformMovedAsync(session); // a SummonPlatform activator who walks off
         await gathering.PlayerMovedAsync(session);
         combat.PlayerMoved(session);
         await emoji.PlayerMovedAsync(session);
@@ -210,6 +212,7 @@ public sealed class RoleSystems(Maps.World world, ChatService chat, CharacterSer
         await step("festival", () => festival.LeaveRoleAsync(session));
         await step("dungeon match", () => dungeonMatches.LeaveRoleAsync(session));
         session.DungeonSoloMatch = false;
+        session.GmAllFunctionsOpen = false;
         await step("timed battle", () => timedBattles.LeaveRoleAsync(session));
         session.EventFaction = 0;
         await step("instance", () => instances.AbandonAsync(session));

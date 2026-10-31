@@ -411,11 +411,11 @@ public sealed class InstanceService
 
     /// <summary>One no-respawn monster tracked for settlement and final room cleanup.</summary>
     public Task<MonsterUnit?> SpawnAsync(Room room, int npcId, MapPoint point,
-        int hpRatio = 10000, int damageRatio = 10000, MonsterTemplate? customTemplate = null)
-        => _loop.TrackAsync("room spawn", () => SpawnCoreAsync(room, npcId, point, hpRatio, damageRatio, customTemplate));
+        int hpRatio = 10000, int damageRatio = 10000, MonsterTemplate? customTemplate = null, bool grounded = true)
+        => _loop.TrackAsync("room spawn", () => SpawnCoreAsync(room, npcId, point, hpRatio, damageRatio, customTemplate, grounded));
 
     private async Task<MonsterUnit?> SpawnCoreAsync(Room room, int npcId, MapPoint point,
-        int hpRatio, int damageRatio, MonsterTemplate? customTemplate)
+        int hpRatio, int damageRatio, MonsterTemplate? customTemplate, bool grounded)
     {
         int generation;
         lock (room.Gate)
@@ -426,7 +426,8 @@ public sealed class InstanceService
         }
         try
         {
-            var actor = await _monsters.SpawnSingleAsync(room.SceneEntry, npcId, point, room.Id, hpRatio, damageRatio, customTemplate);
+            var actor = await _monsters.SpawnSingleAsync(room.SceneEntry, npcId, point, room.Id, hpRatio, damageRatio, customTemplate,
+                grounded);
             if (actor == null) return null;
             bool keep;
             lock (room.Gate)
@@ -492,10 +493,11 @@ public sealed class InstanceService
     });
 
     /// <summary>Idempotent actor removal, including a generation barrier for spawns already in flight.</summary>
-    public Task ClearMonstersAsync(Room room)
-        => _loop.TrackAsync("room removal", () => ClearMonstersCoreAsync(room));
+    /// <param name="keepBodies">Leave the defeated monsters in the world: each removes itself after its own body time.</param>
+    public Task ClearMonstersAsync(Room room, bool keepBodies = false)
+        => _loop.TrackAsync("room removal", () => ClearMonstersCoreAsync(room, keepBodies));
 
-    private async Task ClearMonstersCoreAsync(Room room)
+    private async Task ClearMonstersCoreAsync(Room room, bool keepBodies = false)
     {
         await room.Cleanup.WaitAsync();
         try
@@ -505,8 +507,9 @@ public sealed class InstanceService
             lock (room.Gate)
             {
                 room.Generation++;
-                actors = room.Actors.ToArray();
-                room.Actors.Clear();
+                actors = [.. room.Actors.Where(m => !keepBodies || !m.Dead)];
+                foreach (var gone in actors) room.Actors.Remove(gone);
+                if (!keepBodies) room.Actors.Clear();
                 props = room.Props.ToArray();
                 room.Props.Clear();
             }

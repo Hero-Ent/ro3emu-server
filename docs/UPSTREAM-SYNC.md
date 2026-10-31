@@ -15,6 +15,30 @@ compartilhado. Integramos as novidades deles por **merge** (nunca cherry-pick), 
 |------|--------------------|----------|---------------------------|-------------|
 | 2026-10-12 | fork inicial ..`6befb4b` | tudo | - | import do projeto |
 | 2026-10-22 | `6befb4b..9f3c04d8` (145 commits, PRs #10-#61) | tudo, em 4 etapas (`de99453e`, `9cd23f33`, `249a72be`, `9f3c04d8`) | nenhum revertido; ajustes abaixo | ver "Sync 2026-10-22" |
+| 2026-10-27 | `bbc9e3b2..7122af4f` (38 commits, PRs #85-#117) | tudo | nenhum revertido | ver "Sync 2026-10-27" |
+| 2026-10-31 | `7122af4f..077e59e9` (176 commits, PRs #118-#214) | tudo com preservação dos pontos críticos | nenhum revertido; launcher e identidades mantidos | ver "Sync 2026-10-31" |
+
+## Sync 2026-10-31
+
+Faixa `7122af4f..077e59e9` (176 commits de conteúdo, cobrindo PRs #118 a #214): painel web e wiki integrados (`Ro3Emu.Panel`),
+dungeons scriptadas oficiais completas (Culvert, Portão Norte, Pirâmides, etc.), combate e mira aprimorados (atraso de animação,
+flechas de arqueiro, cooldowns), sistema de códigos de presente (Gift Codes), nível e dicas de cap (`LevelCapTip`), AI e surround de monstros,
+máquinas de cerco e plataformas de guerra de território (Siege), banco de dados SQLite aprimorado com métricas e backup, e economia S3.
+
+Decisões do usuário e pontos preservados:
+
+- **Identidade Visual e Launcher (Crítico):** Mantida 100% a identidade do Hero Saga (`HeroSaga.png` / `logo-hero.png`, temas, interface personalizada, `ClusterName = "Hero Saga Ro3"`). Layout e arquivos invasivos do upstream em `Ro3Emu.Launcher` foram descartados.
+- **Combate e Auto-ataque:** Incorporada a lógica do upstream com atraso de animação de auto-ataque e flechas elementais de arqueiro, preservando a nossa tolerância testada de 500 ms (`AttackStopGraceMs = 500`), a regra de movimento não cancelar cast, o empurrão da Defesa com Escudo (`Shield Defense` / `MechanicDisplacement`) e a carga da Investida Destemida (`CasterCharges`).
+- **Barra de Atalhos:** Preservados os 9 slots (`ShortcutSlotLimit = 9`, `NormalizeShortcutBar`) do Hero Saga.
+- **Site e Painel/Wiki:** Servidor inclui o backend e frontend do `Ro3Emu.Panel` do upstream com branding dinâmico do Hero Saga.
+- **README da Raiz:** Mantido o README customizado do Hero Saga.
+- **Hooks e DLLs do cliente:** Atualizados `Ro3Emu.ClientHooks.dll`, `Ro3Emu.Loc.dll` e `source.sha256`.
+
+Como os conflitos foram resolvidos:
+
+- **Dungeons Scriptadas:** Adotada a reconstrução oficial de dungeons do upstream, removendo rascunhos locais provisórios anteriores (`DungeonService.Cues.cs`, `DungeonService.Cannon.cs`, etc.).
+- **Contas e Banimento:** Desduplicado `AccountPlans` e `AccountStore` mantendo planos do Hero Saga como `WebAccountBanRead`.
+- **Testes Unitários:** 1.027 testes aprovados (0 falhas). Atualizados `ConfigViewTests` (2732 campos), `EconomySnapshotReader.ExpectedFormatManifestHash`, `AccountBanTests` (mensagens amigáveis em português) e `PanelTests`/`PanelCharacterTests` (branding Hero Saga).
 
 ## Sync 2026-10-27
 

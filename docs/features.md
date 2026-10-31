@@ -11,7 +11,8 @@ show is playable from day one, without season or server-day gates ([details](gui
 **World**
 - login, server list, both gates, character create / select / delete
 - maps, portals, NPCs, Kafra travel, wings, map channels
-- monsters, MVPs with their summons and fields, death and revive
+- monsters (they surround the player they attack, [monster AI](systems/monster-ai.md)), MVPs with their summons
+  and fields, death and revive
 - silent reconnect, emotes and sitting
 
 **Character and combat**
@@ -42,7 +43,8 @@ show is playable from day one, without season or server-day gates ([details](gui
 - bonfire party, caravan, black market, Ilmata challenge
 - group mail, call to arms, impeachment, merging two guilds
 - Guild League with elite rosters and capture rings
-- Territory Wars and the castle siege
+- Territory Wars and the castle siege: commander tools, Battle Merit, the war warehouse,
+  cannons and vehicles, gates and stages, rams, ladders, archers, summon platforms
 
 **Instances and activities**
 - story dungeons and scripted story scenes (reconstructed)
@@ -61,11 +63,14 @@ show is playable from day one, without season or server-day gates ([details](gui
 **Not yet**
 - **Boss script mechanics:** the special skills are in, but mechanics that lived only in the original server's scripts
   (bubbles, bells, rhythm stages) are plain area attacks.
-- **Mock Battle extras:** the arena's monsters and the 40-player team frame.
-- **War of Emperium extras:** commander tools, siege weapons and vehicles.
+- **Mock Battle extras:** the arena's monsters.
 - **Smaller missing pieces:** some stages of the story dungeons
   that are still simplified.
 - **Tavern and guild voice:** only party voice is implemented.
+
+**Web panel.** Built into the server ([guide](guide/panel.md)): a player portal with rankings, who's online, news,
+sign-up and a game wiki (items, monsters, maps, with the pictures exported from your own client), and admin tools
+(accounts and bans, character sheets, mail with rewards, gift codes, GM console, broadcasts, economy log).
 
 **Voice.** Party voice goes through a relay in the server instead of the publisher's Tencent GME, and the patched
 client records and plays it through Windows' own winmm. It is off by default: `Voice:Port` turns it on. The voice

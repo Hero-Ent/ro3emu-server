@@ -287,7 +287,8 @@ sealed class Bundle
         switch (kind)
         {
             case 0: return src.ToArray();
-            case 2: case 3:
+            case 2:
+            case 3:
                 var dst = new byte[size];
                 int n = LZ4Codec.Decode(src, dst);
                 if (n != size) throw new InvalidDataException($"LZ4 block decoded to {n}, expected {size}");

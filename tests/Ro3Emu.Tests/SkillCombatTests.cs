@@ -61,7 +61,17 @@ public sealed partial class SkillCombatTests : IAsyncLifetime
         while (dir != null && !File.Exists(Path.Combine(dir.FullName, "Ro3Emu.slnx"))) dir = dir.Parent;
         return dir?.FullName ?? throw new DirectoryNotFoundException();
     }
-    private Task Teach(string name, int group) => Loop.InvokeAsync(() => { Session(name).Progress!.Skills[group] = 1; return Task.CompletedTask; });
+    /// <summary>
+    /// Learns the skill under the character's StateLock. A GM !lvl or !job leaves follow-up work (a quest reward, a
+    /// level-up award) that stages a copy of the progress under that lock and publishes it on commit: a skill written
+    /// beside it, without the lock, was dropped when a loaded run let that commit land after it (3002 SkillNotLearned).
+    /// </summary>
+    private Task Teach(string name, int group) => Loop.InvokeAsync(async () =>
+    {
+        var session = Session(name);
+        using var held = await CharacterService.Lock(session);
+        session.Progress!.Skills[group] = 1;
+    });
     private Task<MonsterUnit> Target(string name, bool stationary = false, int npcId = 5000001) => Loop.InvokeAsync(async () =>
     {
         var s = Session(name);
@@ -71,7 +81,8 @@ public sealed partial class SkillCombatTests : IAsyncLifetime
         {
             template = monsters.Template(npcId);
             Assert.NotNull(template);
-            template = template with { RoamDistance = 0 };
+            // A stationary dummy neither roams nor walks out to a surround slot (MonsterService.Surround).
+            template = template with { RoamDistance = 0, SurroundDistance = 0 };
         }
         var result = await monsters.SpawnSingleAsync(s.SceneEntry, npcId,
             new MapPoint(s.Position.X, s.Position.Y, s.Position.Z, 0), s.InstanceId, customTemplate: template);

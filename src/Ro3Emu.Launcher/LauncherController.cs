@@ -199,13 +199,13 @@ public sealed class LauncherController : IDisposable
         PostState("launching");
         try
         {
-            string? failure = await GameStarter.StartAsync(_layout.GameDirectory);
-            if (failure is null)
+            var start = await GameStarter.StartAsync(_layout.GameDirectory);
+            if (start.Failure is null)
             {
                 PostState("running");
                 _minimize();
             }
-            else PostState("repair", $"The game did not start: {failure}.");
+            else PostState("repair", $"The game did not start: {start.Failure}.");
         }
         catch (Exception e)
         {

@@ -116,7 +116,7 @@ public sealed class FakePlayerService : IDisposable
                 async (index, _) =>
                 {
                     string account = AccountName(index);
-                    if (!await _accounts.ExistsAsync(account) && await _accounts.RegisterAsync(account, password)) Interlocked.Increment(ref created);
+                    if (!await _accounts.ExistsAsync(account) && await _accounts.RegisterAsync(account, password) == AccountStore.Registration.Created) Interlocked.Increment(ref created);
                     lock (_registered) _registered.Add(index);
                     int n = Interlocked.Increment(ref done);
                     if (missing.Length >= 200 && n % nextReport == 0) await ReplyAsync(requester, $"Fake players: contas {n}/{missing.Length}...");

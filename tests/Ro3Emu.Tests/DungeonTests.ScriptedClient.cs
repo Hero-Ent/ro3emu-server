@@ -24,12 +24,10 @@ public sealed partial class DungeonTests
     [MemberData(nameof(ScriptedScenes))]
     public async Task EveryInteractionAStepWaitsOnIsOfferedByTheClientsOwnRules(long scene)
     {
+        Service<Microsoft.Extensions.Options.IOptions<Ro3Emu.Server.ServerOptions>>().Value.ScriptedScenePacePercent = 10; // a ride (the Deniro's) lasts as long as its route
         await using var alice = await InWorld("Alice");
         await Gm(alice, "!lvl 99"); // a scene with a fight
         if (scene == 1022001) await Gm(alice, "!quest accept 10102200"); // Payon Forest's condition [1101, 10102200]
-        // A step on the scene's own clock (After) completes by itself; its time is paced down here.
-        if (Service<ReconstructedDungeons>().Scripted(scene)!.Steps.Any(s => s.Complete.Any(t => t.Kind == ReconstructedDungeons.TriggerKind.After)))
-            Service<Microsoft.Extensions.Options.IOptions<Ro3Emu.Server.ServerOptions>>().Value.ScriptedScenePacePercent = 10;
         Assert.Equal(0, await Enter(alice, new EnterDungeonReq { SceneEntry = scene }));
         long instance = await Load(alice, scene);
         var plan = Session(alice).DungeonAttempt!.Plan;
@@ -92,10 +90,8 @@ public sealed partial class DungeonTests
                             Assert.Equal(0, await Interact(alice, actor, (int)interaction));
                             break;
                         }
-                    case ReconstructedDungeons.TriggerKind.After:
-                        break; // the step's own clock completes it
                     case ReconstructedDungeons.TriggerKind.Plot:
-                        await Story(alice, step.Story != 0 ? step.Story : t.Id); // the step's story may end in a later part
+                        await Story(alice, t.Id);
                         // 84012 (the plot's action 150 PlotActingTrigger) completes it as well as 84011 does.
                         await alice.SendGameAsync(TaskService.ExitCutSceneState, new ExitCutSceneStateReq());
                         await alice.SendGameAsync(DungeonService.PlotSceneEvent, new PlotActingTriggerReq { PlotId = t.Id });

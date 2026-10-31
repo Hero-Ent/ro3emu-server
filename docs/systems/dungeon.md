@@ -90,6 +90,8 @@ original-server encounter parity:
 8. Reward balances are keyed by group, boss-family tuple and difficulty. Refresh type 1 is daily; type 2 is weekly
    using `[weekday,hour]`, local server time (the shipped `[1,5]` means Monday 05:00). A new balance gets one configured
    increment, and later periods accumulate increments up to the configured cap. No allowance is spent on entry.
+   Not original: `Ro3Emu:Testing:UnlimitedRewards` (a test realm switch, [activities](activities.md#test-realm-switches-ro3emutesting))
+   pays every won clear without checking or spending the balance, and 5062 shows nothing used.
 9. A first personal clear grants the same configured personal reward without spending a recurring balance. The
    independent first-pass state changes directly to Finish=2 after automatic settlement; no separate bonus is invented.
 10. Normal spends its own extra balance first, then an unlocked same-type Hard balance, paying the selected Normal
@@ -120,9 +122,10 @@ Reconstructed story encounters (`ReconstructedDungeons`, switch `Ro3Emu:Reconstr
   This also gives Payon Forest's story Eddga (5300001) an attack.
 - Not reconstructed as monster waves (listed in the file): pure scripted scenes without a fight (ant nest
   exploration, Deniro ride, Louie's game, Moonlight Flower's hide-and-seek), the MVP party event, the Ring Test map and
-  scenes without points. The first three are rebuilt as scripted scenes (below).
-  Allied NPC companions and the Goblin Forest transfer are not reproduced (the airship's cannons and the Professor's
-  rescue are scripted steps, below).
+  scenes without points. The four scenes are rebuilt as scripted scenes (below).
+  Allied companions fight only where a scripted step marks them (Payon Forest's Boya and Wule, below); the Goblin
+  Forest transfer is not reproduced. The airship's cannons and the Professor's rescue in Maya's nest are played as
+  scripted stages (below).
 - The task widget: each reconstructed wave names the DungeonQuestConfig quest it plays. 30401 carries var 10001
   `PDungeonQuestIdList` (the scene's quests up to the current one; the widget shows the last one's title and goals)
   and var 10003 `PDungeonQuestGoalParamList` (the wave's kills and size, the goal's "(done/total)"). Seen live: the
@@ -131,19 +134,34 @@ Reconstructed story encounters (`ReconstructedDungeons`, switch `Ro3Emu:Reconstr
 - Quest target 101018 [scene, n] "dungeon pass" now counts a committed successful clear (`DungeonService.Completed`
   to `TaskService.OnDungeonClearedAsync`); entering is not a pass. Story steps waiting on a reconstructed scene
   (Payon Forest, the airship, Desert Crossroad, the sphinx, the Baphomet maze, Southern Payon) can now complete.
-  Steps waiting on a scene that is still not reconstructed stay blocked as before: Louie's game in the Pharaoh
-  branch story (3120703) and Moonlight Flower (3120802).
+  Steps waiting on Louie's shell game in the Pharaoh branch story (3120703) or on Moonlight Flower (3120802) complete
+  through their scripted scenes (below).
 - Live check with the real client: Culvert waves 1-3 spawn and render with names and models, the
   tracker follows the Culvert quests with its counter, the story Golden Thief Bug fights back with its borrowed
   attack, the elite Scorpion run ends in DungeonResSuccess, leaving returns to the field. The client shows no result
-  window for these Plane scenes (as with Payon Forest).
+  window for these Plane scenes (as with Payon Forest): 30403 only raises `LC_DunGeon_Base`'s DungeonSettlement event.
+- A solo Plane scene (DungeonConfig `_iPlaneMapID` set, `_iRoleCntLimit` 1) returns the player to the field
+  `DungeonService.PlaneExitSeconds` (5) seconds after a successful clear, through the exit button's own 30402
+  (`LC_DunGeon_Base.CELL_LEAVE_DUNGEON` takes it unasked). **(inferred)**: the original encounter scripts are not in the
+  client; without it a cleared plane left the player in an empty copy of the field (seen on Southern Payon 1021301,
+  whose story continues on the field: 10102110 is delivered to NPC 400037 on map 10213). A failed run stays, so the
+  client's DungeonReset can retry it.
+- Guide arrows: a solo story scene whose scene editor file has guide routes (`m_kGuidePoints`, e.g. the Culvert
+  plane's 19 and 21, the Geffen field plane's 17) sets dungeon var 10021 `PGuideWayList` to their ids in 30401
+  (`LC_DunGeon_VarDefine.lua:736-741`, processed by `LC_SceneCom_GuideGfx`, which draws each route as the guide arrow
+  line), and to an empty list in a 30404 var change after the clear. **(inferred)**: the scripts that set 10021 are
+  not in the client, so all routes show from the start (a scene's routes chain into one path: the Culvert's 19 ends
+  where 21 starts). `DungeonService.GuideWays`, `SceneEditorGuides`.
 - Solo tuning: the story bosses were built for the original's allied NPC
-  companions (not reproduced); untuned, a level-matched player died in 3-36 s and needed 3-38 minutes to win.
+  companions (mostly not reproduced); untuned, a level-matched player died in 3-36 s and needed 3-38 minutes to win.
   `soloTuning` scales each story template's HP and attack (basis points) so a Swordman at the boss level, every stat
   point spent STR:VIT 2:1, no equipment, normal attacks only, kills it in about 90 s and would fall in about 1.4 times
   that. `CombatService.Duel` computes both sides' expected damage per second from the same formula as a real hit
   (its roll-free part was extracted, rolls unchanged). The airship's nine boarders come in three groups of three, their
-  attack at 20%. `DungeonTests.StoryBossTuning` keeps every boss and a boarder group inside the band. Live: the tuned
+  attack at 20%. A boss whose scripted step shows companions falls to them and the player together: Payon Forest's
+  Eddga (HP 1170 basis points) counts Boya's and Wule's expected damage per second standing in reach
+  (`CombatService.CompanionDps`, their rotation and the same formula as their hits), about a quarter of the total.
+  `DungeonTests.StoryBossTuning` keeps every boss and a boarder group inside the band. Live: the tuned
   Culvert Golden Thief Bug (4126 HP, hits of about 47) fell to a test character and the tracker showed (1/1).
 - `DungeonTests.Reconstructed` resolves every reconstructed plan, clears each dungeon wave by wave to a win with the
   tracker vars checked, counts a clear toward its 101018 quest, and switches off.
@@ -179,6 +197,18 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
   the darkness within 8 m of the hiding place, so the second round needs another side of the room; it wins (5310007)
   and completes the step. The lines go out as 1022 with her uid, which the client's Bubbling rows need for the head
   bubble. `ScriptedScenePacePercent` shortens these timers for tests.
+- Louie's shell game in the Pharaoh branch story (3120703, entered by task 205170 'A New Round') reuses the Culvert's
+  gang, rings and Bells on the Culvert editor's layout moved 5 m south (`sc_pm_branchstory_sphinx_001`). It plays two
+  rounds, each won by Katie's ring (400134, dungeon message 11); the other rings (message 12) do not end the round.
+  Louis speaks through the step's `react` (DungeonService.Reaction): his Secretary rows go out as 1022 with Louie's uid,
+  round 1 opening with 5310008 'Let's start the game!' and 5310002 'Guess which Bell my cat is hiding in!' (each once
+  the previous one's `_iTime` has run out), round 2 with 5310002; a wrong ring answers 5310004 'Sorry, wrong guess!'
+  and shatters the Bell under it (buff 5402201, SXGD_WRONG); Katie's ring answers 5310003 'Congratulations ...' in round
+  1 and 5310009 'Darn ... I give up.' in round 2 and lights her Bell (5402101, SXGD_RIGHT), and the next round (or the
+  settlement) waits until that line's `_iTime` has run out. Guessed: the two rounds (from Louis's lines 'Let's go again'
+  and 'I give up'), where Katie hides in each round (the east Bell, then the west one), the Bell row 400138, and when
+  each line and effect goes out; the effects have not been checked in the live client. The bubbles 5310019-5310033 are
+  not sent.
 - Five story dungeons that were monster waves (or bare point respawns) now play their scripted stages around the
   fights, each with its evidence and guessed parts in the file:
   - Maya's nest (1000401): Maya, then 'Find the Professor' (within 10 m of the egg point), 'Free the Ant Egg' (5300056,
@@ -228,7 +258,7 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
     to the ship nearest the cannon, and the end of the stage, the settlement, a death or leaving the room putting the
     gunner back to Idle. The rope stakes (5300040) and the Sharpshooter (5300054) are not shown.
   - Payon Forest (1022001): 'Cover Boya and Wule' (reach the standoff point 22 between them and Eddga), then Eddga.
-    Boya and Wule (5300086/5300087) are shown, not fighting.
+    Boya and Wule (5300086/5300087) fighting beside the player as companions (below).
   - The Peco Peco nest (1051001): the Elusive Pecopeco with the Ancient Nest and Bragis shown.
   - Pharaoh (main story, 3120702): Pharaoh with the Relic he leaps out of, his coffin 5300013 at point 24, and the
     Pyramid 5300011 beside him (6 m east, 7 m north of point 20: the scene has no point for it). Its use is **inferred**
@@ -236,6 +266,31 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
     20 s of the fight the tip goes out, Pharaoh holds still for 4 s, then his strongest skill 5340301 (whose effect the
     client draws as a cross of light) hits everyone outside the Pyramid's shadow (a step `shelter`, DungeonService.Shelter).
   - Prontera North Gate (1011301): stage 1 'Investigate the fork in the road' completes within 17 m of Baphomet's point 20, which takes in the end of the client's guide line 24 but not the born point (inferred), then stage 2 is Baphomet (5300003) at point 20.
+- Companions (`DungeonService.Companions`, `CompanionUnit`): an actor marked `"companion": true` is shown as an allied
+  fighter instead of a plain scene actor. From the client: only an NPCConfig `_iNPCType` 1 row of the player's camp
+  (`_iCamp` 1) with a monster template and its own `_kSkills` qualifies (the catalog refuses the scene otherwise); its
+  HP and attack come from that template (`_iAttribute`, `_kAttriScale`, `_iLevel`), each skill's cooldown, action and
+  reach from SkillConfig (`_iCD`, `_iActionTime`, `_iDistanceMax`), its walking speed from NPCConfig `_iSpeed`, and
+  its search cadence, attack tick, view range and chase distance from AIConfig `_iAI` (5300007: `_iSearchTime` 100,
+  `_iAttackTickTime` 1000, `_iViewRange` 10000, `_iChaseDistance` 10000, `_iStayInPlace` 1). **Inferred** (the server
+  script is not in the client): it attacks the nearest living monster of its room within view, with the first listed
+  skill whose cooldown is ready and whose reach holds it, at most one cast per action and per attack tick; the hit
+  lands at 40% of the action, as for tower pets. When no ready skill reaches the monster it walks toward it (31081,
+  as a tower pet walks) until one does, never farther than `_iChaseDistance` from its point, and with no target it
+  walks back to its point (`_iStayInPlace` 1 read as "goes back to its point", not "never moves"). Its casts show like a monster's (31100, 31101), deal the skill's damage through the shared
+  formula and settle like a player's hit; a kill it makes counts for the run exactly like a player's (wave and step
+  completion, statistics), credited to the first present, loaded participant who is alive, or the first present, loaded
+  one when none is (so the run still completes). A monster it hits answers it with its normal attack once no player
+  holds that monster. A player comes first: one it already fights, and for an aggressive monster one it sees, as when
+  idle (the player scan keeps running while it answers a companion). A monster that cannot move stops answering a
+  companion out of its reach, so its player scan and return home run as when idle. At 0 HP the companion dies, its body leaves
+  after the template's remain time, and it does not come back in that run (`_kRespawnSkill` unused). Players cannot
+  target it and players' area effects do not hit it (it is no monster); a boss special skill's area that hits tower
+  pets hits the companions inside it too, through the same damage path as a monster's swing (at the boss skills'
+  damage percent), and one it takes to 0 HP falls the same way. It never counts in the run's spawned or killed
+  monsters. It is separate from the Pet Tower's pets, whose behaviour does not change. In Payon Forest the pair stand
+  about 14 m from Eddga's point and reach 3.5-6 m, while Eddga's swing reaches 10 m: they walk up to him wherever the
+  player fights him, so the solo tuning counts them as always in reach.
 
 
 - The last three main-story blockers of the story walk: the ant nest vortex and egg passage (1000201, task 10104290),
@@ -246,6 +301,23 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
   actors the server shows (client NPCConfig ids at scene-editor points, entity type 1 or 2 from `_iNPCType`, with the
   buffs that open their interactions), an optional story, the client events that complete it and an optional teleport
   after it. The engine is generic (`DungeonService.Scripted`): nothing knows a scene, task or NPC id.
+  A step may also have a ride (`after.ride`, a `m_kGuidePoints` route): when a player completes it by using an actor,
+  that actor walks the route at its own `UnitConfig._fSpeed` (the Deniro: 5.25 m/s) and the participants are moved
+  with it in 100 ms forced-position steps, then the teleport and the next step follow (`DungeonService.Ride.cs`).
+  **(inferred)**: the client has no ride rule (the route and the scene's camera animation are data with no trigger, and
+  the original's server script is not shipped), so the speed, the step size and the missing mount are guesses and the
+  camera animation (`mianstorybingyicamera`) is not played.
+  A step may also hold (`after.hold`, ms, scaled by `ScriptedScenePacePercent`): once it is completed, the next step or the
+  result waits that long, so what the step showed is not cut. **(inferred)**: the original script is not shipped and the
+  client data has no duration for these, so the airship's holds are estimates (the chitchat's 13 s is the longest of its four
+  bubbles, 12 to 22 words each at `PublicParamConfig.BubblePerWordTime` 2; 2 s between boarding groups, 3 s after the Evil Boss,
+  4.5 s for the captain's closing line). When a scripted scene is settled its defeated enemies keep their bodies and go by their
+  own `_iBodyRemainTime` (Eddga's body stays where it fell); the living ones and the scene actors are cleared as before.
+  An actor interaction whose `NPCInteractConfig._iStatusID` is a vehicle status (the Deniro's first Ride, 5300005)
+  seats the player in the actor's seat through `WorldInteractionService` (32702, seat 32704; the client's exit button
+  works as for any vehicle); the actor puts them down after 2 s (`SeatedRideMs`, **(inferred)**: nothing in the
+  client says how long the first, failing ride lasts) or when they leave the scene. The second Ride (5300008) has no
+  gameplay status, so the player is not seated during the ride to the depths.
 - Client events: 32700 on a scene actor (its own UID namespace) with one of the actor's `_iInteractID`, also counted as
   the dungeon message of that interaction's server-hosted action 210 `SendDungeonMessage` (the client never runs it);
   a walk into a server region (regionType 2; no client consumer registers them, so the client never reports them;
@@ -264,7 +336,7 @@ Reconstructed scripted scenes (`Reconstructed/scripted-scenes.json`, same switch
   route of the message that completed it does not reserve the settlement's role locks. Scene actors are room props
   (`InstanceService.AddPropAsync`), removed at settlement and before the room's final cleanup.
 - Guessed (see each scene's "guessed" list): the corridor region that ends 1000201's first stage, Bobo's place there,
-  the jump and the ride as teleports, no exploding ant eggs, no seamless 1000201 to 1000301 transfer, which bell hides
+  the jump as a teleport, the ride to the depths as a walk of guide route 36 (see below), no exploding ant eggs, no seamless 1000201 to 1000301 transfer, which bell hides
   Katie (from both stories), a wrong guess changing nothing, the instrument retrieved within 4 m of mark point 37.
 - `DungeonTests.Scripted` resolves each scene against the client data, plays each one through its client events (wrong
   and premature events included) to a clear, and checks that the story step is delivered and the next one offered.
@@ -308,3 +380,13 @@ Tests (`DungeonTests`, `TowerTests`, `TowerShopTests`):
   service, enters the real point-respawn scene, kills its NPC through the wire and receives a result. The 4400001
   test spawns its source-backed 50-actor region plan. Separate two-wave execution uses a synthetic host-local
   editor fixture. The exported data is never modified; these tests do not claim complete solo script parity.
+
+## Dungeon task trackers
+
+TaskConfig type 4 (Dungeon) and type 24 (RingTask) son types 2/3 with an `_iDungeonID` are the run's tracker. The
+client shows them only inside that dungeon (`LC_TaskHelper`); they carry no award. `TaskService.DungeonTasks` chains
+each scene's rows by `_kPreTask` and shows the first unmet step as an extra 5027 entry, never stored or delivered.
+DungeonService reports the step: the Dracula lair's wave, the last step (the boss) for a Guild Challenge stage, and
+over at settlement. The siege reports its fight stage, and its 210003/200001 steps read the participant's assists and
+score. A siege assist is a hit on the victim in the 10 s before another participant's kill (inferred, Battle Merit's
+rule). Boneyard and Whaleback Chute (3011111/3011112/3011123/3011124) have trackers but no Guild Challenge entry.

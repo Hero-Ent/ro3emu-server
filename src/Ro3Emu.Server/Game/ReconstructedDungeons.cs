@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Microsoft.Extensions.Options;
-using Ro3Emu.Server.Maps;
 
 namespace Ro3Emu.Server.Game;
 
@@ -14,17 +13,7 @@ namespace Ro3Emu.Server.Game;
 /// </summary>
 public sealed partial class ReconstructedDungeons
 {
-    /// <summary>
-    /// A monster at a scene-editor point. A scripted step's fight (ReconstructedDungeons.Scripted) may also give it a
-    /// patrol path to fly (<paramref name="Patrol"/>: it appears at the path's first point instead, the scene drives it
-    /// and it never fights back), a delay after the step's start (<paramref name="AtMs"/>), units riding on it
-    /// (<paramref name="Riders"/>), the Lua_Config_EffectData effects that show its end where it fell
-    /// (<paramref name="Sink"/>) and the facing it turns to at its path's end (<paramref name="Face"/>, degrees).
-    /// <paramref name="Path"/> is a route of the scene's own (inferred, in map coordinates) flown like a patrol path, for
-    /// a course the scene editor has no patrol for.
-    /// </summary>
-    public sealed record Spawn(long Point, int NpcId, long Patrol = 0, int AtMs = 0, IReadOnlyList<Rider>? Riders = null,
-        IReadOnlyList<int>? Sink = null, float? Face = null, IReadOnlyList<MapPoint>? Path = null);
+    public sealed record Spawn(long Point, int NpcId);
     public sealed record Wave(int Quest, IReadOnlyList<Spawn> Spawns);
     public sealed record Dungeon(long Scene, string Name, string Confidence, IReadOnlyList<Wave> Waves);
 
