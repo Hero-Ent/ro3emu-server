@@ -22,7 +22,8 @@ public sealed partial class PanelSite
     private const int MaxBody = 16 * 1024;
     /// <summary>The site's own pages: the first path segment of every route app.js draws.</summary>
     private static readonly HashSet<string> Pages = new(StringComparer.Ordinal)
-    { "", "online", "rankings", "news", "login", "register", "account", "admin", "items", "monsters", "maps", "characters" };
+    { "", "online", "rankings", "news", "login", "register", "account", "admin", "items", "monsters", "maps", "characters",
+      "profiles", "guilds", "territory", "market" };
 
     /// <summary>
     /// No inline script or style anywhere, so the policy allows only the site's own files. frame-ancestors and the
@@ -55,7 +56,7 @@ public sealed partial class PanelSite
         _sessions = new PanelSessions(clock, TimeSpan.FromHours(Math.Max(1, options.SessionHours)));
         _proxies = [.. options.TrustedProxies.Select(IPAddress.Parse).Select(Normalize)];
         _routes = [.. PublicRoutes(), .. PlayerRoutes(), .. AdminRoutes(), .. ToolRoutes(), .. DatabaseRoutes(), .. CharacterRoutes(),
-            .. SecurityRoutes(), .. StaffRoutes(), .. ReportRoutes(), .. CharacterActionRoutes(), .. ServerRoutes()];
+            .. SecurityRoutes(), .. StaffRoutes(), .. ReportRoutes(), .. CharacterActionRoutes(), .. ServerRoutes(), .. PlayerPageRoutes()];
     }
 
     /// <summary>
@@ -134,7 +135,7 @@ public sealed partial class PanelSite
     private const string ImagePrefix = "/img/";
 
     /// <summary>The picture folders the data export writes (DataExport IconExport) and the names it gives the files.</summary>
-    [GeneratedRegex(@"^/img/(items|monsters|classes|maps|skills)/[A-Za-z0-9_\-]+\.png$")]
+    [GeneratedRegex(@"^/img/(items|monsters|classes|maps|skills|guilds|titles|achievements)/[A-Za-z0-9_\-]+\.png$")]
     private static partial Regex ImagePath();
 
     /// <summary>

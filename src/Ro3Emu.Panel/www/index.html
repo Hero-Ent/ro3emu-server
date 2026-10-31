@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="/pages/admin-tools.css">
 <link rel="stylesheet" href="/pages/database.css">
 <link rel="stylesheet" href="/pages/admin-staff.css">
+<link rel="stylesheet" href="/pages/players.css">
 <script src="/app.js" defer></script>
 <!-- Admin pages, each in its own file; they register with app.js before the first route. -->
 <script src="/pages/admin-tools.js" defer></script>
@@ -32,6 +33,10 @@
 <script src="/pages/admin-reports.js" defer></script>
 <script src="/pages/admin-characters.js" defer></script>
 <script src="/pages/admin-server.js" defer></script>
+<script src="/pages/profiles.js" defer></script>
+<script src="/pages/territory.js" defer></script>
+<script src="/pages/market.js" defer></script>
+<script src="/pages/admin-items.js" defer></script>
 </head>
 <body>
 
@@ -67,6 +72,7 @@
     <symbol id="i-pen" viewBox="0 0 24 24"><path d="M15.5 4.5l4 4L9 19H5v-4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
     <symbol id="i-bell" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5h4"/></g></symbol>
     <symbol id="i-map" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3.5 6.5l5.5-2.5 6 2.5 5.5-2.5v13.5l-5.5 2.5-6-2.5-5.5 2.5z"/><path d="M9 4v13.5M15 6.5V20"/></g></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 21V4"/><path d="M5.5 4.5h11l-2.5 4 2.5 4h-11"/></g></symbol>
     <symbol id="i-paw" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 12.5c-2.6 0-5 2.4-5 4.6 0 1.6 1.2 2.4 2.6 2.4.9 0 1.5-.4 2.4-.4s1.5.4 2.4.4c1.4 0 2.6-.8 2.6-2.4 0-2.2-2.4-4.6-5-4.6z"/><ellipse cx="5.6" cy="10.4" rx="1.6" ry="2"/><ellipse cx="9.4" cy="6.4" rx="1.7" ry="2.2"/><ellipse cx="14.6" cy="6.4" rx="1.7" ry="2.2"/><ellipse cx="18.4" cy="10.4" rx="1.6" ry="2"/></g></symbol>
   </defs>
 </svg>
@@ -90,6 +96,8 @@
         <a class="link" href="/items" data-link data-nav="items"><svg class="i"><use href="#i-box"/></svg>Items</a>
         <a class="link" href="/monsters" data-link data-nav="monsters"><svg class="i"><use href="#i-paw"/></svg>Monsters</a>
         <a class="link" href="/maps" data-link data-nav="maps"><svg class="i"><use href="#i-map"/></svg>Maps</a>
+        <a class="link" href="/guilds" data-link data-nav="guilds"><svg class="i"><use href="#i-flag"/></svg>Guilds</a>
+        <a class="link" href="/market" data-link data-nav="market"><svg class="i"><use href="#i-coins"/></svg>Market</a>
         <a class="link" href="/admin" data-link data-nav="admin" id="nav-admin" hidden><svg class="i"><use href="#i-shield"/></svg>Admin</a>
       </div>
       <div class="menu-auth" id="menu-auth"></div>
