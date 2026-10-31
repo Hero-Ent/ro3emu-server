@@ -25,7 +25,7 @@ public static partial class IconExport
     public const string Folder = "icons";
 
     /// <summary>The DataConfig tables <see cref="Requests"/> reads.</summary>
-    public static readonly string[] Tables = ["ItemConfig", "NPCConfig", "JobConfig", "MapConfig", "SkillConfig", "PetBaseConfig", "WardRobeConfig", "DailyActivityConfig", "LifeFormulaConfig"];
+    public static readonly string[] Tables = ["ItemConfig", "NPCConfig", "JobConfig", "MapConfig", "SkillConfig", "PetBaseConfig", "WardRobeConfig", "DailyActivityConfig", "LifeFormulaConfig", "GuildIconConfig", "TitleConfig", "AchievementType", "AchievementLevel"];
     private const string IndexFile = "index.json";
 
     /// <summary>One picture to export: the kind folder, the client's sprite file name, the largest side kept.</summary>
@@ -74,6 +74,13 @@ public static partial class IconExport
         foreach (var row in Rows(configDir, "SkillConfig"))
             Add("skills", Text(row, "_kIcon"));
         AddWikiPictures(configDir, Add);
+        // The public profiles and guild pages: guild badge frames and designs, title ranks, achievement levels.
+        foreach (var row in Rows(configDir, "GuildIconConfig"))
+            Add("guilds", Text(row, "_kBigIcon"), 128);
+        foreach (var row in Rows(configDir, "TitleConfig"))
+            Add("titles", Text(row, "_kTitleIcon02"), 128);
+        foreach (var row in Rows(configDir, "AchievementType").Concat(Rows(configDir, "AchievementLevel")))
+            Add("achievements", Text(row, "_kIcon"), 128);
         return [.. requests.DistinctBy(r => r.Path, StringComparer.OrdinalIgnoreCase)];
     }
 

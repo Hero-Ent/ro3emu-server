@@ -34,6 +34,21 @@ public sealed class PanelOptions
 
     /// <summary>White-label branding: the server's own name, tagline, logo, footer and colour on every page.</summary>
     public PanelBranding Branding { get; set; } = new();
+
+    /// <summary>
+    /// Staff roles of the admin area by account (as stored): Moderator, GM or Admin. Accounts of Ro3Emu:GmAccounts are
+    /// Admins too. An Admin can add more roles from the panel; the ones listed here cannot be changed there.
+    /// </summary>
+    public Dictionary<string, string> Roles { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// GM and Admin accounts must turn on two-factor authentication before the admin area opens to them. Unset: on when
+    /// the panel listens on a non-loopback address (a public host), off for local play. The server resolves it at start.
+    /// </summary>
+    public bool? RequireAdmin2FA { get; set; }
+
+    /// <summary>Keep and show the address of each login in the login history. Off: only the time and the way in.</summary>
+    public bool LoginAddresses { get; set; }
 }
 
 /// <summary>Ro3Emu:Panel:Branding. Every field is optional; an empty one keeps RO3Emu's own.</summary>

@@ -6,9 +6,11 @@ the player at once, and the panel never writes the database behind the server's 
 
 | Who | Pages |
 |---|---|
-| everyone | Home (status, version, players online, uptime, accounts and characters; latest news, who's online, top 5 by level) · Who's online · Rankings · News · Items · Monsters · Maps |
+| everyone | Home (status, version, players online, uptime, accounts and characters; latest news, who's online, top 5 by level) · Who's online · Rankings · News · Items · Monsters · Maps · Guilds and the territory map · Market · every character's public profile |
 | a player, logged in with the game account | My account (created, last played, characters with class, level, map and guild) · the sheet of each own character · password change |
-| an admin | Dashboard (the server's own metrics) · Accounts (search, detail, ban and unban) · every character's sheet and mailbox · Audit log · Mail & rewards · Gift codes · GM console · News editor · Broadcasts · Economy log |
+| a Moderator | Dashboard (the server's own metrics) · Accounts (search, detail, login history, deleted characters, ban and unban) · every character's sheet and mailbox · Reports · Audit log |
+| a GM | the Moderator's pages and Mail & rewards · Gift codes · GM console · News editor · Broadcasts · Economy log · Character actions (kick, teleport, rename, items and currencies, restore) · Item tracking |
+| an Admin | the GM's pages and Staff roles · Server control (restart, shutdown, maintenance, backups) · 2FA resets |
 
 Players log in with the same account name and password as in the game. An account the game created logs in here,
 and an account made on the panel's sign-up page logs in to the game: both paths write the same record
@@ -28,6 +30,9 @@ It is on by default, on port **5381**, next to the server's HTTP port 5380:
 | `Ro3Emu:Panel:Registration` | `true` | `false` hides the sign-up page; accounts are then created only by a first login in the game |
 | `Ro3Emu:Panel:ImageDir` | `icons/` of the game data | the pictures the pages show (see [Pictures](#pictures)) |
 | `Ro3Emu:Panel:Branding:*` | RO3Emu's | your server's name, tagline, logo, footer and colour (see [Branding](#branding)) |
+| `Ro3Emu:Panel:Roles:<account>` | none | a staff role, `Moderator`, `GM` or `Admin` (see [Staff roles](#staff-roles)) |
+| `Ro3Emu:Panel:RequireAdmin2FA` | `true` on a public bind, `false` on loopback | GM and Admin accounts must turn on two-factor authentication before the admin area opens to them |
+| `Ro3Emu:Panel:LoginAddresses` | `false` | keep and show the address of each login in the login history |
 
 Set them in `appsettings.json` under `Ro3Emu`, as environment variables (`Ro3Emu__Panel__Port=8081`) or as
 arguments (`--Ro3Emu:Panel:Port=8081`). The startup log says `Web panel on http://...`.
@@ -40,15 +45,37 @@ When you play on your own PC the panel listens on loopback only: open `http://12
 listens on every interface like the game ports; open TCP 5381 in the firewall, or better, put it behind a proxy with
 https as below and keep 5381 closed to the outside.
 
-## Admins
+## Staff roles
 
-The admin area is for the accounts listed in `Ro3Emu:GmAccounts` ([GM access](gm-access.md)), spelled as stored.
-**When the list is empty, nobody is an admin in the panel**, whatever `GmOpenWhenEmpty` says: the open-GM rule of
-local play applies to the game only. To administer a server, list your account even on your own PC.
+The admin area is for staff. Each role has everything of the one before it:
 
-Every admin action is written to the audit log (`admin_audit`: who, what, when, on which account, the reason) in the
-same database transaction as the action itself, so a recorded action always happened and a performed one is always
-recorded.
+| Role | May |
+|---|---|
+| Moderator | open the dashboard, accounts (with their login history and deleted characters), every character's sheet and mailbox, the reports and the audit log; ban and unban; triage reports |
+| GM | also send mail, make gift codes, run the GM console, edit news, broadcast, read the economy log, and act on characters |
+| Admin | also give and take staff roles, control the server (restart, shutdown, maintenance, backups) and reset another account's 2FA |
+
+An account gets its role from, in this order:
+
+1. `Ro3Emu:GmAccounts` ([GM access](gm-access.md)): every account listed there is an Admin, as before.
+2. `Ro3Emu:Panel:Roles`, account to role, spelled as stored: `Ro3Emu__Panel__Roles__anna=Moderator`, or in
+   `appsettings.json` `"Panel": { "Roles": { "anna": "Moderator", "tomek": "GM" } }`.
+3. The **Staff roles** page, where an Admin gives an existing account a role or takes it away. These are stored by
+   the server (`panel_role`) and audited; the roles of 1 and 2 are shown there but changed only in the configuration.
+   Nobody changes their own role.
+
+**When nobody has a role, nobody is staff in the panel**, whatever `GmOpenWhenEmpty` says: the open-GM rule of local
+play applies to the game only. To administer a server, list your account in `GmAccounts` even on your own PC. A panel
+role is the panel's only: GM commands in the game still follow `GmAccounts`.
+
+Every route of the API names the least role it needs and refuses the others (403); the sidebar shows each role only
+the pages it may use.
+
+Every admin action is written to the audit log (`admin_audit`: who, what, when, on which account, the reason). A change
+the panel's own plans make (a ban, a role, news, gift codes, report triage, a rename or restore, maintenance, a 2FA
+reset) is recorded in the same database transaction as the change itself, so a recorded action always happened and a
+performed one is always recorded. An action that runs through the game's own code (mail, a GM command, a broadcast, a
+kick, a teleport, an item grant, a planned restart, a backup) is recorded right after it ran.
 
 ## Bans
 
@@ -85,6 +112,89 @@ Each tool is a page of the admin area's sidebar; each change is written to the a
 - **Broadcasts.** A one-line notice on the screen of everyone in the game: the GM marquee (`BROADCAST_NOTIFY` 83270,
   the message GM replies use). It can repeat every few minutes, up to 100 more times; repeats are kept in the
   server's memory (a restart ends them) and can be cancelled.
+
+## Account security
+
+*My account → Security* is every player's own:
+
+- **Two-factor authentication** with any authenticator app (TOTP, RFC 6238: HMAC-SHA1, 30-second steps, 6 digits).
+  The page shows the key and an `otpauth://` link; the first code from the app turns it on and shows ten recovery
+  codes once (`ABCDE-FGHJK`, each good once, stored as SHA-256 hashes). From then on a login asks for a code after the
+  password: the current one, the one before or after it (a phone's clock may be 30 seconds off), or a recovery code.
+  A code is good once: the server keeps the last time step used and refuses it and every earlier one. Turning 2FA off
+  or making new recovery codes asks for a code too. Turning it on signs out the account's other browsers.
+- **Signed-in browsers**: the panel sessions of the account, with "Sign out" for one and "Log out everywhere else".
+  A password change already signs out the others, a ban all of them.
+- **Latest logins**: the account's last 30 logins (the server keeps 100), each with its time and whether it was the
+  panel or the game (the SDK login). The address only with `Ro3Emu:Panel:LoginAddresses`; without it no address is
+  stored at all.
+
+**Required for GM and Admin.** With `Ro3Emu:Panel:RequireAdmin2FA`, a GM or Admin without 2FA has no staff role in the
+panel until it is on: the admin area answers 403 and *My account* asks to set it up. Unset, it is on whenever the panel
+listens on an address that is not loopback (a public host) and off for local play; set `false` to turn it off on a
+public host, `true` to require it locally. Moderators are not required to use it.
+
+**Limits.** A login that needs a code waits 5 minutes for it and takes 5 tries; an account takes 10 wrong codes in 15
+minutes from all its logins together, then refuses codes until the window passes. Every code also counts against the
+address's login budget (`Ro3Emu:LoginAttemptsPerMinute`). Codes and recovery codes are compared in constant time and
+never logged; a wrong code logs only the account. An Admin can reset another account's 2FA (a lost phone without
+recovery codes) from its account page, which also signs it out; the reset is audited.
+
+A Moderator sees an account's login history, 2FA state and panel sessions on its page; an Admin can also sign it out of
+the panel there.
+
+## Report inbox
+
+**Reports** lists the players' in-game reports ([bug reports](feedback.md): `/bug` in chat and the Feedback button),
+newest first, with tabs for their status: *new*, *in progress*, *done* and *won't fix*. A report shows what the player
+wrote, the character, account, level, map, position and line, how it was sent, and the server's log lines about the
+player from the minutes before. Staff change its status and assignee (any account) and add notes; each change is
+audited. "Take it" assigns it to yourself. The reports stay in `reports/feedback.jsonl` as the game wrote them; the
+triage is the database's (`feedback_triage`, `feedback_note`). A Discord webhook, when set, still gets each report.
+
+## Character actions
+
+From an account's page a GM opens **Character actions** for each of its characters:
+
+- **Kick** (in the game): closes the game session at once, as a ban's kick does, without a ban; the player can log in
+  again.
+- **Teleport**: in the game, the server's own `!warp` moves the character now (to the given x and z, or the map's
+  arrival point). Out of the game, the stored position changes and the character logs in there; the login puts it on
+  the ground or, where the point is not walkable, at the map's arrival point.
+- **Rename**: the game's name rule (2 to 16 characters once trimmed, unique in any letter case). Only while the
+  character is out of the game; the old name is free the moment it commits.
+- **Items and currencies**: while the character is in the game, through the GM grant (`!item`, `!delitem`): the bag
+  changes on the player's screen at once and the economy log records it. Zeny is item 1, other currencies are items
+  too. For a character out of the game use *Mail & rewards*: the mail waits for the next login.
+- **Restore**: the server keeps a deleted character (its row, renamed `name~id`); an account's page lists them, and a
+  GM brings one back under its old name, unless another character took that name since. It gets a new lifecycle, so
+  nothing of the deleted one's server state applies to it.
+
+An action on a character out of the game takes the character's lifecycle reservation and is refused while it is in the
+game, loading or waiting for a reconnect, as the HTTP character deletion is. Every action is audited.
+
+## Server control
+
+**Server control** (Admins):
+
+- **Restart or shut down** now or in up to a day. The players in the game are told on the GM marquee at once and again
+  15, 10, 5, 3, 2 and 1 minutes and 30 and 10 seconds before; then the server stops the way Ctrl+C stops it (the loop
+  drains, the database closes). A plan can be cancelled (the players are told) and lives in memory: a restart forgets
+  it. The process exits with code **75** after a restart and **0** after a shutdown, so a process manager decides what
+  comes back: the systemd unit `server.sh` installs has `Restart=always` with `RestartPreventExitStatus=0` (a restart
+  comes back, a shutdown stays down). Without a process manager (`RO3Emu.exe start`, a terminal) a restart is a stop:
+  start the server again.
+- **Maintenance**: while it is on, a game login of an account without a staff role is refused at the game gate with
+  `ConnectServerResp` *ClusterShutdown*, which the client shows as its own maintenance notice
+  (`LC_LoginManager`: `ClusterShutdown` maps to UIWords 28108 *ServerMaintenancing*; that the gate's answer reaches
+  that state is inferred). Players already in the game stay; plan a restart to send them out. It is kept in the
+  database (`panel_setting`), so it survives a restart.
+- **Backups**: the files of `data/backups`, newest first. *Make a backup now* runs the server's own backup (a checked
+  copy, as at every start); *Download* sends the file; *Restore* plans a restart in 5 minutes whose next start puts
+  that backup back **before the realm opens**, exactly as `Ro3Emu.Server --restore-backup <file>` does: the running
+  database is never swapped. The request is `data/restore-request.txt`, removed as the restore starts, so a refused
+  restore is not tried again at every start; what it did is in `data/restore-result.txt` and on this page. The replaced
+  database is kept in `data/restore-saved/`.
 
 ## Branding
 
@@ -184,6 +294,9 @@ decodes them from the client's Unity bundles into `icons/` of the data folder:
 | `icons/classes/` | JobConfig `_kIcon`, `_kBigIcon` | class emblems |
 | `icons/maps/` | MapConfig `_kBgImage[0]` | the map window's outline (halved to 512 px) |
 | `icons/skills/` | SkillConfig `_kIcon` | skill icons for the character sheet |
+| `icons/guilds/` | GuildIconConfig `_kBigIcon` | guild badge frames and designs |
+| `icons/titles/` | TitleConfig `_kTitleIcon02` | title rank emblems for the profiles |
+| `icons/achievements/` | AchievementType, AchievementLevel `_kIcon` | achievement level and category icons |
 
 About 2 500 PNG files, 120 MB, in about 20 seconds; a later export decodes only what a client update changed
 (`icons/index.json` records the client file each picture came from) and removes what the client dropped.
@@ -198,6 +311,97 @@ works and draws the first letter of the name instead; the next `RO3Emu.exe start
 The admin's **Economy log** reads the server's ledger (`economy_entry` with its `operation_receipt`) on the read
 pool, newest first: filter by account, character, item (an id, or part of a name) and a range of UTC days. The totals
 add up everything the filter matches; they only mean something for one item or currency.
+
+## Profiles, guilds, the territory map and the market
+
+These public pages show the realm's own state. They are read from the database on the read pool, from the cached
+online list and, for the territory map, from TerritoryWarsService on the game loop at most once every 5 seconds. Heavy
+traffic on them never reaches the game loop.
+
+**Profiles** (`/profiles/<name>`; the names on *Who's online*, *Rankings* and the guild pages link to them) show what
+another player can see in the game's details window. That is the class, the base and job level, the guild and the
+position in it, the title rank (TitleConfig), the equipment with each slot's strengthen and refine levels, the
+achievement level with each category's level and the latest achievements reached (`DBRoleAchievementInfo`), and the
+character's place on every board where it is in the top 100.
+
+A profile never shows the bags, purse, map, position, mail or account. It shows what the server last saved, so a
+character in the game may be a few minutes ahead of its profile.
+
+The game has one privacy choice: the setting *show detailed info* (`SettingShowDetailInfo`, `NoShow` or `ShowAll`).
+When a player turns it off in the game, the profile shows only the name, class, levels and guild, and says the
+player keeps the rest private. *(Inferred:)* a character that never saved the setting is shown in full, because the
+client offers the setting as a way to hide details.
+
+**Guilds** (`/guilds`, `/guilds/<id>`) list every guild by prestige. Each row has its badge (the frame
+`State.Background` with the design `State.Icon` over it, both GuildIconConfig `_kBigIcon`), leader, level, members,
+prestige, territories held and guild league tier. A guild's page also shows:
+
+- the declaration (`Announce`; the internal notice stays private);
+- the members with class, level, position (GuildPositionConfig) and Battle Merit;
+- the territory zones it holds and the siege cities it defends;
+- its guild league standing (tier, group, place, strength; GuildLeagueService's state);
+- its place on the guild boards.
+
+*(Inferred:)* the game has no guild Battle Merit, so the page adds up the members' scores on the Battle Merit board.
+
+**Territory map** (`/territory`) shows the war's zones (GVGWarZoneConfig: the capital, its regions, their
+strongholds and fields) with the guild that holds each. It also shows the stage in force, the next stage and the war's
+coming battles (TerritoryWarStageConfig through TerritoryWarsClock), the battles running now with their guild scores
+and the number fighting, and the siege cities (SiegeConfig 1001 and 1101-1103, the cities with an owner source) with
+their defender, attacker and, while a siege runs, its stage. *(Inferred:)* the stage names in words.
+
+The client draws its territory map from a UI prefab whose art no table names, so there is no picture to export. The
+page draws a schematic of the zones' own tree instead: the capital in the middle, the regions around it, and each
+region's strongholds (medium) and fields (small) fanned out around the region. A zone is filled with its holder's
+colour and ringed while a battle runs on it. Each zone links to its map page.
+
+**Market** (`/market`, `/market/<id>`) shows the following, read at most once every 30 seconds *(inferred interval)*:
+
+- what is on offer: the exchange's listings (TradeService `trade_listing`) not yet expired, and the stock of open
+  stalls (StallsService `stall`, player and system stalls);
+- the lowest price, the last sale and the most traded items of the last 30 days (`trade_history`, the exchange's
+  sales; the game itself shows its last 20 as an item's recent price);
+- an item's daily price history over 90 days as a chart (the day's average with its low-high range and the quantity
+  sold), its latest sales and its auction lots (AuctionStore);
+- the guild materials exchange's hourly price (GuildStore `MarketState.PriceHistory`, the game's own last 168 hours).
+
+Sellers on the exchange are not named, as in the game. A stall shows its owner, whose name stands over it in the
+street.
+
+## Item tracking
+
+**Item tracking** (`/admin/items`, admins) finds an item by name or id and shows where it is held now and how it moved.
+The places it counts:
+
+| Place | From |
+|---|---|
+| Bag, Cart, Worn | the item table (cart = pack 100, worn = a grid slot) |
+| Mail | the unclaimed letters of every mailbox: configured grants and attached instances |
+| Exchange | listings in escrow |
+| Stall | stall stock |
+| Auction | open auction lots |
+
+Each holding has a count, the instance guids, and links to the character and its account. Only characters that are not
+deleted count. The economy's other holding places (caravan, escort and territory pendings, recovery) are not
+counted, so a total is a lower bound. A currency has no holders here, only its ledger. Currencies are kept in the
+characters' purses.
+
+The ledger part adds up the item's legs in `economy_entry`: what its source legs let in, what its sink legs took out,
+the first and the last entry. It also shows the latest 25 movements, which link to the full economy log.
+
+The **duplication check** runs over one item (on its page) or over every item held anywhere (*Run the check*, the 200
+worst). Its rules are *inferred*. They rest on the server's own economy invariant (`EconomyExactnessChecker`): what is
+held changes by exactly the ledger's sources minus its sinks.
+
+| Flag | When |
+|---|---|
+| Instance seen twice | one instance guid is in two places. A guid is unique in the item table, and a clone in escrow or mail keeps its guid only while the table row is gone |
+| Exceeds ledger | more is held than the ledger's sources minus its sinks |
+| Unrecorded | the item is held but the ledger never recorded it |
+
+*Exceeds ledger* and *Unrecorded* assume that the ledger has run since the realm began. Items from before the ledger,
+or from a database restored without it, show up as *Unrecorded*. The report gives the ledger's first entry, so you
+can tell. Nothing here changes anything: the check is a lead for an admin to follow in the economy log.
 
 ## Behind nginx with https
 
@@ -242,7 +446,12 @@ proxy's.
 
 - **Sessions.** A random 256-bit id in an `HttpOnly`, `SameSite=Strict` cookie, `Secure` over https. Sessions live in
   the server's memory: a restart logs everyone out. A login always issues a new id. A password change signs out the
-  account's other browsers, a ban all of them.
+  account's other browsers, a ban all of them. The sessions page names a session by an HMAC of its id, never the id.
+- **Two-factor authentication.** See [Account security](#account-security): TOTP secrets stay in the database, recovery
+  codes only as hashes; codes are good once, compared in constant time, limited per login, per account and per
+  address, and never logged.
+- **Roles.** Every API route checks the caller's staff role on each request; a role taken away or a ban applies to the
+  next request.
 - **CSRF.** Every POST carries a token bound to the session cookie (before a login, to a visitor cookie) and is
   refused without it, or when its `Origin` is another site.
 - **Passwords** are checked and stored by the server's own code (PBKDF2-SHA256, 100 000 rounds). A wrong password, an
@@ -254,7 +463,8 @@ proxy's.
   `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`. Every value from the server reaches the page as
   text, never as HTML. Request bodies are capped at 16 KB; API answers are not cached.
 - **Data.** Who's online shows character names, classes, levels and maps to everyone; the account behind a
-  character only to admins.
+  character only to admins. A public profile shows only what the game's details window shows another player, and less
+  when the player turned *show detailed info* off.
 - **Load.** The online list is read on the game loop at most once every 5 seconds, the level board from the database
   at most every 30; the other boards are RankService's own cache. Heavy traffic does not reach the loop.
 
@@ -264,8 +474,13 @@ proxy's.
 |---|---|
 | `admin_audit` | one row per admin action |
 | `panel_news` | the news the public pages show, written with the news editor; `pinned` keeps an item on top |
+| `panel_role` | the staff roles an Admin gave on the panel |
+| `account_login` | the latest 100 logins of each account (panel or game; the address only with `LoginAddresses`) |
+| `account_totp` | each account's two-factor secret, last used step and recovery code hashes |
+| `feedback_triage`, `feedback_note` | the report inbox's status, assignee and notes |
+| `panel_setting` | maintenance mode |
 
-Both are created by the server at startup like its other tables and are part of every backup.
+They are created by the server at startup like its other tables and are part of every backup.
 
 ## For developers
 
@@ -277,7 +492,11 @@ rectangle). Bundles are read with AssetsTools.NET and BC1/BC3/BC7 textures decod
 
 `src/Ro3Emu.Panel` holds the website: the static files (`www/`, embedded in the assembly; the fonts are the
 launcher's; the colours, spacing scale, type scale and components are the tokens at the top of `app.css`), the JSON API under `/api/` (`PanelSite`), sessions and CSRF. It knows nothing of the game: everything
-goes through `IPanelBackend`, which the server implements in `Http/PanelBackend.cs` over its stores, writer and loop.
+goes through `IPanelBackend`, `IPanelAdminTools` and `IPanelOperations` (roles, security, reports, character actions,
+server control), which the server implements in `Http/PanelBackend*.cs`, `Http/PanelAdminTools*.cs` and
+`Http/PanelOperations*.cs` over its stores, writer and loop. A page in its own file registers with
+`registerAdminPage({ ..., role })`; `adminAccountCards` takes cards for an account's admin page.
 `ServerHost` routes every request that arrives on the panel's port to `PanelSite` before the server's own
 middleware, so neither port serves the other's paths. Tests: `PanelTests`; the test hosts keep the panel off unless a
-test turns it on with a free port (`TestHostDefaults`).
+test turns it on with a free port (`TestHostDefaults`). `PanelAdminTests` cover roles, security, reports, character
+actions and server control.
