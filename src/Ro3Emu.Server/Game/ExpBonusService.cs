@@ -27,9 +27,19 @@ public sealed class ExpBonusService
         _options = options;
         _log = log;
 
-        _configFilePath = FindConfigFile(options.Value.DataDir);
+        string file = options.Value.ExpBonusFile;
+        if (string.Equals(file, ServerOptions.ExpBonusOff, StringComparison.OrdinalIgnoreCase))
+        {
+            // No file: the bonus starts at 0 and a GM change stays in memory.
+            _configFilePath = "";
+            _multiplier = 0;
+            return;
+        }
+        _configFilePath = string.IsNullOrEmpty(file) ? FindConfigFile(options.Value.DataDir) : Path.GetFullPath(file);
         LoadOrInitialize();
     }
+
+    private bool HasFile => _configFilePath.Length > 0;
 
     private static string FindConfigFile(string? dataDir)
     {
@@ -116,7 +126,7 @@ public sealed class ExpBonusService
         {
             _multiplier = Math.Max(0, newMultiplier);
             _log?.LogInformation("EXP bonus multiplier updated to {Multiplier}x", _multiplier);
-            if (saveToFile) Save();
+            if (saveToFile && HasFile) Save();
         }
     }
 
@@ -154,7 +164,7 @@ public sealed class ExpBonusService
     private void CheckFileReload()
     {
         var now = DateTime.UtcNow;
-        if ((now - _lastFileCheck).TotalSeconds < 2) return;
+        if (!HasFile || (now - _lastFileCheck).TotalSeconds < 2) return;
         _lastFileCheck = now;
 
         try

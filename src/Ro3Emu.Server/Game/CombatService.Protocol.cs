@@ -213,7 +213,7 @@ public sealed partial class CombatService
     /// from the turret unit.
     /// </summary>
     private async Task SendHitBulletsAsync(IEnumerable<GameSession> viewers, JsonElement row, SkillHitInfo hit, long masterId,
-        TurretShot? turret = null)
+        TurretShot? turret = null, IReadOnlyList<MonsterUnit>? struck = null)
     {
         int effect = BulletEffect(turret?.Show ?? GameData.Int(row, "_iScriptShow"));
         if (effect == 0 || hit.Dsts.Count == 0) return;
@@ -224,7 +224,9 @@ public sealed partial class CombatService
             if (dst.DamageType is DamageType.Heal or DamageType.HealMana) continue;
             var bullet = new SkillFixTimeBulletNotify
             {
-                SourceId = turret?.SourceId ?? hit.SrcID, TargetId = dst.DstID, EffectId = effect, FixedTime = BulletLifeTime(effect),
+                SourceId = turret?.SourceId ?? hit.SrcID, TargetId = dst.DstID, EffectId = effect,
+                FixedTime = turret != null && struck?.FirstOrDefault(m => m.Uid == dst.DstID) is { } ship
+                    ? TurretFlightMs(effect, turret.Origin, ship) : BulletLifeTime(effect),
                 Split = Math.Max(1, hit.Split), SkillConfigId = hit.SkillId, MasterId = masterId, StartTimestampMs = now,
             };
             if (turret != null) bullet.SourcePosition = turret.Origin.Clone();
@@ -234,6 +236,20 @@ public sealed partial class CombatService
 
     private int BulletLifeTime(int effect) =>
         SkillEffectData.Find(_data.SkillTemplateTable("Lua_Config_EffectData"), effect)?.BulletLifeTime ?? 0;
+
+    /// <summary>
+    /// A turret's ball flies from the turret to the unit it hit at the bullet's m_fBulletSpeed (the airship's 61202 ball
+    /// 6120205 at 200 m/s over 100-105 m), its configured life time first; (inferred) held to 100-500 ms, as a hit's
+    /// flight time is.
+    /// </summary>
+    private int TurretFlightMs(int effect, Vec3 origin, MonsterUnit target)
+    {
+        var data = SkillEffectData.Find(_data.SkillTemplateTable("Lua_Config_EffectData"), effect);
+        if (data?.BulletLifeTime is > 50 and var life) return life;
+        if (data?.BulletSpeed is not > 0) return 0;
+        double ms = MonsterService.Distance(origin.X, origin.Z, target.X, target.Z) / data.Value.BulletSpeed * 1000;
+        return (int)Math.Clamp(Math.Round(ms), 100, 500);
+    }
 
     /// <summary>Reflect a real target eligibility transition for an AOI-visible unit (31122).</summary>
     public async Task SetSkillTargetSelectionAsync(GameSession viewer, WorldUnit target, int skillTag, bool white, bool enabled)

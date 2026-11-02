@@ -365,7 +365,7 @@ public sealed partial class CombatService
         var hit = new SkillHitInfo
         {
             SrcID = field?.Uid ?? action.SourceId, SkillId = action.Request.SkillId, SessionId = action.Id,
-            RootCtxGuid = action.Id, ComboIndex = action.Request.ComboIndex, ShowPoint = HitEffect(GameData.Int(row, "_iScriptShow")),
+            RootCtxGuid = action.Id, ComboIndex = action.Request.ComboIndex, ShowPoint = HitEffect(action.Turret?.Show ?? GameData.Int(row, "_iScriptShow")),
             // Heals on allies are one number; damage segments only when an enemy is hit.
             Split = targets.Count > 0 ? HitSplit(row) : 1,
             SrcElement = attackElement,
@@ -506,7 +506,7 @@ public sealed partial class CombatService
                 if (CurrentCaster() && hit.Dsts.Any(d => d.HitResult != DamageHitResult.Miss)) await _buffs.RecoverEnergyOnHitAsync(s, row);
                 var sourceViewers = CurrentCaster() ? _world.Viewers(s).Append(s) : Enumerable.Empty<GameSession>();
                 var hitViewers = processed.SelectMany(t => t.Viewers).Concat(sourceViewers).Distinct().ToArray();
-                await SendHitBulletsAsync(hitViewers, row, hit, castingRole.Id, action.Turret);
+                await SendHitBulletsAsync(hitViewers, row, hit, castingRole.Id, action.Turret, processed);
                 foreach (var viewer in hitViewers) await viewer.SendGameAsync(SkillHit, hit);
                 if (doubles.Count > 0)
                 {

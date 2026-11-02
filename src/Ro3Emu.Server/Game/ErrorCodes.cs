@@ -212,6 +212,11 @@ public static class ErrorCodes
     public const int NpcTooFar = 804;           // "Too far away for NPC Interaction"
     public const int NpcParameter = 806;        // invalid interaction parameters
 
+    // Treasure hunt (ErrorCodeConfig; mapping a refusal to its code is inferred)
+    public const int TreasurePointMissing = 6501;   // "Treasure-digging location does not exist"
+    public const int TreasurePointElsewhere = 6502; // "Treasure-digging location is not on the map"
+    public const int TreasurePointTooFar = 6503;    // "Treasure-digging location is beyond the maximum Distance"
+
     // Party
     public const int AlreadyInParty = 1201;     // "You are already in a Party."
     public const int PartyMissing = 1202;       // "No Party exists with this ID."

@@ -286,6 +286,7 @@ public sealed partial class DungeonTests
     public async Task OnlyTheVortexInteractionEndsTheJumpStepAndALateOneIsNotRefused()
     {
         const long scene = 1000201;
+        Service<IOptions<ServerOptions>>().Value.ScriptedScenePacePercent = 10; // Bobo's exit (stage 2) is timed
         await using var alice = await InWorld("Alice");
         await Gm(alice, "!quest accept 10104290");
         Assert.Equal(0, await Enter(alice, new EnterDungeonReq { SceneEntry = scene }));
@@ -293,45 +294,20 @@ public sealed partial class DungeonTests
         await Stage(alice, 1, quest: 1);
         var map = Service<WorldData>().Map(scene)!;
         await WalkInto(alice, map.Regions[25]);
-        await Stage(alice, 2, quest: 2);
+        await Stage(alice, 2, quest: 1); // Bobo leaves first
+        await Stage(alice, 3, quest: 2);
         var vortex = Assert.Single(await ActorsIn(alice, 1, a => a.NpcId == 5300030));
 
         await WalkInto(alice, map.Regions[20]); // in the vortex: the step waits for its interaction
-        Assert.Equal(1, await Service<GameLoop>().InvokeAsync(() => Task.FromResult(Session(alice).DungeonAttempt!.Wave)));
+        Assert.Equal(2, await Service<GameLoop>().InvokeAsync(() => Task.FromResult(Session(alice).DungeonAttempt!.Wave)));
         Assert.Equal(0, await Interact(alice, vortex, 5300030));
-        await Stage(alice, 3, quest: 3);
+        await Stage(alice, 4, quest: 3);
         // A second (late) auto interaction on the vortex the step took away is answered, not refused with 801.
         Assert.Equal(0, await Interact(alice, vortex, 5300030));
     }
 
-    private static readonly int[] RideWaypoints = [0, 4, 8, 13];
-
-    private async Task SeatedOnTheDeniroAsync(BotClient alice, DungeonService.SceneActorUnit actor, int interaction, bool exitByButton)
-    {
-        long me = Session(alice).Role!.Id;
-        if (exitByButton) Service<IOptions<ServerOptions>>().Value.ScriptedScenePacePercent = 1000; // the put-down is 20 s away
-        Assert.Equal(0, await Interact(alice, actor, interaction));
-        var seat = await Next(alice, WorldInteractionService.Change, InteractChangeNtf.Parser,
-            m => m.Uid == me && m.DataInfo.EType != InteractInfo.Types.EState.Idle);
-        Assert.Equal((InteractInfo.Types.EState.Vehicle, interaction, actor.Uid),
-            (seat.DataInfo.EType, seat.DataInfo.InteractConfigId, (long)seat.DataInfo.ActiveObjId));
-        Assert.Equal(9, (await Next(alice, WorldInteractionService.Change3C, Change3CNtf.Parser)).CfgId); // VehicleSeatConfig 5300005
-        if (exitByButton)
-        {
-            // An old put-down (another ride's token) leaves the seat alone.
-            await Service<GameLoop>().InvokeAsync(() => Service<WorldInteractionService>().PutDownFromSceneActorAsync(Session(alice), -1));
-            Assert.True(Service<WorldInteractionService>().IsSeatedOnSceneActor(Session(alice)));
-            await alice.SendGameAsync(WorldInteractionService.Action, new UseInteractActionReq { ButtonId = 26 });
-            Assert.Equal(0, (await Next(alice, WorldInteractionService.Action, UseInteractActionRes.Parser)).Result);
-            Service<IOptions<ServerOptions>>().Value.ScriptedScenePacePercent = 10;
-        }
-        var down = await Next(alice, WorldInteractionService.Change, InteractChangeNtf.Parser,
-            m => m.Uid == me && m.DataInfo.EType == InteractInfo.Types.EState.Idle);
-        Assert.False(down.Interrupt); // put down, not interrupted by leaving
-    }
-
-    // The first ride (5300005, a vehicle gameplay status) seats the player on the Deniro, which puts them down by itself
-    // (inferred) or when the client's own exit button asks (VehicleSeatConfig 5300005 _kGameplayBtnId 26).
+    // 'Ride the Deniro' (5300005, a vehicle gameplay status) seats the player as its driver; the client's own exit button
+    // (VehicleSeatConfig 5300005 _kGameplayBtnId 26) puts them down, and the end region still ends the ride.
     [ClientDataTheory]
     [InlineData(false)]
     [InlineData(true)]
@@ -383,14 +359,9 @@ public sealed partial class DungeonTests
             // The reverse dungeon's client reports the NPC's place (31089) before each interaction (LC_DAL_Interact.SyncNpcPos).
             await alice.SendGameAsync(WorldCoreService.TeleportObject, new ClientTeleportObject
             { TargetUid = actor.Uid, TargetPos = new Vec3 { X = actor.X, Y = actor.Y, Z = actor.Z } });
-            if (step != 1)
-            {
-                Assert.Equal(0, await Interact(alice, actor, chain[step].Interaction));
-                // Only the first Ride has a vehicle status: the ride to the depths seats nobody.
-                Assert.False(Service<WorldInteractionService>().IsSeatedOnSceneActor(Session(alice)));
-                continue;
-            }
-            await SeatedOnTheDeniroAsync(alice, actor, chain[step].Interaction, exitByButton);
+            Assert.Equal(0, await Interact(alice, actor, chain[step].Interaction));
+            // Only the last Ride enters the driver's state: trying to ride (5300008) and feeding seat nobody.
+            if (step < chain.Length - 1) Assert.False(Service<WorldInteractionService>().IsSeatedOnSceneActor(Session(alice)));
         }
         // ... and gets no error tip for it.
         Assert.DoesNotContain(alice.Inbox.Snapshot(), e => e.IsGame(99999)
@@ -401,25 +372,29 @@ public sealed partial class DungeonTests
             n => n.DataInfo.EType == InteractInfo.Types.EState.Vehicle);
         Assert.Equal((3L, 5300005, deniro.Uid), (seated.DataInfo.StateId, seated.DataInfo.InteractConfigId, seated.DataInfo.ActiveObjId));
         Assert.Equal(9, (await Next(alice, WorldInteractionService.Change3C, Change3CNtf.Parser)).CfgId);
+        Assert.True(Service<WorldInteractionService>().IsSeatedOnSceneActor(Session(alice)));
+        long me = Session(alice).Role!.Id;
+        // The seat travels as AOI carry info, which the client needs to put the player on the Deniro: the player is
+        // carried by the Deniro in seat 0 and the Deniro carries the player (VehicleSeatConfig 5300005 _iType).
+        var carry = alice.Inbox.Snapshot().Where(e => e.IsGame(WorldCoreService.AoiInfo))
+            .Select(e => AoIInfoTotal.Parser.ParseFrom(e.Body)).Last(m => m.AoiData.Any(d => d.CarryInfo?.BeCarried?.Id == (ulong)deniro.Uid));
+        Assert.Equal(0, carry.AoiData.Single(d => d.EntityUuid == (ulong)me).CarryInfo.BeCarried.CarrySlot);
+        Assert.Equal((ulong)me, carry.AoiData.Single(d => d.EntityUuid == (ulong)deniro.Uid).CarryInfo.AddCarries.Single().Id);
+        if (exitByButton)
+        {
+            await alice.SendGameAsync(WorldInteractionService.Action, new UseInteractActionReq { ButtonId = 26 });
+            Assert.Equal(0, (await Next(alice, WorldInteractionService.Action, UseInteractActionRes.Parser)).Result);
+            await Next(alice, WorldInteractionService.Change, InteractChangeNtf.Parser,
+                n => n.Uid == me && n.DataInfo.EType == InteractInfo.Types.EState.Idle);
+            Assert.False(Service<WorldInteractionService>().IsSeatedOnSceneActor(Session(alice)));
+        }
         await WalkInto(alice, Service<WorldData>().Map(scene)!.Regions[31]); // the ride ends in the end region
-        await Next(alice, WorldInteractionService.Change, InteractChangeNtf.Parser, n => n.DataInfo.EType == InteractInfo.Types.EState.Idle);
+        if (!exitByButton)
+            await Next(alice, WorldInteractionService.Change, InteractChangeNtf.Parser,
+                n => n.Uid == me && n.DataInfo.EType == InteractInfo.Types.EState.Idle);
         var result = await Next(alice, DungeonService.Result, DungeonResNotify.Parser);
         Assert.Equal((DungeonRes)1, result.Res);
-        // The ride (inferred): the player was moved from the start of guide 36 to its end in forced positions.
-        var route = Service<WorldData>().Map(scene)!.GuidePaths[36];
-        var moves = alice.Inbox.Snapshot().Where(e => e.IsGame(GameAoiSink.MovementChange))
-            .Select(e => MovementChangeNtf.Parser.ParseFrom(e.Body)).Where(m => m.Uid == Session(alice).Role!.Id && m.MovementInfo?.Pos != null)
-            .Select(m => m.MovementInfo.Pos).ToList();
-        int Reached(int waypoint) => moves.FindIndex(m => MonsterService.Distance(m.X, m.Z, route[waypoint].X, route[waypoint].Z) < 1.5f);
-        int[] passed = [.. RideWaypoints.Select(Reached)];
-        Assert.All(passed, i => Assert.True(i >= 0, "a waypoint was never reached"));
-        Assert.Equal(passed.Order(), passed); // in route order
-        // ... and the Deniro walked it too, ending where the route ends.
-        Assert.Contains(alice.Inbox.Snapshot().Where(e => e.IsGame(GameAoiSink.MovementChange))
-            .Select(e => MovementChangeNtf.Parser.ParseFrom(e.Body)).Where(m => m.Uid == deniro.Uid && m.MovementInfo?.Pos != null)
-            .Select(m => m.MovementInfo.Pos), m => MonsterService.Distance(m.X, m.Z, route[^1].X, route[^1].Z) < 1.5f);
-        var end = Service<WorldData>().Map(scene)!.Points[31]; // the ride ends in the end region
-        Assert.True(MonsterService.Distance(Session(alice).Position.X, Session(alice).Position.Z, end.X, end.Z) < 1);
+        Assert.False(Service<WorldInteractionService>().IsSeatedOnSceneActor(Session(alice)));
         await StoryMovesOn(alice, 10104300, 10104310);
         await Load(alice, 1000401); // on into Maya's nest
     }

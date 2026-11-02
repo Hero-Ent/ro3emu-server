@@ -33,6 +33,8 @@ public sealed partial class SkillCombatTests
         var lowTarget = await Target("archer", stationary: true, npcId: 5000007);
         var lowHit = await CastDoubleStrafeAsync(archer, lowTarget);
         await Task.Delay(1000);
+        // Points are refused in battle (ActionInBattle): skip PublicParamConfig.OutOfCombatTime after the shot.
+        await Loop.InvokeAsync(() => { Session("archer").StatusBits &= ~(1L << 15); return Task.CompletedTask; });
 
         var request = new AllocateAttrPointReq { PlanIndex = 0 };
         foreach (int stat in Enumerable.Range(1, 6)) request.Points[stat] = stat == 5 ? 10 : 1;

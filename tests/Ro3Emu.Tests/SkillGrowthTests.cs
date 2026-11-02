@@ -259,6 +259,65 @@ public sealed class SkillGrowthTests : IAsyncLifetime
         Assert.Equal(0, (await Next(again, SkillService.SwitchPlan, SwitchPlanResp.Parser)).Result);
     }
 
+    /// <summary>
+    /// The skill window edits manualLoadSkill (ServerManualLoadSkill), so a bar never edited is sent as the default bar
+    /// the wheel shows; a Guillotine Cross can then take its normal attack (15000) off slot 1 and put it back.
+    /// </summary>
+    [ClientDataFact]
+    public async Task NormalAttackTakenOffTheBarCanBePutBack()
+    {
+        await using var alice = await InWorld("Alice");
+        await Next(alice, SkillService.SkillDataSync, DBSkillDataIncrement.Parser);
+        await Gm("alice", "!job 5400");
+        await Next(alice, SkillService.SkillDataSync, DBSkillDataIncrement.Parser,
+            m => m.SkillList?.All?.Value.Contains(15000) == true);
+
+        // The bar keeps one skill (24219 "Skill slot cannot be empty"), so another goes on first.
+        await alice.SendGameAsync(SkillService.SkillLoad, new SkillLoadReq
+        {
+            OpType = SkillLoadOperation.SkillLoadOpLoad, IsManual = true, SocketNum = 1,
+            Info = new SkillData { SkillId = 15099, SkillLevel = 1 }
+        });
+        Assert.Equal(0, (await Next(alice, SkillService.SkillLoad, SkillLoadResp.Parser)).Result);
+        await alice.SendGameAsync(SkillService.SkillLoad, new SkillLoadReq
+        {
+            OpType = SkillLoadOperation.SkillLoadOpUnload, IsManual = true, SocketNum = 0,
+            Info = new SkillData { SkillId = 15000, SkillLevel = 1 }
+        });
+        Assert.Equal(0, (await Next(alice, SkillService.SkillLoad, SkillLoadResp.Parser)).Result);
+        await alice.SendGameAsync(SkillService.SkillLoad, new SkillLoadReq
+        {
+            OpType = SkillLoadOperation.SkillLoadOpLoad, IsManual = true, SocketNum = 0,
+            Info = new SkillData { SkillId = 15000, SkillLevel = 1 }
+        });
+        Assert.Equal(0, (await Next(alice, SkillService.SkillLoad, SkillLoadResp.Parser)).Result);
+    }
+
+    /// <summary>
+    /// The skill window shows a Guillotine Cross's katar attack (JobAttackConfig 5400 [12] -> 1005101, group 10051) in
+    /// the Novice's attack slot; it is learned at level 1 and goes on the bar.
+    /// </summary>
+    [ClientDataFact]
+    public async Task WeaponNormalAttackIsLearnedAndGoesOnTheBar()
+    {
+        await using var alice = await InWorld("Alice");
+        await Next(alice, SkillService.SkillDataSync, DBSkillDataIncrement.Parser);
+        await Gm("alice", "!job 5400");
+        var sync = await Next(alice, SkillService.SkillDataSync, DBSkillDataIncrement.Parser,
+            m => m.SkillList?.All?.Value.Contains(10051) == true);
+        Assert.Contains(10050, sync.SkillList.All.Value);
+        Assert.Contains(10052, sync.SkillList.All.Value);
+        var session = _app.Services.GetRequiredService<SessionRegistry>().All().Single(s => s.Role?.Name == "Alice");
+        Assert.Equal(1, _app.Services.GetRequiredService<SkillService>().Level(session.Progress!, 10051));
+
+        await alice.SendGameAsync(SkillService.SkillLoad, new SkillLoadReq
+        {
+            OpType = SkillLoadOperation.SkillLoadOpLoad, IsManual = true, SocketNum = 1,
+            Info = new SkillData { SkillId = 10051, SkillLevel = 1 }
+        });
+        Assert.Equal(0, (await Next(alice, SkillService.SkillLoad, SkillLoadResp.Parser)).Result);
+    }
+
     [ClientDataFact]
     public async Task LoadQueueAndResetValidateInputsAndPersist()
     {

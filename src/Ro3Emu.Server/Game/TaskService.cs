@@ -403,10 +403,12 @@ public sealed partial class TaskService
         {
             case "reset":
                 session.Tasks = new DBTaskInfo();
+                session.TaskRuntime.GmResets++;
                 Accept(session, FirstTask);
                 session.Tasks.CompleteTaskNum[FirstTask] = 0;
                 break;
             case "drop":
+                if (session.Tasks.CompleteTaskNum.GetValueOrDefault(id) > 0) session.TaskRuntime.GmResets++;
                 session.Tasks.Infos.Remove(id);
                 session.Tasks.CompleteTaskNum.Remove(id);
                 break;
@@ -597,9 +599,17 @@ public sealed partial class TaskService
             int? playBook = session.Synced.GetValueOrDefault(SeasonService.SeasonSync) is DBSeasonInfo { Current: { } current }
                 ? (int)current.PlayBookId : null;
             var plan = _awards.ResolveTask(session, def.Award, playBook);
-            var runtime = new TaskRuntimeState { CompletedGuides = session.TaskRuntime.CompletedGuides.ToHashSet(), InCutScene = session.InCutScene || cutScene };
+            var runtime = new TaskRuntimeState
+            {
+                CompletedGuides = session.TaskRuntime.CompletedGuides.ToHashSet(), InCutScene = session.InCutScene || cutScene,
+                GmResets = session.TaskRuntime.GmResets,
+            };
+            // A role whose counts a GM cleared names its reset generation; one that never had them cleared keeps the key.
             string awardSource = $"task/{session.Role!.Id}/{id}/{next.CompleteTaskNum[id]}/" +
-                $"{session.Daily?.DailyEpoch ?? 0}/{session.Daily?.WeeklyEpoch ?? 0}";
+                $"{session.Daily?.DailyEpoch ?? 0}/{session.Daily?.WeeklyEpoch ?? 0}" +
+                (runtime.GmResets > 0 ? $"/gm{runtime.GmResets}" : "");
+            if (daily == null && await _character.RewardSourceCommittedAsync(awardSource))
+                return RecordPaidDelivery(session, id, next, runtime, awardSource);
             if (!await _character.ApplyAwardAsync(session, plan, def.Exp, costs, next.ToByteArray(),
                 JsonSerializer.SerializeToUtf8Bytes(runtime), expectedDaily: daily?.Before, nextDaily: daily?.After,
                 expectedTasks: expectedTasks, persist: questMount is { } ride ? tx => _mounts.PersistQuestRide(session, ride, tx) : null,
@@ -630,6 +640,21 @@ public sealed partial class TaskService
             foreach (var handler in GuildActivityJoined) handler(session, activity);
         _log.LogInformation("{Name} delivers task {Task} {TaskName}: exp {Exp}", session.Role?.Name, id,
             _data.TextOf(_data.Row("TaskConfig", id)!.Value, "_iName"), def.Exp);
+        return 0;
+    }
+
+    /// <summary>
+    /// A delivery whose award source is already committed was paid by an earlier operation whose task state did not
+    /// survive (the source names this very count and period). Paying again is refused by the natural-source claim and
+    /// would abort the caller (login settlement included), so the delivery is recorded as done without a second award.
+    /// </summary>
+    private int RecordPaidDelivery(GameSession session, long id, DBTaskInfo next, TaskRuntimeState runtime, string awardSource)
+    {
+        _log.LogWarning("Task {Task} of {Role} was already paid ({Source}); recorded as delivered without a second award",
+            id, session.Role?.Id, awardSource);
+        session.Tasks = next;
+        session.TaskRuntime = runtime;
+        Save(session);
         return 0;
     }
 

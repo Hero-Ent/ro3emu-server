@@ -134,8 +134,9 @@ public sealed partial class DungeonService
         /// (DungeonService.Cannon).</summary>
         /// <summary>The current step's region cues already played (their index in the step's cues).</summary>
         internal HashSet<int> FiredCues { get; } = [];
-        /// <summary>Participants seated on a scene actor that is a vehicle (DungeonService.Story).</summary>
-        internal Dictionary<GameSession, SceneActorUnit> Riding { get; } = [];
+        /// <summary>Participants seated on a scene actor that is a vehicle (DungeonService.Story), by their seat's
+        /// WorldInteractionService token.</summary>
+        internal Dictionary<GameSession, long> Riding { get; } = [];
         /// <summary>Participants sliding down the step's slope (DungeonService.Story).</summary>
         internal HashSet<GameSession> Sliding { get; } = [];
         /// <summary>The longest fall a completed step started, in ms: the next scene waits for the landing.</summary>
@@ -271,8 +272,7 @@ public sealed partial class DungeonService
         var online = _sessions.All().Where(p => p.Role != null).ToDictionary(p => p.Role!.Id);
         var members = ids.Where(online.ContainsKey).Select(id => online[id]).ToArray();
         if (error == 0 && ids.Length > 1 && membership.Leader != s.Role!.Id) error = ErrorCodes.NoPermission;
-        // GM "!dungeonsolo on" (test aid, not original behaviour): a lone role may also enter a team boss with 30400.
-        if (error == 0 && ids.Length < plan!.MinPlayers && !(ids.Length == 1 && s.DungeonSoloMatch && plan.Multi != null))
+        if (error == 0 && ids.Length < plan!.MinPlayers && !BelowMinimumAllowed(ids.Length, s))
             error = ErrorCodes.DungeonTeamSize;
         if (error == 0 && ids.Length > plan!.MaxPlayers) error = ErrorCodes.PartyFull;
         if (error == 0 && members.Length != ids.Length) error = ErrorCodes.PlayerOffline;

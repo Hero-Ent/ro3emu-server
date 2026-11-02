@@ -18,6 +18,11 @@ using Ro3Emu.Bot;
 //   --guild: instead of a party, apply to that guild, wait to be accepted, sit in its voice channel and echo there
 //   (when the server's voice relay is on); --ask-mic asks for the mic each time the channel turns to Order mode.
 //   waits for a party invite, accepts it and echoes the party's voice back (see BotVoiceEcho)
+if (args.Length > 0 && args[0] == "probe")
+{
+    Environment.ExitCode = await Probe.RunAsync(args[1..], FindDataDir());
+    return;
+}
 if (args.Length > 0 && args[0] == "voice-echo")
 {
     Environment.ExitCode = await VoiceEchoAsync(args[1..]);

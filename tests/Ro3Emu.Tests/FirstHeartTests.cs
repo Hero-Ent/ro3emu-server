@@ -5,6 +5,8 @@ using Romsg;
 using Ro3Emu.Bot;
 using Ro3Emu.Server;
 using Ro3Emu.Server.Accounts;
+using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 using Ro3Emu.Server.Game;
 
 namespace Ro3Emu.Tests;
@@ -18,7 +20,8 @@ public sealed class FirstHeartTests : IAsyncLifetime
 {
     private const long LevelTen = 100100200, LevelTwenty = 100100201, LevelFifty = 100100206, LoginOne = 101101100,
         LoginSeven = 101101106, CardTask = 102101110;
-    private const int OpenLevel = 30; // condition 21000012
+    /// <summary>NewActivityConfig 114's open condition 21000012 (base level 30; 10 before the 20 Oct 2026 client).</summary>
+    private long OpenLevel => new LCConditionList(LCConditionList.Get(Service<GameData>(), 21000012)!.Value.SubConditionList!.Value[0]).Data[1];
     private const int Zeny = 1;
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(15);
     private readonly string _dataDir = Path.Combine(Path.GetTempPath(), "ro3emu-firstheart-" + Guid.NewGuid().ToString("N"));
@@ -179,7 +182,7 @@ public sealed class FirstHeartTests : IAsyncLifetime
     {
         await using var alice = await InWorld("Alice");
         var s = Session(alice);
-        await Gm(alice, $"!lvl {OpenLevel}");
+        await Gm(alice, $"!lvl {Math.Max(OpenLevel, 20)}"); // and LevelTwenty's level for day 2
         await Until(s, cfg => Status(cfg, LoginOne) == FirstHeartTaskState.Accept, "day 1 tasks completed");
         Assert.Equal(0, await ClaimTask(alice, LevelTen));
         Assert.Equal(0, await ClaimTask(alice, LoginOne));

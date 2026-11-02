@@ -144,7 +144,7 @@ public sealed class ConfigViewTests
     // count only goes down: lower it when a change removes such reads, never raise it.
     // Hero Saga: upstream's 2679 plus 65 reads of our own combat and story code still to move into
     // the views (upstream sync 2026-10-31 with maya-story).
-    private const int FieldNamesOutsideViews = 2744;
+    private const int FieldNamesOutsideViews = 2743;
     private static readonly string Obj = Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar;
 
     [Fact]

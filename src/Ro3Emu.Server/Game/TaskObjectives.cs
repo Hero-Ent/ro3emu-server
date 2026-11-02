@@ -599,4 +599,7 @@ public sealed class TaskRuntimeState
 {
     public HashSet<long> CompletedGuides { get; set; } = new();
     public bool InCutScene { get; set; }
+    /// <summary>How often GM "!quest reset|drop" cleared delivery counts (custom test aid). A delivery's award source names
+    /// the task's CompleteTaskNum, so a cleared count would name a delivery already committed; this keeps them apart.</summary>
+    public int GmResets { get; set; }
 }

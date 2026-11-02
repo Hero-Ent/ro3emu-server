@@ -38,4 +38,8 @@ public readonly record struct SkillEffectData(JsonElement Row)
     /// <summary>The bullet's configured life time in ms (m_fBulletLifeTime), 0 when unset.</summary>
     public int BulletLifeTime => Bullet is { } bullet && bullet.TryGetProperty("m_fBulletLifeTime", out var life)
         && life.TryGetDouble(out double ms) && ms > 0 ? (int)ms : 0;
+
+    /// <summary>The bullet's speed in m/s (m_fBulletSpeed), 0 when unset.</summary>
+    public double BulletSpeed => Bullet is { } bullet && bullet.TryGetProperty("m_fBulletSpeed", out var speed)
+        && speed.TryGetDouble(out double value) && value > 0 ? value : 0;
 }

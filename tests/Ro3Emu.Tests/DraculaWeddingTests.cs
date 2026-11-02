@@ -155,14 +155,20 @@ public sealed class DraculaWeddingTests : IAsyncLifetime
 
     private async Task Kill(BotClient bot, MonsterUnit actor)
     {
-        await OnLoop(async () =>
+        // A wave monster keeps walking (to its surround slot): it may leave the swing's range before the cast lands.
+        int result = ErrorCodes.SkillDistance;
+        for (int attempt = 0; attempt < 5 && result == ErrorCodes.SkillDistance; attempt++)
         {
-            await Service<SceneService>().TeleportInMapAsync(Session(bot), new MapPoint(actor.X + 1, actor.Y, actor.Z, actor.Face));
-            Service<MonsterService>().Engage(actor, Session(bot));
-            actor.Hp = 1;
-        });
-        await bot.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1000001, TargetId = actor.Uid });
-        Assert.Equal(0, (await Next(bot, CombatService.UseSkill, CastSkillRsp.Parser)).Result);
+            await OnLoop(async () =>
+            {
+                await Service<SceneService>().TeleportInMapAsync(Session(bot), new MapPoint(actor.X + 1, actor.Y, actor.Z, actor.Face));
+                Service<MonsterService>().Engage(actor, Session(bot));
+                actor.Hp = 1;
+            });
+            await bot.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1000001, TargetId = actor.Uid });
+            result = (await Next(bot, CombatService.UseSkill, CastSkillRsp.Parser)).Result;
+        }
+        Assert.Equal(0, result);
         await Next(bot, CombatService.SkillHit, SkillHitInfo.Parser, hit => hit.Dsts.Any(d => d.DstID == actor.Uid && d.IsDead));
     }
 
@@ -268,6 +274,8 @@ public sealed class DraculaWeddingTests : IAsyncLifetime
 
         var plan = await Read(() => Session(alice).DungeonAttempt!.Plan);
         var map = Service<WorldData>().Map(Lair)!;
+        // The waves outlast a fresh role's HP (the GM "!hp" stops at its max): the GM's invincibility (GmUnlimit).
+        await OnLoop(() => { Session(alice).GmCombat |= GmCombatSwitches.Unlimited; return Task.CompletedTask; });
         for (int wave = 0; wave < plan.Waves.Count - 1; wave++)
         {
             await Until(() => Session(alice).DungeonAttempt?.Wave == wave, $"wave {wave + 1}");
@@ -277,7 +285,6 @@ public sealed class DraculaWeddingTests : IAsyncLifetime
                 await Gm(alice, FormattableString.Invariant($"!actors walk {region.X} {region.Z}"));
                 continue;
             }
-            await Gm(alice, "!hp 999999");
             foreach (var actor in await WaveIn(instance, plan.Waves[wave].Spawns.Count)) await Kill(alice, actor);
         }
 

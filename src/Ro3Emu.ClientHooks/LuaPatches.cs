@@ -32,6 +32,9 @@ namespace Ro3Emu.ClientHooks
     /// before any scene needs them (MapModules).</item>
     /// <item>Profile cards without stickers parse (LC_DAL_Personal.ParsePersonalInfo walks a nil list; PersonalCards).</item>
     /// <item>Hero Saga: 9 skill and 9 consumable slots on the PC bars, their keys and settings rows (HotbarExpansion).</item>
+    /// <item>Hero Saga: the Guillotine Cross katar skills repeat while their key is held, like Sonic Blow (KatarHold).</item>
+    /// <item>Hero Saga: auto-combat keeps chasing its target while Axe Tornado spins (AxeTornadoChase).</item>
+    /// <item>Hero Saga: with ShowLog off, Lua's forced Log/Warning lines (each with a traceback) are dropped (LuaLogFilter).</item>
     /// <item>Hero Saga: the camera zooms out 30 % farther and keeps the player's zoom from map to map (CameraZoom).</item>
     /// <item>Dialogue lines whose config names the wrong speaker, and a larger interaction key on the NPC option list
     /// (NpcDialogFixes).</item>
@@ -126,6 +129,9 @@ namespace Ro3Emu.ClientHooks
                     global.Obf_RuA<Obf_R.Obf_ff>("LC_SeasonExplorationHelper") ?? Module(manager, global, "lc_seasonexplorationhelper"));
                 LevelCapTip.Install(Module(manager, global, "lua_cfg_baselvlimitconfig"));
                 PersonalCards.Install((Obf_R.Obf_Cf)env, Module(manager, global, "lc_dal_personal"));
+                KatarHold.Install(global, name => Module(manager, global, name));
+                AxeTornadoChase.Install(global, name => Module(manager, global, name));
+                LuaLogFilter.Install(global, name => Module(manager, global, name));
                 HotbarExpansion.Install(manager, (Obf_R.Obf_Cf)env, global, name => Module(manager, global, name));
                 CameraZoom.Install(global, name => Module(manager, global, name));
                 NpcDialogFixes.Install(global, name => Module(manager, global, name));

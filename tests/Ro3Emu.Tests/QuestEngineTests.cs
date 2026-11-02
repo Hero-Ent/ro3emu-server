@@ -128,6 +128,46 @@ public sealed class QuestEngineTests : IAsyncLifetime
     }
 
     [ClientDataFact]
+    public async Task AGmResetLetsTheRoleDeliverAQuestAgainWithItsReward()
+    {
+        await using var bot = await InWorld();
+        long role = (long)bot.Self!.Uuid;
+        await Gm("!quest done 10101040");
+        await Barrier(bot);
+        Assert.Equal(1, OwnedQuestSourceCount(role, 10101040));
+        await Gm("!quest reset");
+        await Gm("!quest done 10101040");
+        var reward = await Next(bot, CharacterService.GetRewardNotify, GetRewardNotify.Parser);
+        Assert.NotEmpty(reward.Rewards);
+        Assert.Equal(1, await Read(s => s.Tasks!.CompleteTaskNum[10101040]));
+        Assert.Equal(2, OwnedQuestSourceCount(role, 10101040));
+        await Gm("!quest drop 10101040");
+        await Gm("!quest done 10101040");
+        await Barrier(bot);
+        Assert.Equal(3, OwnedQuestSourceCount(role, 10101040));
+    }
+
+    [ClientDataFact]
+    public async Task ADeliveryAlreadyPaidIsRecordedWithoutASecondAward()
+    {
+        // Login settlement of a role whose delivery committed but whose task state was lost aborted the login on the
+        // natural-source claim (EconomyOperationConflictException); the delivery is recorded and nothing is paid twice.
+        await using var bot = await InWorld();
+        long role = (long)bot.Self!.Uuid;
+        await Accept(10101040);
+        var before = await Read(s => s.Tasks!.Clone());
+        await Gm("!quest done 10101040");
+        await Barrier(bot);
+        Assert.Equal(1, OwnedQuestSourceCount(role, 10101040));
+        await Change(s => { s.Tasks = before; return Task.CompletedTask; });
+        await Gm("!quest done 10101040");
+        await Barrier(bot);
+        Assert.True(await Read(s => TaskService.IsDelivered(s, 10101040)));
+        Assert.Equal(1, await Read(s => s.Tasks!.CompleteTaskNum[10101040]));
+        Assert.Equal(1, OwnedQuestSourceCount(role, 10101040));
+    }
+
+    [ClientDataFact]
     public async Task NoviceTrialGrantsExactlySevenExpAndReplaySurvivesRelog()
     {
         long role;

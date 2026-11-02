@@ -27,8 +27,9 @@ public sealed partial class NewActivityService
 {
     /// <summary>
     /// ItemConfig 1112001/1112002 action 304, called with ActivityGate and CharacterService's item-use lock held.
-    /// LC_DAL_SeasonTreasure consumes 5064.pointId and LC_System_SeasonTreasure starts the hunt.
-    /// The point selection among configured candidates is (inferred).
+    /// LC_DAL_SeasonTreasure consumes 5064.pointId and LC_System_SeasonTreasure starts the hunt. StartHunt and
+    /// _doStartHunt guide the player only when TreasureHuntMapPointConfig._iMapId is the current map, so the point
+    /// comes from the caster's map; the random pick among them and the refusal on a map without one are (inferred).
     /// </summary>
     private async Task<int> StartTreasureMapAsync(GameSession session, ItemUseReq req,
         Action<Ro3Emu.Server.Accounts.Persistence.RoleItemPlanBuilder> persistCooldown, Action publishCooldown)
@@ -47,8 +48,8 @@ public sealed partial class NewActivityService
             .OrderBy(r => GameData.Int(r, "_iId")).ToArray();
         if (points.Length == 0) return ErrorCodes.FeatureUnavailable;
         var local = points.Where(r => GameData.Int(r, "_iMapId") == session.SceneEntry).ToArray();
-        var pool = local.Length > 0 ? local : points;
-        var chosen = pool[Random.Shared.Next(pool.Length)];
+        if (local.Length == 0) return ErrorCodes.TreasurePointMissing;
+        var chosen = local[Random.Shared.Next(local.Length)];
         var runtime = CloneRuntime(session);
         runtime.AdventureTreasure = new AdventureTreasureCursor
         {

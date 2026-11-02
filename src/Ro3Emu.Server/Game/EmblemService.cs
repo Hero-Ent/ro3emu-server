@@ -2,6 +2,7 @@ using System.Text.Json;
 using Romsg;
 using Ro3Emu.Server.Accounts;
 using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 
 namespace Ro3Emu.Server.Game;
 
@@ -94,6 +95,8 @@ public sealed partial class EmblemService
                 item.Attrs = GenerateAttrs(item.Entry);
                 changed = true;
             }
+            // Echoes leveled while mark 0 stayed empty roll their reached slots once (inferred repair, LightMarks).
+            if (item.Attrs != null && AddMarks(item.Attrs, item.Entry, (int)item.Attrs.GetValueOrDefault(Level))) changed = true;
         }
         var active = next.Plans[next.CurrentPlan];
         var seen = new HashSet<long>();
@@ -594,17 +597,37 @@ public sealed partial class EmblemService
         }
     }
 
-    private void AddMarks(Dictionary<int, long> attrs, int entry, int level)
+    /// <summary>Light the _kInitialMark slots reached by the level (see <see cref="LightMarks"/>); true when one changed.</summary>
+    private bool AddMarks(Dictionary<int, long> attrs, int entry, int level)
     {
-        if (_data.Row("EmblemConfig", entry) is not { } row || !row.TryGetProperty("_kInitialMark", out var list) || list.ValueKind != JsonValueKind.Array) return;
-        int slot = 0;
-        foreach (var pair in list.EnumerateArray())
+        if (EmblemConfig.Get(_data, entry) is not { } config) return false;
+        var initial = config.InitialMark.TakeWhile(p => p.Length >= 2).Select(p => ((int)p[0], p[1])).ToList();
+        var pool = EmblemMarkConfig.All(_data).Where(r => r.EmblemMarkId > 0 && SeasonRowsValid(r.Row))
+            .Select(r => r.EmblemMarkId).Distinct().Order().ToList();
+        return LightMarks(attrs, initial, level, pool, Random.Shared.Next);
+    }
+
+    /// <summary>
+    /// itemInfos 1021+: each _kInitialMark [level, mark] pair reached lights its slot. Mark 0 rolls one element of the
+    /// pool, uniformly (inferred): the Soul Echo help text (loc 19439) lights an element every few levels, mark 0 is the
+    /// empty element (EmblemMarkConfig _iID 1, icon "_null"), and fixed marks alone, at most one per common echo, cannot
+    /// reach the 6/10 resonance stages of five slots. A slot already lit keeps its element.
+    /// </summary>
+    internal static bool LightMarks(Dictionary<int, long> attrs, IReadOnlyList<(int Level, long Mark)> initial, int level,
+        IReadOnlyList<long> pool, Func<int, int> pick)
+    {
+        bool changed = false;
+        for (int slot = 0; slot < Math.Min(10, initial.Count) && initial[slot].Level <= level; slot++)
         {
-            if (slot >= 10 || pair.ValueKind != JsonValueKind.Array || pair.GetArrayLength() < 2) break;
-            if ((long)(GameData.Number(pair[0]) ?? 0) > level) break;
-            attrs[1021 + slot] = (long)(GameData.Number(pair[1]) ?? 0);
-            slot++;
+            long lit = attrs.GetValueOrDefault(1021 + slot);
+            long mark = initial[slot].Mark != 0 ? initial[slot].Mark
+                : lit != 0 ? lit
+                : pool.Count > 0 ? pool[pick(pool.Count)] : 0;
+            if (attrs.ContainsKey(1021 + slot) && lit == mark) continue;
+            attrs[1021 + slot] = mark;
+            changed = true;
         }
+        return changed;
     }
 
     /// <summary>Positive-weight rows selected without replacement by actual attribute ID (inferred selection).</summary>

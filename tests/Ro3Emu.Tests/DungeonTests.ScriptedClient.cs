@@ -93,7 +93,9 @@ public sealed partial class DungeonTests
                     case ReconstructedDungeons.TriggerKind.After:
                         break; // the step's own clock completes it (paced down above)
                     case ReconstructedDungeons.TriggerKind.Plot:
-                        await Story(alice, t.Id);
+                        // A step with its own story shows that plot; the client's chain reports a later part (1000501's
+                        // 130161, then 130162 after its QTE).
+                        await Story(alice, step.Story != 0 ? step.Story : t.Id);
                         // 84012 (the plot's action 150 PlotActingTrigger) completes it as well as 84011 does.
                         await alice.SendGameAsync(TaskService.ExitCutSceneState, new ExitCutSceneStateReq());
                         await alice.SendGameAsync(DungeonService.PlotSceneEvent, new PlotActingTriggerReq { PlotId = t.Id });
@@ -127,6 +129,8 @@ public sealed partial class DungeonTests
     [MemberData(nameof(ScriptedScenes))]
     public async Task TheUseTestAidFinishesAScriptedSceneServerSide(long scene)
     {
+        // The airship's last boarders drop in at 16.5 s, past WaveIn's 15 s: the scene's clock runs at 10 %.
+        Service<Microsoft.Extensions.Options.IOptions<Ro3Emu.Server.ServerOptions>>().Value.ScriptedScenePacePercent = 10;
         await using var alice = await InWorld("Alice");
         await Gm(alice, "!lvl 99"); // a scene with a fight
         await Gm(alice, "!actors use"); // outside a scene: refused, nothing happens

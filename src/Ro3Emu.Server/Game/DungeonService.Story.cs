@@ -81,7 +81,9 @@ public sealed partial class DungeonService
 
     /// <summary>
     /// After a scene actor's interaction was accepted: one that enters the vehicle driver's state seats the player. Its
-    /// seat is the interaction's _iStatusLocation (one-based) in VehicleConfig._kSeats, as WorldInteractionService reads it.
+    /// seat is the interaction's _iStatusLocation (one-based) in VehicleConfig._kSeats. WorldInteractionService holds the
+    /// seat, as for a world vehicle: it answers the client's requests while seated (32703, the exit button) and shows the
+    /// rider to the players around; a seat only this room knew left the client unseated.
     /// </summary>
     private async Task TryRideAsync(Attempt a, GameSession s, SceneActorUnit actor, long interactionId)
     {
@@ -91,32 +93,20 @@ public sealed partial class DungeonService
             || NPCConfig.Get(_data, actor.NpcId) is not { NPCSubType: VehicleSubType } npc
             || VehicleConfig.Get(_data, npc.SubTypeValue) is not { } vehicle) return;
         int seat = (int)interaction.StatusLocation - 1;
-        if (seat < 0 || seat >= vehicle.Seats.Length || VehicleSeatConfig.Get(_data, vehicle.Seats[seat]) is not { } seatRow) return;
-        a.Riding[s] = actor;
-        await s.SendGameAsync(WorldInteractionService.Change, new InteractChangeNtf
-        {
-            Uid = s.Role.Id,
-            DataInfo = new InteractInfo
-            {
-                EType = (InteractInfo.Types.EState)VehicleStatusType, StateId = (int)interaction.StatusId,
-                InteractConfigId = (int)interactionId, ActiveObjId = actor.Uid,
-            },
-        });
-        await s.SendGameAsync(WorldInteractionService.Change3C, new Change3CNtf { CfgId = (int)seatRow.Change3C });
+        if (seat < 0 || seat >= vehicle.Seats.Length || VehicleSeatConfig.Get(_data, vehicle.Seats[seat]) == null) return;
+        long token = await _vehicles.SeatOnSceneActorAsync(s, actor.Uid, actor.NpcId, (int)interactionId);
+        if (token == 0) return;
+        a.Riding[s] = token;
         if (Step(a) is { } step && step.Complete.FirstOrDefault(t => t.Kind == Kind.Region) is { } end)
             StepLater(a, a.StepGeneration, RideLimitMs, () => StepEventAsync(a, null, [(Kind.Region, end.Id)]));
     }
 
-    private static async Task DismountRidersAsync(Attempt a, GameSession? only = null)
+    private async Task DismountRidersAsync(Attempt a, GameSession? only = null)
     {
-        foreach (var s in a.Riding.Keys.Where(m => only == null || m == only).ToArray())
+        foreach (var (s, token) in a.Riding.Where(r => only == null || r.Key == only).ToArray())
         {
             a.Riding.Remove(s);
-            if (s.Role == null || s.SceneLoading) continue;
-            await s.SendGameAsync(WorldInteractionService.Change, new InteractChangeNtf
-            {
-                Uid = s.Role.Id, DataInfo = new InteractInfo { EType = InteractInfo.Types.EState.Idle },
-            });
+            await _vehicles.PutDownFromSceneActorAsync(s, token);
         }
     }
 
@@ -158,7 +148,7 @@ public sealed partial class DungeonService
     }
 
     /// <summary>The run is over, or a participant left it: nobody stays sliding or seated.</summary>
-    private static async Task EndStoryStateAsync(Attempt a, GameSession? only = null)
+    private async Task EndStoryStateAsync(Attempt a, GameSession? only = null)
     {
         await StopSlideAsync(a, only);
         await DismountRidersAsync(a, only);

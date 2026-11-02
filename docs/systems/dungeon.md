@@ -56,8 +56,12 @@ Realm of the Gods extras (`DungeonService.RealmOfGods`, TenGameplayConfig 100101
   uniform), sends `RandomDungeonNotify` with the countdown `FiveGamePlay_RandomDuration`, then runs that boss with the
   Hidden Realm as `MultiDungeonInitData.origin`. The clear counts as the Hidden Realm's (its awards, allowance and
   record, inferred).
-- Test aids: `!dungeonsolo on` also admits a lone 30400 entry to a team boss; `!firstclear <boss> [daysAgo] | clear`
-  sets the realm's first clear of a boss.
+- Solo entry (custom, not original): `Ro3Emu:DungeonSoloEntry` (default on) lets a party of any size, from one role up
+  to the maximum, start any dungeon or team boss below TenGameplayConfig `_kLimit[0]`, by 30400 Enter or by 82637
+  matching (which then starts the party as it is instead of waiting for `_iStartQuantity`). The run has as many
+  players as the party; off restores the client's rule.
+- Test aids: `!dungeonsolo on` admits a lone role session the same way when `DungeonSoloEntry` is off;
+  `!firstclear <boss> [daysAgo] | clear` sets the realm's first clear of a boss.
 
 Policies below remain **(inferred)** except for explicitly identified client contracts; they do not establish
 original-server encounter parity:

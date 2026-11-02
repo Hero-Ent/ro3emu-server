@@ -385,6 +385,31 @@ public sealed partial class EmblemTests : IAsyncLifetime
     }
 
     [ClientDataFact]
+    public async Task LoginLightsTheEmptyElementsOfAnEchoLeveledBeforeTheRoll()
+    {
+        long guid, role;
+        await using (var alice = await InWorld("Alice"))
+        {
+            await Gm("alice", "!item 1850111"); // marks [5,1001] then 0 at 10, 15 and 20
+            guid = Granted(await Next(alice, CharacterService.ItemsSync, DBItemsInfoIncrement.Parser, m => m.PackInfo.ContainsKey(5)), 1850111).ItemGuid;
+            role = alice.Roles.Single().Id;
+        }
+        // A level 20 instance written before mark 0 rolled: only the fixed first element is lit.
+        FixtureSql.Execute(_app.Services.GetRequiredService<AccountStore>(),
+            $"""UPDATE item SET attrs = json_set(attrs, '$."1001"', 20, '$."1021"', 1001, '$."1022"', 0, '$."1023"', 0, '$."1024"', 0) WHERE guid = {guid}""");
+        var store = _app.Services.GetRequiredService<ItemStore>();
+        long[] Marks() => Enumerable.Range(1021, 4).Select(k => store.Load(role).Single(i => i.Guid == guid).Attrs![k]).ToArray();
+        await using (var again = await InWorld("Alice", create: false))
+            await Next(again, EmblemService.PlanSync, DBEmblemInfoIncrement.Parser);
+        var lit = Marks();
+        Assert.Equal(1001, lit[0]);
+        Assert.All(lit.Skip(1), mark => Assert.InRange(mark, 1001, 1004));
+        await using (var third = await InWorld("Alice", create: false))
+            await Next(third, EmblemService.PlanSync, DBEmblemInfoIncrement.Parser);
+        Assert.Equal(lit, Marks());
+    }
+
+    [ClientDataFact]
     public async Task MissingUnlockStateDoesNotBypassTheQuestGate()
     {
         await using var alice = await InWorld("Alice");

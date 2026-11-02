@@ -35,6 +35,7 @@ public sealed partial class GroupContentTests : IAsyncLifetime
             o.DataDir = _dataDir;
             o.GameDataDir = Path.Combine(ClientData.RepoRoot, "data");
             o.SeasonStart = "2026-10-08";
+            o.DungeonSoloEntry = false; // the client's team-size rule; the custom solo entry has its own tests
             // These tests finish bosses at 1 HP; a boss opening its last phase there (BossSkills) could down the bot
             // first. Boss specials have their own tests.
             o.BossSkills.Enabled = false;

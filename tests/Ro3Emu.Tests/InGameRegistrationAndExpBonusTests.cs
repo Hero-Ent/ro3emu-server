@@ -59,11 +59,13 @@ public sealed class InGameRegistrationAndExpBonusTests
         Directory.CreateDirectory(tempDir);
         try
         {
-            var options = Options.Create(new ServerOptions { DataDir = tempDir });
+            var options = Options.Create(new ServerOptions { DataDir = tempDir, ExpBonusFile = ServerOptions.ExpBonusOff });
             var service = new ExpBonusService(options);
 
-            // Default is 50x or 100x
-            service.SetMultiplier(50, saveToFile: false);
+            // Without a file the bonus starts at 0; a change stays in memory and writes nothing.
+            Assert.Equal(0, service.Multiplier);
+            service.SetMultiplier(50);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(tempDir));
             Assert.Equal(50, service.Multiplier);
 
             // Base EXP = 10, Bonus = 10 * 50 = 500

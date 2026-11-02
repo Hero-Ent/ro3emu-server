@@ -12,6 +12,14 @@ public sealed partial class DungeonService
     }
 
     /// <summary>
+    /// Whether a party of <paramref name="count"/> may start below the boss's minimum: any size with the custom
+    /// ServerOptions.DungeonSoloEntry, or a lone role whose session has the GM "!dungeonsolo on" test aid. Neither is
+    /// original behavior.
+    /// </summary>
+    public bool BelowMinimumAllowed(int count, GameSession leader) =>
+        count >= 1 && (_options.DungeonSoloEntry || count == 1 && leader.DungeonSoloMatch);
+
+    /// <summary>
     /// The 82637 vote has already finished. The normal dungeon owner allocates the room and performs
     /// 30107/70010/30005/30401; no second 42033/30406 vote is issued (LC_DAL_Match and LC_DAL_Team).
     /// </summary>
@@ -19,7 +27,7 @@ public sealed partial class DungeonService
     {
         if (members.Length == 0 || members.Distinct().Count() != members.Length
             || members.Any(s => s.Role == null || !_sessions.All().Contains(s))) return ErrorCodes.PlayerOffline;
-        if (members.Length < plan.MinPlayers && !(members.Length == 1 && members[0].DungeonSoloMatch))
+        if (members.Length < plan.MinPlayers && !BelowMinimumAllowed(members.Length, members[0]))
             return ErrorCodes.DungeonTeamSize;
         if (members.Length > plan.MaxPlayers) return ErrorCodes.PartyFull;
         foreach (var member in members)

@@ -152,7 +152,8 @@ public sealed class DungeonMatchService : IGameTicker
                 MatchEntryId = req.MatchEntryId,
                 MatchData = item.Data.Clone(), MatchStartTime = startSeconds
             });
-        if (item.Members.Length == 1 && s.DungeonSoloMatch)
+        // A party the custom DungeonSoloEntry admits below _iStartQuantity starts as it is instead of waiting to be filled.
+        if (item.Members.Length < quantity && _dungeons.BelowMinimumAllowed(item.Members.Length, s))
         {
             list.Remove(item);
             if (list.Count == 0) _queue.Remove(item.Key);

@@ -1,3 +1,5 @@
 {
-  "AUCTION_CURRENCY": 1
+  "AUCTION_CURRENCY": 1,
+  "VitalityInitCount": 300,
+  "VitalityExtraLimit": 800
 }

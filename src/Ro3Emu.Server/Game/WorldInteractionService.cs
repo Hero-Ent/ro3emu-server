@@ -121,6 +121,7 @@ public sealed class WorldInteractionService
         int type = Id(status, "_iStatusType"), seat = type == 3 ? Id(interaction, "_iStatusLocation") - 1 : -1;
         _active[s] = new Active(Anchor.Of(npc), req.InteractionId, statusId, type, seat);
         if (seat >= 0) _seats[(s.WorldScene, npc.Uid, seat)] = s;
+        await CarryAsync(s, _active[s], seated: true);
         await NotifyAsync(s, _active[s], false);
         if (seat >= 0) await Send3CAsync(s, _active[s]);
     }
@@ -149,6 +150,31 @@ public sealed class WorldInteractionService
         };
         await s.SendGameAsync(Change, message);
         foreach (var viewer in _world.Viewers(s)) await viewer.SendGameAsync(Change, message);
+        await CarryAsync(s, state, seated: false);
+    }
+
+    /// <summary>
+    /// A vehicle seat (status 3) travels as AOI carry info, as TerritoryWarsService.BoardAsync sends it: the rider's
+    /// be_carried {vehicle, slot, carry_type = VehicleSeatConfig _iType} and the vehicle's add/remove_carries. It comes
+    /// before 32702 Vehicle, so LC_GamePlayStatusMgr.EnterVehicle finds the passenger component (without it the client
+    /// stays on foot), and after 32702 Idle on the way off, with be_carried id 0 (LC_PassengerComponent.ExitVehicle).
+    /// </summary>
+    private async Task CarryAsync(GameSession s, Active state, bool seated, GameSession? onlyTo = null)
+    {
+        if (s.Role == null || state.StatusType != 3 || state.SeatIndex < 0) return;
+        int[] seats = VehicleSeats(state);
+        long type = state.SeatIndex < seats.Length && VehicleSeatConfig.Get(_data, seats[state.SeatIndex]) is { } seat ? seat.Type : 0;
+        AoICarry Entry(long id) => new() { Id = (ulong)id, CarrySlot = state.SeatIndex, CarryOffset = new Vec3(), CarryType = (int)type };
+        var total = new AoIInfoTotal { AoITickMs = 50, TickNowMs = (ulong)MonsterService.NowMs };
+        total.AoiData.Add(new AoIInfoSingle
+        {
+            EntityUuid = (ulong)s.Role.Id, CarryInfo = new AoICarryInfo { BeCarried = Entry(seated ? state.Npc.Uid : 0) },
+        });
+        var vehicle = new AoICarryInfo();
+        (seated ? vehicle.AddCarries : vehicle.RemoveCarries).Add(Entry(s.Role.Id));
+        total.AoiData.Add(new AoIInfoSingle { EntityUuid = (ulong)state.Npc.Uid, CarryInfo = vehicle });
+        foreach (var viewer in onlyTo != null ? [onlyTo] : _world.Viewers(s).Prepend(s))
+            await viewer.SendGameAsync(WorldCoreService.AoiInfo, total);
     }
 
     private Task LeaveAsync(GameSession s) => ExitAsync(s, true);
@@ -171,6 +197,9 @@ public sealed class WorldInteractionService
                     StateId = state.StatusId, InteractConfigId = state.InteractionId, ActiveObjId = state.Npc.Uid
                 }
             });
+        // A rider is shown on its seat to a new viewer: its AOI base carries no carry info.
+        if (_active.TryGetValue(subject, out var seated) && StillHere(subject, seated))
+            await CarryAsync(subject, seated, seated: true, onlyTo: viewer);
     }
 
     /// <summary>32703: only a configured QuitStatus action is accepted; skill grants stay with combat.</summary>
@@ -258,6 +287,7 @@ public sealed class WorldInteractionService
         if (seat < 0 || seat >= seats.Length || _data.Row("VehicleSeatConfig", seats[seat]) == null || !SeatFree(s, actorUid, seat)) return 0;
         _active[s] = state;
         _seats[(s.WorldScene, actorUid, seat)] = s;
+        await CarryAsync(s, state, seated: true);
         await NotifyAsync(s, state, false);
         await Send3CAsync(s, state);
         return state.Token;

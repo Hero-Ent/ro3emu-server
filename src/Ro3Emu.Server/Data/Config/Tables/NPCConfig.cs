@@ -23,6 +23,9 @@ public readonly partial record struct NPCConfig(JsonElement Row)
     [ConfigField("_iImportantSkill")] public partial long ImportantSkill { get; }
     [ConfigField("_iInteractDistance")] public partial double InteractDistance { get; }
     [ConfigField("_iInteractID")] public partial long[] InteractId { get; }
+    /// <summary>_iInteractID as the row holds it: one NPCInteractConfig id (21070002) or a list of them; InteractId reads
+    /// only the list.</summary>
+    public JsonElement? InteractIdValue => Row.TryGetProperty("_iInteractID", out var value) ? value : null;
     [ConfigField("_iInterval")] public partial long Interval { get; }
     [ConfigField("_iLevel")] public partial long Level { get; }
     [ConfigField("_iNPCSubType")] public partial long NPCSubType { get; }

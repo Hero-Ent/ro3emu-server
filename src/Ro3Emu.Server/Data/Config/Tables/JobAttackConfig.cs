@@ -2,7 +2,8 @@ using System.Text.Json;
 
 namespace Ro3Emu.Server.Data.Config;
 
-/// <summary>The client's JobAttackConfig (data/config/JobAttackConfig.json): each career's normal attack, per mount.</summary>
+/// <summary>The client's JobAttackConfig (data/config/JobAttackConfig.json): a career's normal attack per weapon type
+/// and battle mount (Lua_CFG_JobAttackConfig.GetNormalSkillID).</summary>
 [ConfigTable("JobAttackConfig")]
 public readonly partial record struct JobAttackConfig(JsonElement Row)
 {

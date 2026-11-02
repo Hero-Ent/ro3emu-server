@@ -76,6 +76,18 @@ public sealed partial class SkillService
             ? n[0].GetInt32()
             : 1000001;
 
+    /// <summary>
+    /// The career's other normal attacks: JobAttackConfig rows of the career (by weapon type and battle mount), as skill
+    /// groups. The client's skill window shows GetNormalSkillID(local player) in the Novice's attack slot
+    /// (UI_Sys_Skill_ItemPageWidgetCtrl), e.g. a katar Guillotine Cross's 1005101 (group 10051), which no SkillTreeConfig
+    /// row lists; unlisted it read "not learned" and could not go on the bar. They are learned at level 1 like the
+    /// career's _kSkillNormalID (inferred).
+    /// </summary>
+    private IReadOnlySet<int> WeaponAttackGroups(int career) => _weaponAttacks.GetOrAdd(career, c =>
+        JobAttackConfig.All(_data).Where(r => r.JobId == c)
+            .Select(r => SkillConfig.Get(_data, r.SkillId) is { } skill ? (int)skill.SkillId : 0)
+            .Where(g => g > 0).ToHashSet());
+
     internal int Rank(int career) => (int)(_data.Row("JobConfig", career) is { } job ? Math.Max(1, GameData.Int(job, "_iJobRank")) : 1);
 
     /// <summary>The career and its parents (JobConfig._iParentId), novice first.</summary>
@@ -91,6 +103,7 @@ public sealed partial class SkillService
     private readonly System.Collections.Concurrent.ConcurrentDictionary<int, IReadOnlyDictionary<int, int>> _replacements = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<int, IReadOnlyList<(int Group, int Career)>> _trees = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<int, HashSet<int>> _treeGroups = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, IReadOnlySet<int>> _weaponAttacks = new();
 
     private IReadOnlyDictionary<int, int> Replacements(int career) => _replacements.GetOrAdd(career, c => _data.Row("JobConfig", c) is { } row
         ? GameData.Pairs(row, "_kSkillReplace").ToDictionary(p => (int)p.Id, p => (int)p.Value)
@@ -158,7 +171,8 @@ public sealed partial class SkillService
     public int Level(RoleProgress p, int group)
     {
         int initial = InTree(p.Career, group) ? Initial(p, group) : 0;
-        if (_data.Row("SkillConfig", NormalAttack(p.Career)) is { } atk && GameData.Int(atk, "_iSkillID") == group)
+        if (_data.Row("SkillConfig", NormalAttack(p.Career)) is { } atk && GameData.Int(atk, "_iSkillID") == group
+            || WeaponAttackGroups(p.Career).Contains(group))
             initial = Math.Max(1, initial);
         int saved = Math.Max(p.Skills.GetValueOrDefault(group), p.GrantedSkills.GetValueOrDefault(group));
         foreach (var (old, replacement) in Replacements(p.Career))
@@ -174,7 +188,7 @@ public sealed partial class SkillService
         var tree = Tree(p.Career);
         var skillData = new DBSkillData { MaxPlanCount = PlanCount, CurrentPlanIndex = 0, CurrentAtkSkillId = atk };
         if (atkGroup > 0) skillData.SkillList.Add(atkGroup);
-        skillData.SkillList.Add(tree.Select(t => t.Group).Where(g => g != atkGroup).Distinct());
+        skillData.SkillList.Add(tree.Select(t => t.Group).Concat(WeaponAttackGroups(p.Career)).Where(g => g != atkGroup).Distinct());
 
         var plan = new SkillPlan { IsUnlock = true };
         foreach (int group in skillData.SkillList)
@@ -191,7 +205,7 @@ public sealed partial class SkillService
                 blank.SkillAssigns[group] = new SkillData
                 {
                     SkillId = group,
-                    SkillLevel = group == atkGroup ? 1 : Initial(p, group)
+                    SkillLevel = group == atkGroup || WeaponAttackGroups(p.Career).Contains(group) ? 1 : Initial(p, group)
                 };
             blank.SkillQueue[0] = new SkillData(); // paired by the client even in a fresh plan.
             PadManualLoads(blank);
@@ -406,6 +420,7 @@ public sealed partial class SkillService
                 foreach (var load in plan.ManualLoadSkill.Concat(plan.AutoLoadSkill).Concat(plan.SkillQueue.Values))
                     if (load.SkillId == old) load.SkillId = replacement;
             }
+            CurrentNormalAttack(session.Progress!, plan);
             foreach (int group in generated.SkillList)
                 if (!plan.SkillAssigns.ContainsKey(group))
                     plan.SkillAssigns[group] = new SkillData { SkillId = group, SkillLevel = Initial(session.Progress!, group) };
@@ -491,6 +506,7 @@ public sealed partial class SkillService
     {
         if (session.SkillPlans == null) await LoadAsync(session);
         var state = Build(session);
+        SeedManualLoads(session.Progress!, state.SkillAssignPlans[state.CurrentPlanIndex]);
         // A granted skill (a socketed card's Skill(3)) is listed with its level in the current plan, where the skill panel's
         // card skills read it (UI_Sys_SkillPanelModel.GetCardSkillList: ServerAllSkills = skillList, then the plan's
         // skillAssigns with level > 0). It is sent, never saved in a plan: a plan switch checks its groups against the tree.
@@ -517,6 +533,7 @@ public sealed partial class SkillService
         // Ignore those from the current career chain when an older plan is selected after a job change.
         var normalAttacks = CareerChain(progress.Career)
             .Select(c => _data.Row("SkillConfig", NormalAttack(c)) is { } row ? (int)GameData.Int(row, "_iSkillID") : 0)
+            .Concat(CareerChain(progress.Career).SelectMany(WeaponAttackGroups))
             .Where(group => group > 0).ToHashSet();
         progress.Skills.Clear();
         foreach (var (group, assignment) in source.SkillAssigns)
@@ -772,6 +789,39 @@ public sealed partial class SkillService
         if (plan.SkillQueue.Count == 0) plan.SkillQueue[0] = new SkillData();
     }
 
+    /// <summary>
+    /// A bar saved under an earlier career keeps that career's normal attack (the Novice's 10000). The wheel shows the
+    /// current one (BarGroup), but the skill window lists the saved group, which the career has not learned, so the
+    /// slot could not be moved: loads use the current career's normal attack.
+    /// </summary>
+    private void CurrentNormalAttack(RoleProgress p, SkillPlan plan)
+    {
+        int attack = CareerNormalGroup(p.Career);
+        if (attack <= 0) return;
+        foreach (var load in plan.ManualLoadSkill.Concat(plan.AutoLoadSkill))
+            if (load.SkillId != attack && IsChainNormalGroup(p, load.SkillId))
+            {
+                load.SkillId = attack;
+                load.SkillLevel = Level(p, attack);
+            }
+    }
+
+    /// <summary>
+    /// A plan whose bar was never edited holds no manual loads, yet the wheel shows the default bar. The skill window
+    /// edits manualLoadSkill (UI_Sys_SkillPanelModel's ServerManualLoadSkill), so it gets the bar the wheel shows:
+    /// with an empty list there is nothing in the slot to take off. Only the sent data and a bar edit get it: saved, it
+    /// would freeze the default bar, and a skill learned later (Smite at level 5) would never join it.
+    /// </summary>
+    private void SeedManualLoads(RoleProgress p, SkillPlan plan)
+    {
+        if (plan.ManualLoadSkill.Any(skill => skill.SkillId > 0)) return;
+        foreach (var (slot, barGroup) in Bar(p))
+        {
+            while (plan.ManualLoadSkill.Count < slot) plan.ManualLoadSkill.Add(new SkillData());
+            plan.ManualLoadSkill[slot - 1] = new SkillData { SkillId = barGroup, SkillLevel = Level(p, barGroup) };
+        }
+    }
+
     /// <summary>31153: put a skill on a bar slot (socketNum = slot - 1), remove it, or replace one.</summary>
     public async Task LoadAsync(GameSession session, SkillLoadReq req)
     {
@@ -779,13 +829,8 @@ public sealed partial class SkillService
         var p = session.Progress!;
         var plans = Build(session);
         var selected = plans.SkillAssignPlans[plans.CurrentPlanIndex];
+        if (req.IsManual) SeedManualLoads(p, selected);
         var loadList = req.IsManual ? selected.ManualLoadSkill : selected.AutoLoadSkill;
-        if (req.IsManual && loadList.All(skill => skill.SkillId == 0))
-            foreach (var (slot, barGroup) in Bar(p))
-            {
-                while (loadList.Count < slot) loadList.Add(new SkillData());
-                loadList[slot - 1] = new SkillData { SkillId = barGroup, SkillLevel = Level(p, barGroup) };
-            }
         int target = req.SocketNum;
         int op = (int)req.OpType;
         int group = req.Info?.SkillId ?? 0;

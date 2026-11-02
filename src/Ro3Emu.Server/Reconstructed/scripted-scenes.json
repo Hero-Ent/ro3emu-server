@@ -199,9 +199,8 @@
             { "region": 31, "chat": 5300407, "why": "the end region: too narrow for the ant" }
           ],
           "complete": [
-            { "region": 31, "why": "the 'end region' (regionType 2) where the riding guide 36 ends" }
-          ],
-          "after": { "ride": 36, "teleport": 31, "why": "the Deniro carries the player down guide 36 (the riding route) at its own walking speed, then the player stands at the end region" }
+            { "region": 31, "why": "the 'end region' (regionType 2) where the riding guide 36 ends: the player drives the Deniro there (DungeonService.Story)" }
+          ]
         }
       ]
     },
@@ -543,7 +542,7 @@
           ]
         },
         {
-          "quest": 5,
+          "quest": 6,
           "stage": "The reinforcements' shells around the Captain",
           "actors": [
             { "npc": 5300031, "point": 54, "buffs": [5364501], "why": "Bobo at 波波NPC; group 53645 opens his bubble (530003101)" },
@@ -582,7 +581,7 @@
           ]
         },
         {
-          "quest": 5,
+          "quest": 6,
           "stage": "The collision: the closing cutscene",
           "story": 130161,
           "actors": [

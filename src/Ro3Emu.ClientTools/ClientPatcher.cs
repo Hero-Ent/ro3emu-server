@@ -34,20 +34,44 @@ public static class ClientPatcher
     /// </summary>
     private const string GmtManagerType = "GMT.GMTManager";
 
-    internal static readonly string[] PatchedFiles = ["Happyengine.Network.dll", "Assembly-CSharp.dll", "Phonest.Common.dll", "Happyengine.Base.Runtime.dll", "Unity.TextMeshPro.dll", "HUD.dll", "HappyEngine.Resource.dll", "UnityEngine.UI.dll", "UnityEngine.CoreModule.dll"];
+    internal static readonly string[] PatchedFiles = ["Happyengine.Network.dll", "Assembly-CSharp.dll", "Phonest.Common.dll", "Happyengine.Base.Runtime.dll", "Unity.TextMeshPro.dll", "HUD.dll", "HappyEngine.Resource.dll", "UnityEngine.UI.dll", "UnityEngine.CoreModule.dll", "HappyEngine.TerrainColliderBake.dll"];
 
-    /// <summary>--verbose: GS_Debug.ShowLog always true, so the Lua debug logs (Lua_Debug reads it) reach Player.log.</summary>
+    /// <summary>--verbose: GS_Debug.ShowLog true, so the Lua debug logs (Lua_Debug reads it) reach Player.log.</summary>
     public static bool VerboseLogs { get; set; }
 
-    private static string ForceShowLog(ModuleDefinition module)
+    /// <summary>
+    /// GS_Debug.ShowLog is a constant true in this client. Lua's Debug.Log/LogWarning/LogFormat check it and then build a
+    /// debug.traceback for every line, hundreds a second in a fight: every attack hitches the frame (the Android port,
+    /// android\tools\AndroidPatch.cs, measured 70-200 ms a frame on a phone). Off unless --verbose.
+    /// </summary>
+    internal static string SetShowLog(ModuleDefinition module, bool on)
     {
         var debug = module.GetType("HappyEngine.GS_Debug") ?? throw new InvalidOperationException("GS_Debug not found");
         var getter = debug.Properties.Single(p => p.Name == "ShowLog").GetMethod;
         getter.Body.Instructions.Clear();
         var il = getter.Body.GetILProcessor();
-        il.Append(il.Create(OpCodes.Ldc_I4_1));
+        il.Append(il.Create(on ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0));
         il.Append(il.Create(OpCodes.Ret));
-        return "GS_Debug.ShowLog -> true";
+        return "GS_Debug.ShowLog -> " + (on ? "true" : "false");
+    }
+
+    /// <summary>
+    /// The streamed terrain's colliders (StreamingWorld's TerrainColliderManager) bake from a height map whose data this
+    /// client does not have (HeightmapDataViewer.IsEmptyData is true; GPU mode reads back a degenerate grid): every region
+    /// that loads fails PhysX's mesh cleaning twice, in Physics.BakeMesh on a worker and again on the main thread when the
+    /// MeshCollider takes the uncooked mesh ("cleaning the mesh failed", measured 2 per region load), and the colliders it
+    /// leaves collide with nothing. TerrainColliderManager.Update returns at once: no region is loaded or baked.
+    /// </summary>
+    internal static string SkipTerrainColliderBake(ModuleDefinition module)
+    {
+        var manager = module.GetType("HappyEngine.TerrainColliderBake.TerrainColliderManager")
+            ?? throw new InvalidOperationException("TerrainColliderManager not found");
+        var update = manager.Methods.Single(m => m.Name == "Update" && !m.HasParameters);
+        update.Body.Instructions.Clear();
+        update.Body.ExceptionHandlers.Clear();
+        update.Body.Variables.Clear();
+        update.Body.GetILProcessor().Append(Instruction.Create(OpCodes.Ret));
+        return "TerrainColliderManager.Update -> return";
     }
 
     private const string HooksFile = "Ro3Emu.ClientHooks.dll";
@@ -115,12 +139,13 @@ public static class ClientPatcher
     {
         "Assembly-CSharp.dll" => m => RedirectChat(m, hooksDll) + "; " + VoiceStubPatch.Patch(m, hooksDll) + "; " + VoiceEnablePatch.Patch(m)
             + "; " + TextSink.PatchLanguageGet(m, locDll),
-        "Happyengine.Base.Runtime.dll" when VerboseLogs => ForceShowLog,
+        "Happyengine.Base.Runtime.dll" => m => SetShowLog(m, VerboseLogs),
         "Unity.TextMeshPro.dll" => m => TextSink.PatchTmp(m, locDll, hooksDll),
         "HUD.dll" => m => TextSink.PatchHud(m, locDll),
         "HappyEngine.Resource.dll" => m => TextSink.PatchLauncher(m, locDll),
         "UnityEngine.UI.dll" => m => ImageSwapPatch.Patch(m, hooksDll),
         "UnityEngine.CoreModule.dll" => m => OpenUrlPatch.Patch(m, hooksDll),
+        "HappyEngine.TerrainColliderBake.dll" => SkipTerrainColliderBake,
         _ => null,
     };
 

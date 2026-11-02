@@ -87,7 +87,9 @@ public static partial class EconomySnapshotReader
     // Daily compensation: role.daily DailyState.Compensation lists, per ended day, the goods of the To-Do boxes that day
     // reached and left unclaimed. An obligation, not a holding: the goods are sourced only by the 1058 letter's
     // mail/deliver receipt (ActivityReward), delivered once by its daily-compensation delivery key, which also removes the day.
-    public const string ExpectedFormatManifestHash = "FEA0D2CFD7E9B59C0842297453E5534CE8F44AB693D620F24BE97F2764243ADF";
+    // GM quest resets: role.task_runtime TaskRuntimeState.GmResets counts "!quest reset|drop" clears. A generation number
+    // only, no balance and no asset: it names the cleared deliveries' quest-award sources apart from the paid ones.
+    public const string ExpectedFormatManifestHash = "B58D8AF0AB90299E43786DAE037E17D9502F0C4063B134A9092015174D87E53E";
     public static string FormatManifestHash => State.FormatManifestHash;
 
     private sealed partial class State

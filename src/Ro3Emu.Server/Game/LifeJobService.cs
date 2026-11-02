@@ -50,6 +50,7 @@ public sealed partial class LifeJobService
         character.LifeItemUse = UseLifeItemAsync;
         character.ExtraAttributes.Add(FoodAttributes);
         character.ProgressHandlers.Add(OnLevelChangedAsync);
+        character.StateChanged.Add(QueueEnergyCredit);
         scene.Leaving.Add(CancelAsync);
     }
 
@@ -105,6 +106,7 @@ public sealed partial class LifeJobService
         if (s.LifeJob == null) await LoadAsync(s);
         await SyncAsync(s);
         await HealthAsync(s);
+        QueueEnergyCredit(s); // a balance credited as currency before LifeJobService.EnergyAward
     }
 
     public static long ActiveLevel(GameSession s, long job) => s.LifeJob is { } life

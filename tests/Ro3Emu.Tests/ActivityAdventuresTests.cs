@@ -659,6 +659,48 @@ public sealed class ActivityAdventuresTests : IAsyncLifetime
             i => i.Result != 0)).Result);
     }
 
+    /// <summary>
+    /// LC_System_SeasonTreasure.StartHunt guides only to a point on the current map, so a map without one refuses the
+    /// item and keeps it; the hunt's NPC is not an AoI unit and survives the client's unview request (31038).
+    /// </summary>
+    [ClientDataFact]
+    public async Task TreasureMapPicksAPointOnTheCurrentMapAndItsNpcSurvivesUnview()
+    {
+        var window = _app.Services.GetRequiredService<ActivityClock>()
+            .Segments(1017, _clock.GetUtcNow().ToUnixTimeSeconds()).Single();
+        _clock.Set(window.Start + 60);
+        await using var alice = await InWorld("Alice");
+        await Gm("alice", "!lvl 99");
+        await Gm("alice", "!item 1112001 2");
+        var session = _app.Services.GetRequiredService<SessionRegistry>().All()
+            .Single(s => s.Role?.Name == "Alice");
+        long guid = session.Items.Single(i => i.Entry == 1112001).Guid;
+        long home = session.SceneEntry;
+
+        await Gm("alice", "!warp 10500");
+        Assert.Equal(10500, session.SceneEntry);
+        await alice.SendGameAsync(CharacterService.ItemUse, new ItemUseReq { ItemGuid = guid, ItemCount = 1 });
+        Assert.Equal(ErrorCodes.TreasurePointMissing, (await Next(alice, CharacterService.ItemUse, ItemUseResp.Parser)).Result);
+        Assert.Equal(0, session.ActivityRuntime.AdventureTreasure.PointId);
+        Assert.Equal(2, session.Items.Single(i => i.Guid == guid).Stack);
+
+        await Gm("alice", $"!warp {home}");
+        await alice.SendGameAsync(CharacterService.ItemUse, new ItemUseReq { ItemGuid = guid, ItemCount = 1 });
+        Assert.Equal(0, (await Next(alice, CharacterService.ItemUse, ItemUseResp.Parser)).Result);
+        var cursor = await Next(alice, 5064, DBTreasureInfoIncrement.Parser, i => i.PointId > 0);
+        Assert.Equal(home, _app.Services.GetRequiredService<SceneService>().TreasurePoint(cursor.PointId)!.Value.Scene);
+
+        long npc = SceneService.TreasureUidPrefix | session.Role!.Id;
+        var shown = await Next(alice, Ro3Emu.Server.Maps.GameAoiSink.SyncAoiView, AoIViewChangeData.Parser,
+            v => v.Bases.Any(b => b.Uuid == (ulong)npc));
+        var point = shown.Bases.Single(b => b.Uuid == (ulong)npc).CustomDatas.Single(c => c.Id == SceneService.ScenePointIdData);
+        Assert.Equal(cursor.PointId, point.CustomParam.LongParam);
+        await alice.SendGameAsync(WorldCoreService.AoiUnview, new SyncAoIUnviewReq { Uuids = { npc, 123456789 } });
+        var unview = await Next(alice, WorldCoreService.AoiUnview, AoIViewChangeData.Parser);
+        Assert.DoesNotContain((ulong)npc, unview.LeaveAoi);
+        Assert.Contains(123456789UL, unview.LeaveAoi);
+    }
+
     [ClientDataFact]
     public async Task TreasureShortcutUsesCommonValidationCooldownAndReplyContract()
     {
@@ -1135,7 +1177,8 @@ public sealed class ActivityAdventuresTests : IAsyncLifetime
         await Gm("alice", $"!jump {x} {z}");
         await alice.SendGameAsync(SceneService.NpcInteraction, new NpcInteractionReq
         {
-            NpcUid = SceneService.TreasureUidPrefix | session.Role!.Id, InteractionId = 4,
+            // The NPCInteractConfig id the client's dig sends (LC_InteractManager -> SendNPCInteractionReq).
+            NpcUid = SceneService.TreasureUidPrefix | session.Role!.Id, InteractionId = 21070002,
         });
         Assert.Equal(0, (await Next(alice, SceneService.NpcInteraction, NpcInteractionRsp.Parser)).Result);
         await Next(alice, 83251, TreasureEventNotify.Parser);

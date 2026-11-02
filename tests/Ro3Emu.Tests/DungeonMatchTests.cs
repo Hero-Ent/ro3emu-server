@@ -29,6 +29,7 @@ public sealed class DungeonMatchTests : IAsyncLifetime
             o.DataDir = _dataDir;
             o.GameDataDir = Path.Combine(RepoRoot(), "data");
             o.SeasonStart = "2026-10-08";
+            o.DungeonSoloEntry = false; // the client's team-size rule; the custom solo entry has its own tests
             o.HttpPort = httpPort;
             o.MicroGatePort = microPort;
             o.GameGatePort = gamePort;

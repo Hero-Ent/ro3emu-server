@@ -214,6 +214,8 @@ public sealed partial class SiegeTests
         _clock.Set(_siege.Start + 300); // the Gate stage: the gate can be hit
         await OnLoop(wars.ReconcileAsync);
         var a = Session(attack);
+        // The guardians fight back harder than a fresh role lasts: the GM's invincibility (GmUnlimit).
+        await OnLoop(() => { a.GmCombat |= GmCombatSwitches.Unlimited; return Task.CompletedTask; });
 
         async Task<long> HitFromBeside(MonsterUnit m)
         {

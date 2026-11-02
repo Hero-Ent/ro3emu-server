@@ -357,7 +357,7 @@ public sealed partial class WorldCoreService : IGameTicker
         var response = new AoIViewChangeData();
         var visible = s.Visible.Where(p => p.Role != null).Select(p => p.Role!.Id).Concat(s.VisibleUnits.Select(u => u.Uid)).ToHashSet();
         foreach (long id in req.Uuids.Distinct().Take(256))
-            if (id != s.Role!.Id && !visible.Contains(id)) response.LeaveAoi.Add((ulong)id);
+            if (id != s.Role!.Id && !visible.Contains(id) && !_scene.IsOwnTreasureNpc(s, id)) response.LeaveAoi.Add((ulong)id);
         return s.SendGameAsync(AoiUnview, response);
     }
 

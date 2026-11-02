@@ -186,4 +186,71 @@ public sealed class ClientPatcherTests : IDisposable
         Assert.All(rules.Where(r => r.Description.Contains("URL", StringComparison.Ordinal)), r => Assert.True(r.Hits > 0, r.Description));
         Assert.DoesNotContain(changed, w => w.Contains("RO3.SealedLoginFallback", StringComparison.Ordinal));
     }
+
+    /// <summary>A Happyengine.Base.Runtime with GS_Debug.ShowLog returning the client's constant true.</summary>
+    static AssemblyDefinition BaseRuntime()
+    {
+        var assembly = AssemblyDefinition.CreateAssembly(new AssemblyNameDefinition("Happyengine.Base.Runtime", new Version(1, 0)), "Happyengine.Base.Runtime", ModuleKind.Dll);
+        var module = assembly.MainModule;
+        var debug = new TypeDefinition("HappyEngine", "GS_Debug", TypeAttributes.Public | TypeAttributes.Abstract | TypeAttributes.Sealed, module.TypeSystem.Object);
+        var getter = new MethodDefinition("get_ShowLog", MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.SpecialName, module.TypeSystem.Boolean);
+        var il = getter.Body.GetILProcessor();
+        il.Emit(OpCodes.Ldc_I4_1);
+        il.Emit(OpCodes.Ret);
+        debug.Methods.Add(getter);
+        debug.Properties.Add(new PropertyDefinition("ShowLog", PropertyAttributes.None, module.TypeSystem.Boolean) { GetMethod = getter });
+        module.Types.Add(debug);
+        return assembly;
+    }
+
+    static AssemblyDefinition TerrainColliderBake()
+    {
+        var assembly = AssemblyDefinition.CreateAssembly(new AssemblyNameDefinition("HappyEngine.TerrainColliderBake", new Version(1, 0)), "HappyEngine.TerrainColliderBake", ModuleKind.Dll);
+        var module = assembly.MainModule;
+        var manager = new TypeDefinition("HappyEngine.TerrainColliderBake", "TerrainColliderManager", TypeAttributes.Public | TypeAttributes.Class, module.TypeSystem.Object);
+        var update = new MethodDefinition("Update", MethodAttributes.Public, module.TypeSystem.Void);
+        update.Body.Variables.Add(new VariableDefinition(module.TypeSystem.Int32));
+        var il = update.Body.GetILProcessor();
+        il.Append(il.Create(OpCodes.Ldc_I4_1));
+        il.Append(il.Create(OpCodes.Stloc_0));
+        il.Append(il.Create(OpCodes.Ret));
+        manager.Methods.Add(update);
+        module.Types.Add(manager);
+        return assembly;
+    }
+
+    [Fact]
+    public void TheTerrainColliderBakeNeverRuns()
+    {
+        // Every region it loads fails PhysX's mesh cleaning twice, once on the main thread, and bakes an empty collider.
+        Assert.Contains("HappyEngine.TerrainColliderBake.dll", ClientPatcher.PatchedFiles);
+        using var bake = TerrainColliderBake();
+        Assert.Equal("TerrainColliderManager.Update -> return",
+            ClientPatcher.Extra("HappyEngine.TerrainColliderBake.dll", "hooks.dll", "loc.dll")!(bake.MainModule));
+        var update = bake.MainModule.GetType("HappyEngine.TerrainColliderBake.TerrainColliderManager").Methods.Single();
+        Assert.Equal([OpCodes.Ret], update.Body.Instructions.Select(i => i.OpCode));
+        Assert.Empty(update.Body.Variables);
+    }
+
+    static OpCode ShowLogConstant(AssemblyDefinition assembly) =>
+        assembly.MainModule.GetType("HappyEngine.GS_Debug").Properties.Single().GetMethod.Body.Instructions[0].OpCode;
+
+    [Fact]
+    public void TheLuaDebugLogIsOffUnlessVerbose()
+    {
+        // Every Lua log line builds a traceback while ShowLog is true, so each attack hitched the frame.
+        bool verbose = ClientPatcher.VerboseLogs;
+        try
+        {
+            ClientPatcher.VerboseLogs = false;
+            using var quiet = BaseRuntime();
+            Assert.Equal("GS_Debug.ShowLog -> false", ClientPatcher.Extra("Happyengine.Base.Runtime.dll", "hooks.dll", "loc.dll")!(quiet.MainModule));
+            Assert.Equal(OpCodes.Ldc_I4_0, ShowLogConstant(quiet));
+            ClientPatcher.VerboseLogs = true;
+            using var loud = BaseRuntime();
+            Assert.Equal("GS_Debug.ShowLog -> true", ClientPatcher.Extra("Happyengine.Base.Runtime.dll", "hooks.dll", "loc.dll")!(loud.MainModule));
+            Assert.Equal(OpCodes.Ldc_I4_1, ShowLogConstant(loud));
+        }
+        finally { ClientPatcher.VerboseLogs = verbose; }
+    }
 }

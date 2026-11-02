@@ -203,6 +203,15 @@ public sealed class ServerOptions
     public int RaidPreparationSeconds { get; set; } = 120;
 
     /// <summary>
+    /// Custom, not original behavior: a party of any size, from one role (no team) up to the boss's maximum, may start any
+    /// dungeon or team boss below its minimum (TenGameplayConfig `_kLimit[0]`), by 30400 Enter or by 82637 matching,
+    /// which then starts the party as it is instead of waiting for MatchConfig `_iStartQuantity`. The run has as many
+    /// players as the party. A server measure for a small population; off restores the client's rule (GM
+    /// "!dungeonsolo on" still admits one role session).
+    /// </summary>
+    public bool DungeonSoloEntry { get; set; } = true;
+
+    /// <summary>
     /// Pace of the scripted scenes' own timers (the hide-and-seek rounds), in percent of their reconstructed length:
     /// 100 plays them as designed, a test makes them shorter.
     /// </summary>
@@ -222,6 +231,16 @@ public sealed class ServerOptions
     /// original had no such knob.)
     /// </summary>
     public List<FieldExpRule> FieldExpRates { get; set; } = [];
+
+    /// <summary>
+    /// Custom, not original behavior: the file of the server-wide EXP bonus (ExpBonusService, GM "!expbonus"). Empty finds
+    /// scripts/exp_bonus.json above the server and its data dir, creating it at 100x when there is none; a path uses that
+    /// file; <see cref="ExpBonusOff"/> runs without a bonus and neither reads nor writes a file (the test hosts).
+    /// </summary>
+    public string ExpBonusFile { get; set; } = "";
+
+    /// <summary>The <see cref="ExpBonusFile"/> value that turns the bonus file off.</summary>
+    public const string ExpBonusOff = "off";
 
     /// <summary>
     /// (inferred) Star Cores drop for roles with the Astral Level open (ParagonService.StarCoreDrops). The client data gives

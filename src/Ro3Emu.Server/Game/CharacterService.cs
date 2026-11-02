@@ -50,7 +50,7 @@ public sealed partial class CharacterService(RoleStore roles, ItemStore itemStor
     /// <summary>Stat-point and equipment plans are 0-based (the equipment window labels plan key k "Build k+1").</summary>
     private const int StatPlan = 0;
 
-    private const int ItemTypeCurrency = 1;
+    internal const int ItemTypeCurrency = 1;
     private const int ItemTypeEquip = 5;
     private const int ZenyId = 1;
     private const int BaseExpItem = 100;

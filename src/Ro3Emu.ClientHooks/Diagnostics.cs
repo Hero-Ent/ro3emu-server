@@ -38,6 +38,9 @@ namespace Ro3Emu.ClientHooks
                     case "panels":
                         Panels();
                         break;
+                    case "terrain":
+                        Terrain();
+                        break;
                     case "dumptex":
                         DumpTextures(parts.Length > 1 ? parts[1] : "Txt");
                         break;
@@ -145,6 +148,73 @@ namespace Ro3Emu.ClientHooks
         }
 
         /// <summary>Open UI views: active objects named UI_Sys_* / UI_Com_* (the view prefabs' roots), outermost only.</summary>
+        /// <summary>
+        /// The streamed terrain's collider baker (WorldStreamFacade._instance.World.TerrainColliderManager): its bake mode,
+        /// compute shader, height map, load/unload counts and slot states, read by reflection.
+        /// </summary>
+        private static void Terrain()
+        {
+            const System.Reflection.BindingFlags all = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static
+                | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+            object Get(object o, string name)
+            {
+                if (o == null) return null;
+                for (var t = o as Type ?? o.GetType(); t != null; t = t.BaseType)
+                {
+                    var target = o is Type ? null : o;
+                    var f = t.GetField(name, all) ?? t.GetField("<" + name + ">k__BackingField", all);
+                    if (f != null) return f.GetValue(target);
+                    var p = t.GetProperty(name, all);
+                    if (p != null) return p.GetValue(target);
+                }
+                return null;
+            }
+            Type facade = null;
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+                facade = facade ?? assembly.GetType("HappyEngine.WorldStream.WorldStreamTool.WorldStreamFacade");
+            var manager = Get(Get(Get(facade, "_instance"), "World"), "TerrainColliderManager");
+            var baker = Get(manager, "_colliderBaker");
+            var context = Get(manager, "_context");
+            var executor = Get(manager, "_commandExecutor");
+            var slots = Get(baker, "_slotManager");
+            var sb = new StringBuilder("[Ro3Emu.Diag] terrain: manager=" + (manager != null));
+            sb.Append(" mode=").Append(Get(baker, "_bakeMode"));
+            sb.Append(" strategy=").Append(Get(baker, "_bakeStrategy")?.GetType().Name);
+            sb.Append(" computeShader=").Append(Get(context, "ComputeShader") is UnityEngine.Object cs && cs != null ? cs.name : "null");
+            sb.Append(" heightMap=").Append(Get(context, "HeightMapWidth")).Append('x').Append(Get(context, "HeightMapHeight"));
+            sb.Append(" emptyHeightData=").Append(Get(baker, "_heightmapDataViewer")?.GetType().GetMethod("IsEmptyData", all)?.Invoke(Get(baker, "_heightmapDataViewer"), null));
+            sb.Append(" terrainSize=").Append(Get(context, "TerrainSize")).Append(" terrainHeight=").Append(Get(context, "TerrainHeight"));
+            sb.Append(" patch=").Append(Get(context, "PatchSize")).Append(" gridPixels=").Append(Get(context, "GridPixelSizeX")).Append('x').Append(Get(context, "GridPixelSizeZ"));
+            var stat = Get(executor, "_loadCommandStat");
+            sb.Append(" commands total=").Append(Get(stat, "totalCount")).Append(" load=").Append(Get(stat, "loadCount")).Append(" unload=").Append(Get(stat, "unloadCount"));
+            sb.Append(" activeSlots=").Append(Get(Get(slots, "_activeSlotIndices"), "_activeCount"));
+            if (Get(slots, "_bakeSlots") is Array bakeSlots)
+            {
+                var states = new System.Collections.Generic.Dictionary<string, int>();
+                foreach (var slot in bakeSlots)
+                {
+                    string state = Get(slot, "bakeState")?.ToString() ?? "?";
+                    states[state] = states.TryGetValue(state, out int n) ? n + 1 : 1;
+                }
+                foreach (var pair in states) sb.Append(' ').Append(pair.Key).Append('=').Append(pair.Value);
+            }
+            if (Get(Get(manager, "_colliderBaker"), "_lifecycleManager") is object life && Get(life, "_loadedColliders") is GameObject[] loaded)
+            {
+                int live = 0, withMesh = 0, vertices = 0;
+                foreach (var go in loaded)
+                {
+                    if (go == null) continue;
+                    live++;
+                    var mesh = Get(go.GetComponent("MeshCollider"), "sharedMesh") as Mesh; // PhysicsModule is not referenced
+                    if (mesh == null) continue;
+                    withMesh++;
+                    vertices = mesh.vertexCount;
+                }
+                sb.Append(" colliders=").Append(live).Append(" withMesh=").Append(withMesh).Append(" lastVertices=").Append(vertices);
+            }
+            Debug.Log(sb.ToString());
+        }
+
         private static void Panels()
         {
             var sb = new StringBuilder();
