@@ -50,13 +50,24 @@ internal sealed class CaravanVersionReadPlan(long guildId, long day) : DbReadPla
     }
 }
 
-internal sealed class CaravanRoleIdsReadPlan : DbReadPlan
+/// <summary>
+/// The roles with a caravan order, except the fake players' (<paramref name="fakePrefix"/> followed by digits only, as
+/// FakePlayerService.IsFake; empty: every role).
+/// </summary>
+internal sealed class CaravanRoleIdsReadPlan(string fakePrefix = "") : DbReadPlan
 {
     internal override int Bytes => 128;
     internal override string Label => "guild-caravan/read-RoleIds";
     internal override object? Execute(SqliteConnection db, SqliteTransaction tx)
     {
-        using var cmd = DbSql.Command(db, tx, "SELECT role_id FROM guild_caravan_member");
+        using var cmd = DbSql.Command(db, tx, fakePrefix.Length == 0 ? "SELECT role_id FROM guild_caravan_member"
+            : "SELECT m.role_id FROM guild_caravan_member m LEFT JOIN role r ON r.id = m.role_id WHERE r.account IS NULL "
+              + "OR substr(r.account, 1, $n) <> $prefix OR length(r.account) = $n OR substr(r.account, $n + 1) GLOB '*[^0-9]*'");
+        if (fakePrefix.Length > 0)
+        {
+            cmd.Parameters.AddWithValue("$prefix", fakePrefix);
+            cmd.Parameters.AddWithValue("$n", fakePrefix.Length);
+        }
         using var reader = cmd.ExecuteReader();
         var ids = new List<long>();
         while (reader.Read()) ids.Add(reader.GetInt64(0));

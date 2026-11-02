@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using Google.Protobuf;
+using Microsoft.Extensions.Options;
 using Microsoft.Data.Sqlite;
 using Romsg;
 using Ro3Emu.Server.Accounts;
@@ -19,7 +20,7 @@ namespace Ro3Emu.Server.Game;
 public sealed class GuildCaravanService(GameData data, GuildStore guilds, AccountStore accounts, RoleStore roles,
     CharacterService character, AwardService awards, MailService mail, GuildService guildService,
     TaskService tasks, SeasonService seasons, FunctionService functions, SessionRegistry sessions, TimeProvider clock, GameLoop loop,
-    ILogger<GuildCaravanService> log) : IGameTicker
+    IOptions<ServerOptions> options, ILogger<GuildCaravanService> log) : IGameTicker
 {
     public const uint Show = 32247, Submit = 32249, WantHelp = 32250, HelpOther = 32251,
         HelpList = 32252, Depart = 32255, Refresh = 32288, HelpNotify = 32289;
@@ -39,6 +40,12 @@ public sealed class GuildCaravanService(GameData data, GuildStore guilds, Accoun
     private readonly TimeProvider _clock = clock;
     private readonly GameLoop _loop = loop;
     private readonly ILogger<GuildCaravanService> _log = log;
+    /// <summary>
+    /// The fake players' account prefix (FakePlayerService): they take no part in the caravan. Each order is settled by
+    /// the daily sweep one role at a time under its guild's gate, and a guild war's 140 fake players made that sweep hold
+    /// logins and the realm tick for minutes after 05:00 and after every server start on a new day.
+    /// </summary>
+    private readonly string _fakePrefix = options.Value.FakePlayers.AccountPrefix;
     private readonly ConcurrentDictionary<long, SemaphoreSlim> _gates = new();
     private TimeSpan _lastTick;
     // Deterministic pre-admission suspension; never installed by production callers.
@@ -222,10 +229,15 @@ public sealed class GuildCaravanService(GameData data, GuildStore guilds, Accoun
     private GuildStore.State? Guild(GameSession s) => s.Role is { } role && s.Guild?.GuildId is > 0
         && _guilds.ForRole(role.Id) is { } guild && guild.Id == s.Guild.GuildId
         && guild.Status == (int)GuildStatus.Normal && guild.Members.ContainsKey(role.Id) ? guild : null;
-    private bool Eligible(GameSession s) => s.Progress is { } progress
+    private bool Eligible(GameSession s) => !IsFake(s.Account) && s.Progress is { } progress
         && _data.Row("DailyActivityConfig", 101) is { } row
         && progress.Level >= GameData.Int(row, "_iiLv")
         && _functions.IsOpen(s, 1320);
+
+    /// <summary>A fake player's account: the prefix and digits only (as FakePlayerService.IsFake).</summary>
+    private bool IsFake(string? account) =>
+        _fakePrefix.Length > 0 && account != null && account.StartsWith(_fakePrefix, StringComparison.Ordinal)
+        && account.Length > _fakePrefix.Length && account.AsSpan(_fakePrefix.Length).IndexOfAnyExceptInRange('0', '9') < 0;
 
     private State? Read(long roleId) => _accounts.ReadSync<State?>(new CaravanMemberReadPlan<State>(roleId));
 
@@ -424,7 +436,7 @@ public sealed class GuildCaravanService(GameData data, GuildStore guilds, Accoun
     /// <summary>Settle yesterday's connected and offline orders at 05:00, once per persisted role.</summary>
     public async Task ReconcileAllAsync()
     {
-        var roleIds = _accounts.ReadSync<List<long>>(new CaravanRoleIdsReadPlan());
+        var roleIds = _accounts.ReadSync<List<long>>(new CaravanRoleIdsReadPlan(_fakePrefix));
         foreach (long roleId in roleIds)
         {
             var snapshot = Read(roleId);

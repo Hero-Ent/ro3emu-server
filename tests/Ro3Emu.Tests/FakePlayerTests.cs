@@ -1,9 +1,11 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Romsg;
 using Ro3Emu.Bot;
 using Ro3Emu.FakePlayers;
 using Ro3Emu.Server;
+using Ro3Emu.Server.Data;
 using Ro3Emu.Server.Game;
 
 namespace Ro3Emu.Tests;
@@ -65,6 +67,16 @@ public sealed class FakePlayerTests
         Assert.Equal(90f, BotClient.FaceTowards(0, 0, 5, 0), 3);   // +x
         Assert.Equal(180f, BotClient.FaceTowards(0, 0, 0, -5), 3);
         Assert.Equal(270f, BotClient.FaceTowards(0, 0, -5, 0), 3);
+    }
+
+    /// <summary>Fake players never learn or cast a hiding buff (Disguise made some vanish or turn translucent).</summary>
+    [GameClientDataFact]
+    public void FakePlayersNeverTakeHidingBuffs()
+    {
+        var data = new GameData(Microsoft.Extensions.Options.Options.Create(new ServerOptions { GameDataDir = GameClientData.Dir }),
+            NullLogger<GameData>.Instance);
+        Assert.True(FakePlayerService.IsSelfBuff(data, 1400101));  // Blessing
+        Assert.False(FakePlayerService.IsSelfBuff(data, 1511201)); // Disguise: BuffConfig 1500602, category 31
     }
 
     [Fact]
@@ -199,6 +211,7 @@ public sealed class FakePlayerTests
             o.ReconnectGraceSeconds = 0;
             o.FakePlayers.MaxBots = Math.Max(count, 3000);
             o.FakePlayers.LoginConcurrency = 16;
+            o.FakePlayers.LoginGapMs = 0;
             if (Environment.GetEnvironmentVariable("RO3EMU_FAKE_SKILLS") == "0") o.FakePlayers.Skills = false;
         });
         await app.StartAsync();

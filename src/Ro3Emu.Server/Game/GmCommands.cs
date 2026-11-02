@@ -82,12 +82,12 @@ public sealed partial class GmCommands(IOptions<ServerOptions> options, GameData
     }
 
     /// <summary>
-    /// Commands that change nothing in the world themselves (!fakeplayer steers another process, !online and !where
+    /// Commands that change nothing in the world themselves (!fakeplayer and !gvg steer another process, !online and !where
     /// only read): they run under the GM's own role. A realm-wide admission waits for every other operation to end,
     /// so with a full server "!fakeplayer stop" could never run.
     /// </summary>
     internal static bool IsRoleScopedCommand(string line) =>
-        line.Length > 1 && line[1..].Split(' ', 2)[0].ToLowerInvariant() is "fakeplayer" or "online" or "where";
+        line.Length > 1 && line[1..].Split(' ', 2)[0].ToLowerInvariant() is "fakeplayer" or "gvg" or "online" or "where";
 
     internal static bool IsEventOwnerCommand(string line)
     {

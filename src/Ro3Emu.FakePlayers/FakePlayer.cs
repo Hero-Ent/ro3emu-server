@@ -7,13 +7,13 @@ using Romsg;
 
 namespace Ro3Emu.FakePlayers;
 
-public enum FakeState { Starting, Town, Hunting, Dead, Retrying, Stopped }
+public enum FakeState { Starting, Town, Hunting, Dead, Retrying, Stopped, Fighting }
 
 /// <summary>
 /// One fake player: a real protocol client (login, role, scene, walk, chat, combat) driven by its <see cref="FakeProfile"/>.
 /// It reconnects with a growing pause after any failure until it is stopped.
 /// </summary>
-public sealed class FakePlayer(FakePlayerHost host, FakeProfile profile)
+public sealed partial class FakePlayer(FakePlayerHost host, FakeProfile profile)
 {
     /// <summary>3 m steps every 0.6 s (5 m/s): viewers project each step for up to 1 s, so the walk stays smooth with fewer
     /// walk messages than 2 m / 0.4 s, and the server's speed check allows it even when steps arrive bunched.</summary>
@@ -48,6 +48,8 @@ public sealed class FakePlayer(FakePlayerHost host, FakeProfile profile)
     private long _hp, _maxHp;
 
     public FakeProfile Profile => profile;
+    /// <summary>The host, for the other part of this class (FakePlayer.War.cs).</summary>
+    private FakePlayerHost Host => host;
     public string Account { get; } = host.Options.Prefix + profile.Index.ToString("D5");
     public string? Name { get; private set; }
     public FakeState State { get; private set; } = FakeState.Starting;
@@ -70,7 +72,10 @@ public sealed class FakePlayer(FakePlayerHost host, FakeProfile profile)
             }
             if (ct.IsCancellationRequested) break;
             State = FakeState.Retrying;
-            try { await Task.Delay(TimeSpan.FromSeconds(Math.Min(120, 5 * failures) + _r.Next(0, 10)), ct); }
+            // A war player waits longer and more spread out: a war's players failing together (a busy server) must not
+            // come back together and keep it busy.
+            var retry = War != null ? Math.Min(180, 15 * failures) + _r.Next(5, 40) : Math.Min(120, 5 * failures) + _r.Next(0, 10);
+            try { await Task.Delay(TimeSpan.FromSeconds(retry), ct); }
             catch (OperationCanceledException) { break; }
         }
         State = FakeState.Stopped;
@@ -89,7 +94,10 @@ public sealed class FakePlayer(FakePlayerHost host, FakeProfile profile)
         await using var owned = bot;
         bot.EnableLoadMode(256, e => { reducer.Observe(e); Observe(e); });
 
+        await host.PaceLoginAsync(ct);
         await host.LoginGate.WaitAsync(ct);
+        // The login's own scene switch is not one a war player must follow (FakePlayer.War.cs ObserveWar).
+        _switching = true;
         try
         {
             await bot.LoginAsync(Account, host.Options.Password).WaitAsync(TimeSpan.FromSeconds(120), ct);
@@ -103,7 +111,11 @@ public sealed class FakePlayer(FakePlayerHost host, FakeProfile profile)
             // The server gave the role its class, levels, skills and stats while loading it (FakePlayerService) and sent
             // the castable skills on the "skills" line.
         }
-        finally { host.LoginGate.Release(); }
+        finally
+        {
+            _switching = false;
+            host.LoginGate.Release();
+        }
 
         _normalSkill = host.NormalSkill(profile.Job);
         _speedRate = Math.Clamp(StepMeters / (float)StepInterval.TotalSeconds / host.WalkSpeed(profile.Job), 0.1f, 1f);
@@ -124,7 +136,8 @@ public sealed class FakePlayer(FakePlayerHost host, FakeProfile profile)
             while (!ct.IsCancellationRequested)
             {
                 if (_disconnected) throw new IOException("connection closed by the server");
-                if (profile.Behavior == FakeBehavior.Hunter) await HuntAsync(bot, reducer, ct);
+                if (War != null) await WarStepAsync(bot, reducer, ct);
+                else if (profile.Behavior == FakeBehavior.Hunter) await HuntAsync(bot, reducer, ct);
                 else await TownAsync(bot, ct);
             }
         }
@@ -138,12 +151,13 @@ public sealed class FakePlayer(FakePlayerHost host, FakeProfile profile)
     private void Observe(BotEvent e)
     {
         if (e.Kind == BotEventKind.Disconnect) { _disconnected = true; return; }
+        if (War != null) ObserveWar(e);
         if (profile.Behavior == FakeBehavior.Hunter && e.IsGame(CombatService.SkillHit))
         {
             NoteFight(SkillHitInfo.Parser.ParseFrom(e.Body));
             return;
         }
-        if (profile.Behavior == FakeBehavior.Hunter && e.IsGame(CharacterService.OnePropertyChange))
+        if (profile.Behavior is FakeBehavior.Hunter or FakeBehavior.Warrior && e.IsGame(CharacterService.OnePropertyChange))
         {
             foreach (var property in OnePropertyChange.Parser.ParseFrom(e.Body).Property?.Propertys ?? [])
                 if (property.PropertyId == 2000)
@@ -155,7 +169,11 @@ public sealed class FakePlayer(FakePlayerHost host, FakeProfile profile)
         }
         if (!e.IsGame(CombatService.ReviveInfo)) return;
         bool dead = SyncClientPlayerReviveInfoNtf.Parser.ParseFrom(e.Body).BDead;
-        if (dead && !_dead) host.CountDeath();
+        if (dead && !_dead)
+        {
+            if (War != null) host.CountWarDeath();
+            else host.CountDeath();
+        }
         _dead = dead;
     }
 
@@ -198,17 +216,34 @@ public sealed class FakePlayer(FakePlayerHost host, FakeProfile profile)
         using var switched = bot.Inbox.Expect(e => e.IsGame(MsgId.SwitchSceneLine));
         using var self = bot.Inbox.Expect(e => e.IsGame(MsgId.EntitySelf));
         using var end = bot.Inbox.Expect(e => e.IsGame(MsgId.SelfInfoEndFrameNotify));
-        await bot.SendGameAsync(SceneService.SceneTeleport, new SceneTeleportReq { TargetMapId = target }).WaitAsync(SendTimeout, ct);
-        var response = SceneTeleportRsp.Parser.ParseFrom((await reply.WaitAsync(TimeSpan.FromSeconds(30), ct)).Body);
-        if (response.Result != 0) throw new InvalidOperationException($"travel to {target} refused ({response.Result})");
-        var scene = SwitchSceneLineResp.Parser.ParseFrom((await switched.WaitAsync(TimeSpan.FromSeconds(30), ct)).Body);
+        _switching = true;
+        try
+        {
+            await bot.SendGameAsync(SceneService.SceneTeleport, new SceneTeleportReq { TargetMapId = target }).WaitAsync(SendTimeout, ct);
+            var response = SceneTeleportRsp.Parser.ParseFrom((await reply.WaitAsync(TimeSpan.FromSeconds(30), ct)).Body);
+            if (response.Result != 0) throw new InvalidOperationException($"travel to {target} refused ({response.Result})");
+            var scene = SwitchSceneLineResp.Parser.ParseFrom((await switched.WaitAsync(TimeSpan.FromSeconds(30), ct)).Body);
+            await FinishSceneAsync(bot, reducer, scene.SceneEntry, self, end, ct);
+        }
+        finally { _switching = false; }
+    }
+
+    /// <summary>
+    /// A scene switch the server answered (SwitchSceneLine): loads the scene, takes the own entity (position, facing and,
+    /// in a siege, the camp) and joins its chat. <paramref name="self"/> and <paramref name="end"/> were registered before
+    /// the request that caused the switch.
+    /// </summary>
+    private async Task FinishSceneAsync(BotClient bot, WorldReducer reducer, long sceneEntry, BotExpectation self, BotExpectation end,
+        CancellationToken ct)
+    {
         using var loaded = bot.Inbox.Expect(e => e.IsGame(MsgId.SceneLoaded));
-        await bot.SendGameAsync(MsgId.SceneLoaded, new SceneLoadedReq { SceneId = scene.SceneEntry, ViewMaxCount = (ulong)host.Options.ViewCount }).WaitAsync(SendTimeout, ct);
+        await bot.SendGameAsync(MsgId.SceneLoaded, new SceneLoadedReq { SceneId = sceneEntry, ViewMaxCount = (ulong)host.Options.ViewCount }).WaitAsync(SendTimeout, ct);
         var ready = SceneLoadedResp.Parser.ParseFrom((await loaded.WaitAsync(TimeSpan.FromSeconds(30), ct)).Body);
-        if (ready.Result != 0) throw new InvalidOperationException($"scene {scene.SceneEntry} load refused ({ready.Result})");
+        if (ready.Result != 0) throw new InvalidOperationException($"scene {sceneEntry} load refused ({ready.Result})");
         var arrived = EntitySelf.Parser.ParseFrom((await self.WaitAsync(TimeSpan.FromSeconds(30), ct)).Body).Base;
         SetPosition(arrived.MovementInfo.Pos);
         _face = arrived.Face;
+        _camp = arrived.EntityCamp;
         await end.WaitAsync(TimeSpan.FromSeconds(30), ct);
         await EnterSceneAsync(bot, reducer, ct);
     }
@@ -218,7 +253,8 @@ public sealed class FakePlayer(FakePlayerHost host, FakeProfile profile)
     {
         var location = reducer.Location;
         _nav = host.Nav(location.SceneEntry);
-        State = profile.Behavior == FakeBehavior.Hunter ? FakeState.Hunting : FakeState.Town;
+        State = War != null && location.SceneEntry == SiegeScene ? FakeState.Fighting
+            : profile.Behavior == FakeBehavior.Hunter ? FakeState.Hunting : FakeState.Town;
         _chatGroup = $"4_{(location.SceneId != 0 ? location.SceneId : location.SceneEntry)}";
         try { await bot.JoinChatAsync(_chatGroup).WaitAsync(SendTimeout, ct); }
         catch (Exception e) when (e is not OperationCanceledException) { _chatGroup = ""; host.Log($"{Account}: chat join failed: {e.Message}"); }
@@ -236,7 +272,26 @@ public sealed class FakePlayer(FakePlayerHost host, FakeProfile profile)
         float diff = MathF.Abs((face - _face + 540f) % 360f - 180f);
         if (diff < 15f) return;
         _face = face;
-        await bot.WalkAsync(_x, _y, _z, true, _face, _speedRate).WaitAsync(SendTimeout, ct);
+        await SendWalkAsync(bot, _x, _y, _z, true, ct);
+    }
+
+    private DateTime _lastWalk;
+
+    /// <summary>
+    /// One walk message (31082) with the current facing. A step that moves waits until <see cref="StepInterval"/> after
+    /// the previous walk message: walks that follow one another (or a turn just before one) would otherwise bunch their
+    /// steps, and the server's speed check measures each step against the time since the previous one.
+    /// </summary>
+    private async Task SendWalkAsync(BotClient bot, float x, float y, float z, bool stop, CancellationToken ct)
+    {
+        float dx = x - _x, dz = z - _z;
+        if (dx * dx + dz * dz > 0.0001f)
+        {
+            var wait = _lastWalk + StepInterval - DateTime.UtcNow;
+            if (wait > TimeSpan.Zero) await Task.Delay(wait, ct);
+        }
+        await bot.WalkAsync(x, y, z, stop, _face, _speedRate).WaitAsync(SendTimeout, ct);
+        _lastWalk = DateTime.UtcNow;
     }
 
     // ------------------------------------------------------------------ town
@@ -277,13 +332,13 @@ public sealed class FakePlayer(FakePlayerHost host, FakeProfile profile)
             // Every step stays on walkable ground as the server checks it (cell and straight segment); else stop here.
             if (_nav != null && (_nav.Height(x, z, _y) is not { } ground || !_nav.CanWalk(_x, _y, _z, x, z)))
             {
-                await bot.WalkAsync(_x, _y, _z, true, _face, _speedRate).WaitAsync(SendTimeout, ct);
+                await SendWalkAsync(bot, _x, _y, _z, true, ct);
                 return;
             }
             float y = _nav?.Height(x, z, _y) ?? _y;
             // Face where the step goes: viewers turn the model and animate the walk along this direction.
             if (step > 0.01f) _face = BotClient.FaceTowards(_x, _z, x, z);
-            await bot.WalkAsync(x, y, z, last, _face, _speedRate).WaitAsync(SendTimeout, ct);
+            await SendWalkAsync(bot, x, y, z, last, ct);
             _x = x; _y = y; _z = z;
             await KeepAliveAsync(bot, ct);
             if (last) return;
@@ -574,8 +629,10 @@ public sealed class FakePlayer(FakePlayerHost host, FakeProfile profile)
         if (now >= _nextChat)
         {
             _nextChat = now + ChatGap();
-            if (host.Talkative(profile))
-                await SayAsync(bot, FakeChat.Line(_r, profile.Behavior == FakeBehavior.Hunter, FakePlayerHost.JobName(profile.Job), profile.BaseLevel), ct);
+            // War players talk in the siege only (in town their lines would only add load).
+            string? line = War == null ? FakeChat.Line(_r, profile.Behavior == FakeBehavior.Hunter, FakePlayerHost.JobName(profile.Job), profile.BaseLevel)
+                : InSiege ? WarChatLine() : null;
+            if (line != null && host.Talkative(profile)) await SayAsync(bot, line, ct);
         }
     }
 

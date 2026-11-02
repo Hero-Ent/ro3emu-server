@@ -74,10 +74,11 @@ Options (`appsettings.json` or `--Ro3Emu:FakePlayers:...`):
 | `MaxBots` | 100000 | Most one command may ask for |
 | `AccountPrefix` | `fp_` | Fake account names: prefix + 5 digits |
 | `LoginConcurrency` | 12 | Logins in flight at once (each one is a password hash on the server) |
+| `LoginGapMs` | 1000 | Milliseconds between two logins (0: none). Each login loads, the first time creates, a character on the game loop: 140 at once left real players' requests unanswered until their clients reconnected. 1000 fake players take about 17 minutes to arrive |
 | `ChatSpeed` | 1 | Chat pace (higher = more often) |
 | `ViewCount` | 20 | Players each fake player asks to see. Real players still see the fake players, and monsters are not limited |
 | `Skills` | true | Learn and cast the class's damage skills |
-| `Buffs` | false | Also learn and cast self buffs (off: every buff starts a realm-wide expiry timer) |
+| `Buffs` | false | Also learn and cast self buffs (off: every buff starts a realm-wide expiry timer); never a hiding one |
 
 ## Load: what the server does differently for fake players
 
@@ -119,6 +120,68 @@ dotnet test tests/Ro3Emu.Tests --filter "FullyQualifiedName~StressWithManyFakePl
 ```
 
 On a live server, `!fakeplayer <n>` plus `GET /ro3emu/metrics` (loopback) measure the same thing.
+
+## Guerra simulada (`!gvg`, GM/admin only)
+
+A full guild war against fake players, to test the castle siege (scene 2230101) end to end: two guilds of fake
+third classes fight it with skills, cannons and vehicles, and real players can join either side.
+
+| Command | Effect |
+|---|---|
+| `!gvg iniciar` | 70 fake players per side (`!gvg iniciar 60` for 60), city 1001 (`!gvg iniciar 70 1002` for another) |
+| `!gvg iniciar 70 1001 minha=atacante` | Your own guild is the attacker (or `minha=defensor`): fake players fill it up to 70 members, and only the other side gets a fake guild |
+| `!gvg entrar atacante` / `!gvg entrar defensor` | You apply to that side's guild (it accepts at once) and get its cannon permission (Firearm slot 9 or 10); then Activities → Royal City War → go to battle |
+| `!gvg maquina veiculo` / `!gvg maquina canhao` | Your war machine permission in your guild becomes a vehicle (or a cannon) one: the siege battle bag then lists those machines |
+| `!gvg puxar 20` | 20 more fake players join your guild (`!gvg puxar 20 atacante`, `defensor` or a guild id for another one) |
+| `!gvg status` | Both guilds (members/maximum) and the fake players' counters: online, in a guild, in the siege, entries, deaths, skills, heals, cannon shots, machines boarded |
+| `!gvg parar` | The war fake players log out and the test siege closes |
+
+What `!gvg iniciar` does, in order (a few minutes; `!gvg status` follows it):
+1. Registers the accounts `fp_90001`… (attackers) and `fp_91001`… (defenders) and starts the fake player process.
+2. Player 1 of each side founds its guild (`Ataque` / `Defesa`) through the real protocol (32210) and opens it to
+   applications with auto-accept (32230 type 10); the others apply (32223) and join at once. The guild cap is 80, so
+   70 per side leaves 10 places for real players.
+3. Runs the siege test aids `!siege close`, `!siege seed <city> <attacker> <defender>` and `!siege open`, and fills
+   both war warehouses (50 cannons, 10 Madogears, 6 tanks, 6 Peco Pecos, 10 repair kits; never lowered).
+4. The fake players enter the siege (30400, six at a time) and fight it.
+
+The fake players log in one per `LoginGapMs` (1 s), so 140 take a little over two minutes. They wait for the siege in
+Alberta (10600), not Prontera, so their arrival does not land in the real players' view or map chat; there each walks to
+a spot of its own up to 60 m away and mostly stands there, silent (they talk in the siege only). If the GM reconnects meanwhile, the war's next
+steps and answers go to the GM's new session (they also go to the server log, `Guild war: ...`).
+
+**The fake players** are third classes at the server's top base and job level (Rune Knight, Royal Guard, Guillotine
+Cross, Mechanic, Warlock, Ranger and Archbishop, about 2:2:1 front line, ranged and healers), with all their attack
+skills and self buffs learned. No fake player learns or casts a hiding buff (BuffConfig category 31): Disguise, the
+Assassin line's, hid it from the other camp and left it translucent for its own, so it looked invisible. In the siege each one:
+- fights as its camp (1 attackers, 2 defenders): enemy players first (within 24 m; hurt ones and the camp's focus
+  target first: an enemy below 45% HP becomes everybody's target for 6 s), then castle units (crystal, ram and ladders,
+  guardians, barricades, archers, enemy machines; the City Gate last, it is the ram's work);
+- casts its skills, a third class's own skills (rank 5) four times as often as first-class ones and area skills three
+  times as often on a crowd; ranged classes and healers keep their distance;
+- Archbishops heal themselves below 70% and the most hurt ally within 20 m;
+- steps back below 30% HP with an enemy close, revives after death and goes back to the front;
+- walks around the standing air walls (var 133 of 30401) as the real client must, so nobody passes a closed wall;
+- follows the stages: attackers gather in their camp (Prepare), then go to the ladders and the gate (the middle lane
+  escorts the Battering Ram, which only moves with an attacker within 32 m), the Knight Guardians and the crystal;
+  defenders hold the wall walk and the gateway, then the guardians and the crystal;
+- players 2–9 of a side are **gunners**: player 1 gives them Firearm slots 1–8 (32282), they build a cannon (32270 /
+  32271) at a spot in range of the stage's fight, board it (32700) and fire ballistic volleys (32703, gravity, speed and
+  direction computed to land on the target) at enemy crowds, castle objects or where the other side gathers;
+- players 12–19 are **drivers**: Vehicle slots 1–8, they board a free vehicle of their camp (a fixed Madogear or their
+  own, 32281 from the warehouse otherwise) and drive it into the fight with the seat's skills.
+
+Slots 9 and 10 of each machine type stay for real players: `!gvg entrar` and `!gvg maquina` put you in one (the server
+does what the leader's Tactics panel would, since the leader is a fake player). A member holds one slot at a time, so
+switching to a vehicle gives up the cannon (and the cannon you built).
+
+In `minha=` mode or with `!gvg puxar`, nobody fake gives the machine slots of your guild: give them yourself in the
+guild's Tactics panel if you want the fake gunners and drivers there to use machines. If your guild does not
+auto-accept, the server approves the fake players' applications in your name.
+
+The fake players use no GM shortcut: their guild, siege and machine actions are the real client messages, so what
+works for them works for players. Accounts `fp_90001`–`fp_99999` are reserved for the war and never
+used by `!fakeplayer`.
 
 ## Limits
 
