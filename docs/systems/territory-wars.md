@@ -243,6 +243,9 @@ Code: `GuildService.WarVehicles.cs`, `TerritoryWarsService.WarVehicles.cs`.
   its entity). Then 32702 Vehicle (state 3, the interaction, the vehicle) and the seat's camera (32704 `_iChange3C`).
 - **Driving.** The driver controls the vehicle (`LC_PassengerComponent`: `ChangeControlUnit`), so its 31082 walks are
   the vehicle's: the vehicle moves for everyone else, and the other riders follow it. 31074 turns the vehicle.
+- **Speed.** The vehicle's entity carries the speed attribute 113 (its current speed, the NPC's as base), as a
+  monster's does. Without it the client gave the vehicle it controls speed 0: the driver could not move it and it showed
+  no walk animation.
 - **Seat skills.** The seat's `_kMainSkills` and `_kSkills` are cast through 31102 like any skill, without being learned.
 - **Changing seats.** 32708 `ChangeVehicleSeatReq` with a free 0-based seat.
 - **Getting off.** The seat's `_iExitNpcAction` (4900025, ActionConfig 5004 QuitStatus, sent by
@@ -564,6 +567,8 @@ platform: "Summon platforms" (below, under "Stronghold gameplay points").
 ### Test aids (not original)
 
 - `!siege prepare`: the running sieges' Prepare ends now; the Gate stage starts at once (the ladders and the ram set off).
+- `!gvg`: a whole siege played by fake players, with cannons and vehicles, that real players can join
+  (docs/guide/fake-players.md "Guerra simulada").
 - `!siege objects`: the castle units one can hit in the open siege rooms (`point=npc#uid hp/max`, `marching`, `held`,
   `arrived`), the living archers as a count and the ladders and ram waiting to come back. The uids serve the GM panel's
   entity ops (`GmChangeHp`, `GmKillEntity`).

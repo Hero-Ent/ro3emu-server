@@ -193,6 +193,13 @@ public sealed class WorldReducer(int maxEntities = 4096)
     }
 
     public bool Sees(long role) { lock (_lock) return _entities.ContainsKey((ulong)role) && (ulong)role != _selfUid; }
+
+    /// <summary>NPC units currently shown (entity type 2: war machines, interactable NPCs), with a position.</summary>
+    public EntityBase[] Npcs()
+    {
+        lock (_lock) return _entities.Values.Where(x => x.EntityType == 2 && x.MovementInfo?.Pos != null).Select(x => x.Clone()).ToArray();
+    }
+
     public EntityBase[] GatheringNodes()
     {
         lock (_lock) return _entities.Values.Where(x => x.CollectionInfo != null && x.MovementInfo?.Pos != null)

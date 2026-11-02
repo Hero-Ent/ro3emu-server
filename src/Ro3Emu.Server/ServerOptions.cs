@@ -374,6 +374,13 @@ public sealed class FakePlayerOptions
     /// <summary>Logins the fake player process runs at once (each one is a password hash on this server).</summary>
     public int LoginConcurrency { get; set; } = 12;
 
+    /// <summary>
+    /// Milliseconds between two fake player logins. Each login loads (and the first time creates) a character on the game
+    /// loop: a burst of a hundred of them left real players' requests unanswered until their clients reconnected. 0 = no
+    /// spacing (stress tests).
+    /// </summary>
+    public int LoginGapMs { get; set; } = 1000;
+
     /// <summary>Chat pace: 1 = like people (a line every few minutes per talker), higher = more often.</summary>
     public double ChatSpeed { get; set; } = 1;
 

@@ -178,6 +178,7 @@ public static partial class ServerHost
         builder.Services.AddSingleton<GateAuthRegistry>();
         builder.Services.AddSingleton<ReconnectService>();
         builder.Services.AddSingleton<FakePlayerService>();
+        builder.Services.AddSingleton<GvgSimService>();
         builder.Services.AddSingleton<Voice.VoiceTicketRegistry>();
         builder.Services.AddSingleton<Voice.VoiceRooms>();
         // The voice relay PoC only opens a second listener when a port is configured for it.
@@ -464,6 +465,7 @@ public static partial class ServerHost
         questTasks.QuestDelivered.Add(questTasks.OnConnectDelivered);
         app.Services.GetRequiredService<ReconnectService>(); // hooks the handover and registers !netdrop
         app.Services.GetRequiredService<FakePlayerService>(); // registers !fakeplayer
+        app.Services.GetRequiredService<GvgSimService>(); // registers !gvg (the simulated guild war)
         app.Services.GetRequiredService<CardEffects>(); // socketed-card passives and procs (sockets, scene loads, hits)
         app.Services.GetRequiredService<TalentProcs>(); // profession talent procs (cast resolutions)
         app.Services.GetRequiredService<PassiveSkills>(); // learned passives' procs, shields and reactions

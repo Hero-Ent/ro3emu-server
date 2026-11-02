@@ -78,4 +78,100 @@ public sealed class MapNav
         var c = _cells[r.Next(_cells.Length)];
         return (c.X + .5f, c.Y, c.Z + .5f);
     }
+
+    /// <summary>A straight walk from a to b stays on walkable ground and enters no blocked cell (a's own cell may be one).</summary>
+    public bool CanWalkClear(float ax, float ay, float az, float bx, float bz, Func<int, int, bool>? blocked)
+    {
+        if (!CanWalk(ax, ay, az, bx, bz)) return false;
+        if (blocked == null) return true;
+        int startX = (int)MathF.Floor(ax), startZ = (int)MathF.Floor(az);
+        float dx = bx - ax, dz = bz - az;
+        int steps = Math.Max(1, (int)MathF.Ceiling(MathF.Sqrt(dx * dx + dz * dz) / 0.25f));
+        for (int i = 1; i <= steps; i++)
+        {
+            float t = (float)i / steps;
+            int cx = (int)MathF.Floor(ax + dx * t), cz = (int)MathF.Floor(az + dz * t);
+            if ((cx != startX || cz != startZ) && blocked(cx, cz)) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// The points to walk to from a to b (the last one b, or the reachable cell nearest b when b itself is shut off),
+    /// avoiding the nav grid's closed cells and the <paramref name="blocked"/> ones (a siege's standing air walls): A* over
+    /// the 1 m cells as NavGrid.FindPath, each leg then stretched as far as a clear straight walk goes. Null when nothing
+    /// within <paramref name="maxNodes"/> cells leads closer.
+    /// </summary>
+    public List<(float X, float Y, float Z)>? Route(float ax, float ay, float az, float bx, float bz, Func<int, int, bool>? blocked,
+        int maxNodes = 40000)
+    {
+        if (_nav == null) return [(bx, ay, bz)];
+        int w = _nav.Width, h = _nav.Height;
+        int sx = (int)MathF.Floor(ax), sz = (int)MathF.Floor(az), gx = (int)MathF.Floor(bx), gz = (int)MathF.Floor(bz);
+        if (sx < 0 || sz < 0 || sx >= w || sz >= h || gx < 0 || gz < 0 || gx >= w || gz >= h) return null;
+        if (CanWalkClear(ax, ay, az, bx, bz, blocked) && Height(bx, bz, ay) is { } direct) return [(bx, direct, bz)];
+        int start = sz * w + sx, goal = gz * w + gx;
+        var parent = new Dictionary<int, int> { [start] = -1 };
+        var cost = new Dictionary<int, float> { [start] = 0 };
+        var height = new Dictionary<int, float> { [start] = ay };
+        var closed = new HashSet<int>();
+        var open = new PriorityQueue<int, float>();
+        float Heuristic(int x, int z)
+        {
+            int dx = Math.Abs(x - gx), dz = Math.Abs(z - gz);
+            return Math.Max(dx, dz) + 0.41421357f * Math.Min(dx, dz);
+        }
+        bool Step(int x, int z, float y, out float found)
+        {
+            found = 0;
+            if (x < 0 || z < 0 || x >= w || z >= h || blocked?.Invoke(x, z) == true) return false;
+            if (_nav.WalkHeight(x + 0.5f, z + 0.5f, y) is not { } ny || MathF.Abs(ny - y) > NavGrid.WalkHeightTolerance) return false;
+            found = ny;
+            return true;
+        }
+        int best = start;
+        float bestLeft = Heuristic(sx, sz);
+        open.Enqueue(start, bestLeft);
+        while (open.TryDequeue(out int cell, out _))
+        {
+            if (!closed.Add(cell)) continue;
+            int cx = cell % w, cz = cell / w;
+            float left = Heuristic(cx, cz);
+            if (left < bestLeft) { bestLeft = left; best = cell; }
+            if (cell == goal || closed.Count > maxNodes) break;
+            float g = cost[cell], y = height[cell];
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dz = -1; dz <= 1; dz++)
+                {
+                    if (dx == 0 && dz == 0) continue;
+                    bool diagonal = dx != 0 && dz != 0;
+                    if (diagonal && (!Step(cx + dx, cz, y, out _) || !Step(cx, cz + dz, y, out _))) continue;
+                    if (!Step(cx + dx, cz + dz, y, out float ny)) continue;
+                    int next = (cz + dz) * w + cx + dx;
+                    float ng = g + (diagonal ? 1.41421357f : 1f);
+                    if (closed.Contains(next) || cost.TryGetValue(next, out float old) && old <= ng) continue;
+                    cost[next] = ng;
+                    parent[next] = cell;
+                    height[next] = ny;
+                    open.Enqueue(next, ng + Heuristic(cx + dx, cz + dz));
+                }
+        }
+        if (best == start) return null;
+        // The chain of cell centres back to the start (the goal itself when reached), then stretched legs.
+        var cells = new List<(float X, float Y, float Z)>();
+        for (int cell = best; cell >= 0 && parent[cell] >= 0; cell = parent[cell])
+            cells.Add(cell == goal && best == goal ? (bx, height[cell], bz) : (cell % w + 0.5f, height[cell], cell / w + 0.5f));
+        cells.Reverse();
+        var legs = new List<(float X, float Y, float Z)>();
+        var from = (X: ax, Y: ay, Z: az);
+        for (int i = 0; i < cells.Count;)
+        {
+            int j = i;
+            while (j + 1 < cells.Count && CanWalkClear(from.X, from.Y, from.Z, cells[j + 1].X, cells[j + 1].Z, blocked)) j++;
+            legs.Add(cells[j]);
+            from = cells[j];
+            i = j + 1;
+        }
+        return legs;
+    }
 }

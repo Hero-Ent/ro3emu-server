@@ -141,6 +141,48 @@ public sealed class FakePlayerService : IDisposable
 
     private string AccountName(int index) => Settings.AccountPrefix + index.ToString("D5");
 
+    // ------------------------------------------------------------------ guild war (GvgSimService)
+
+    /// <summary>The fake player process's guild-war lines ("@guild", "@applied", "@warstatus", "@warfail"), off the loop.</summary>
+    internal Action<string>? WarLine { get; set; }
+
+    /// <summary>The fake player process is running.</summary>
+    internal bool ProcessRunning => _process is { HasExited: false };
+
+    /// <summary>A line for the fake player process ("warbot ...", "wargo ...", "warstop").</summary>
+    internal void SendLine(string line) => Send(line);
+
+    /// <summary>
+    /// The accounts of the given fake players exist (registered off the loop: each is a password hash) and the process
+    /// runs; the problem in Portuguese for the GM, or null. Used by the guild war (GvgSimService).
+    /// </summary>
+    internal async Task<string?> EnsureWarAsync(IReadOnlyCollection<int> indexes)
+    {
+        await _busy.WaitAsync();
+        try
+        {
+            string password = Password();
+            var missing = indexes.Where(i => { lock (_registered) return !_registered.Contains(i); }).ToArray();
+            int created = 0;
+            await Parallel.ForEachAsync(missing, new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount / 2, 2, 8) },
+                async (index, _) =>
+                {
+                    string account = AccountName(index);
+                    if (!await _accounts.ExistsAsync(account) && await _accounts.RegisterAsync(account, password) == AccountStore.Registration.Created)
+                        Interlocked.Increment(ref created);
+                    lock (_registered) _registered.Add(index);
+                });
+            if (created > 0) _log.LogInformation("Guild war: {Created} fake account(s) registered", created);
+            return EnsureProcess(password, out string? problem) ? null : problem;
+        }
+        catch (Exception e)
+        {
+            _log.LogError(e, "Guild war: preparing {Count} fake players failed", indexes.Count);
+            return $"falhou ({e.Message})";
+        }
+        finally { _busy.Release(); }
+    }
+
     private Task ReplyAsync(GameSession session, string text) =>
         _loop.InvokeAsync(async () =>
         {
@@ -188,7 +230,8 @@ public sealed class FakePlayerService : IDisposable
             foreach (var arg in new[] { "--server", $"http://127.0.0.1:{opts.HttpPort}", "--data", opts.GameDataDir ?? opts.DataDir,
                          "--prefix", Settings.AccountPrefix, "--logins", Settings.LoginConcurrency.ToString(),
                          "--chat-speed", Settings.ChatSpeed.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                         "--view", Settings.ViewCount.ToString() })
+                         "--view", Settings.ViewCount.ToString(),
+                         "--login-gap-ms", Settings.LoginGapMs.ToString(System.Globalization.CultureInfo.InvariantCulture) })
                 start.ArgumentList.Add(arg);
             start.Environment["RO3EMU_FAKE_PASSWORD"] = password;
             var process = Process.Start(start) ?? throw new InvalidOperationException("the fake player process did not start");
@@ -241,6 +284,12 @@ public sealed class FakePlayerService : IDisposable
             {
                 if (line.StartsWith("@status ", StringComparison.Ordinal)) { _lastStatus = line[8..]; _lastStatusAt = DateTime.UtcNow; }
                 else if (line.StartsWith("@log ", StringComparison.Ordinal)) _log.LogInformation("Fake players: {Text}", line[5..]);
+                else if (line.StartsWith("@guild ", StringComparison.Ordinal) || line.StartsWith("@applied ", StringComparison.Ordinal)
+                    || line.StartsWith("@war", StringComparison.Ordinal))
+                {
+                    try { WarLine?.Invoke(line); }
+                    catch (Exception e) { _log.LogWarning(e, "Guild war: line {Line} failed", line); }
+                }
             }
         }
         catch (Exception e) { _log.LogWarning(e, "Fake players: output reader stopped"); }
@@ -293,21 +342,29 @@ public sealed class FakePlayerService : IDisposable
         bool changed = false;
         try
         {
-            if (p.Career != profile.Job || p.Level < profile.BaseLevel)
+            // A war fake player asks for the top levels (FakeProfile.WarLevel): compare with what the server allows, so a
+            // role already there is not rewritten at every login.
+            bool war = FakeProfile.IsWar(index);
+            if (p.Career != profile.Job || p.Level < Math.Min(profile.BaseLevel, _character.MaxLevel))
             {
                 _character.SetCareerAndLevels(p, profile.Job, profile.BaseLevel, profile.JobLevel);
                 changed = true;
             }
             var skills = _services.GetRequiredService<SkillService>();
             var data = _services.GetRequiredService<Data.GameData>();
-            if (Settings.Skills) changed |= LearnSkills(skills, data, p, Settings.Buffs);
+            // The guild war is a few hundred fake players at most: they always fight with skills and keep their buffs up.
+            bool useSkills = Settings.Skills || war, buffs = Settings.Buffs || war;
+            if (useSkills) changed |= LearnSkills(skills, data, p, buffs);
             changed |= AllocateStats(p);
-            if (Settings.Skills)
+            if (useSkills)
             {
-                var groups = skills.Tree(p.Career).Select(t => t.Group).Distinct()
-                    .Where(g => IsAttackSkill(data, skills.RealId(g, 1)) || Settings.Buffs && IsSelfBuff(data, skills.RealId(g, 1)));
+                var tree = skills.Tree(p.Career);
+                var rankOf = tree.GroupBy(t => t.Group).ToDictionary(g => g.Key, g => skills.Rank(g.First().Career));
+                var groups = tree.Select(t => t.Group).Distinct()
+                    .Where(g => IsAttackSkill(data, skills.RealId(g, 1)) || buffs && IsSelfBuff(data, skills.RealId(g, 1)));
                 var learned = groups.Select(g => (Group: g, Level: skills.Level(p, g))).Where(x => x.Level > 0);
-                Send($"skills {account} {string.Join(',', learned.Select(x => $"{x.Group}:{x.Level}"))}");
+                // group:level:rank (the job rank of the skill: 5 = a third class's own skill, which a war player prefers).
+                Send($"skills {account} {string.Join(',', learned.Select(x => $"{x.Group}:{x.Level}:{rankOf.GetValueOrDefault(x.Group)}"))}");
             }
         }
         catch (Exception e) when (e is ArgumentException or InvalidOperationException or KeyNotFoundException)
@@ -383,11 +440,28 @@ public sealed class FakePlayerService : IDisposable
             _ => true,
         };
 
-    /// <summary>A skill cast on oneself that applies a buff: no damage, _kBuff1 set (no teleports or other utilities).</summary>
+    /// <summary>
+    /// A skill cast on oneself that applies a buff: no damage, _kBuff1 set (no teleports or other utilities), and no hiding
+    /// buff among them (BuffConfig category 31, CombatService.StealthBuff). Disguise (the Assassin line's 15112) hid a fake
+    /// player from the other side and left it translucent for its own (LC_UnitStealthManager): it looked invisible.
+    /// </summary>
     internal static bool IsSelfBuff(Data.GameData data, int rowId) =>
         data.Row("SkillConfig", rowId) is { } row && Data.GameData.Int(row, "_iBasicType") == 1
         && Data.GameData.Int(row, "_iRelease") == 2 && Data.GameData.Int(row, "_iDmgType") == 0
-        && row.TryGetProperty("_kBuff1", out var buffs) && buffs.ValueKind == System.Text.Json.JsonValueKind.Array && buffs.GetArrayLength() > 0;
+        && row.TryGetProperty("_kBuff1", out var buffs) && buffs.ValueKind == System.Text.Json.JsonValueKind.Array && buffs.GetArrayLength() > 0
+        && !Hides(data, buffs);
+
+    /// <summary>Whether a _kBuff1 list ([[buff id, chance, ...], ...]) applies a hiding buff.</summary>
+    private static bool Hides(Data.GameData data, System.Text.Json.JsonElement buffs)
+    {
+        foreach (var entry in buffs.EnumerateArray())
+        {
+            var first = entry.ValueKind == System.Text.Json.JsonValueKind.Array && entry.GetArrayLength() > 0 ? entry[0] : entry;
+            if (first.ValueKind == System.Text.Json.JsonValueKind.Number && first.TryGetInt64(out long id)
+                && Data.Config.BuffConfig.Get(data, id) is { } buff && CombatService.StealthBuff(buff)) return true;
+        }
+        return false;
+    }
 
     /// <summary>Spends every free stat point on the job line's usual build (each stat at most 99).</summary>
     private bool AllocateStats(RoleProgress p)

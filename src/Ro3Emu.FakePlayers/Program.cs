@@ -2,8 +2,8 @@ using Ro3Emu.FakePlayers;
 
 // Fake players for a running server (docs/guide/fake-players.md). Normally the server starts this process itself for the
 // GM command "!fakeplayer <n>" and talks to it over stdin/stdout:
-//   in:  "target <n>", "status", "quit"
-//   out: "@ready <account> <roleId> <job> <baseLevel> <jobLevel>", "@status ...", "@log ..."
+//   in:  "target <n>", "status", "quit", and for the guild war "warbot ...", "wargo <city>", "warstop", "warstatus"
+//   out: "@status ...", "@log ...", and for the guild war "@guild", "@applied", "@warstatus", "@warfail"
 // It can also run by hand for a stress test against a server whose fake accounts already exist:
 //   Ro3Emu.FakePlayers --server http://127.0.0.1:5380 --data Client\RO3Emu\data --count 500 [--prefix fp_]
 // The password comes from the RO3EMU_FAKE_PASSWORD environment variable (or --password).
@@ -29,6 +29,8 @@ var options = new FakeHostOptions(server, data, prefix, password)
     ChatSpeed = double.TryParse(values.GetValueOrDefault("--chat-speed"), System.Globalization.NumberStyles.Float,
         System.Globalization.CultureInfo.InvariantCulture, out double chatSpeed) && chatSpeed > 0 ? chatSpeed : 1,
     ViewCount = int.TryParse(values.GetValueOrDefault("--view"), out int view) && view > 0 ? view : 20,
+    LoginGapMs = int.TryParse(values.GetValueOrDefault("--login-gap-ms"), System.Globalization.NumberStyles.Integer,
+        System.Globalization.CultureInfo.InvariantCulture, out int gap) && gap >= 0 ? gap : 1000,
     GateHost = values.GetValueOrDefault("--gate-host", "127.0.0.1") is { Length: > 0 } gate && gate != "-" ? gate : null,
 };
 
@@ -50,6 +52,7 @@ var reporter = Task.Run(async () =>
     {
         try { await Task.Delay(10_000, quit.Token); } catch (OperationCanceledException) { break; }
         Write(host.Status());
+        if (host.WarPlayers().Count > 0) Write(host.WarStatus());
     }
 });
 
@@ -73,6 +76,22 @@ var input = Task.Run(async () =>
                 break;
             case "skills" when parts.Length > 1:
                 host.SetSkills(parts[1], parts.Length > 2 ? parts[2] : "");
+                break;
+            // The guild war (GvgSimService, "!gvg"): "warbot <index> <A|D|P> <leader|member> <name|guildId>",
+            // "wargo <city>", "warstop", "warstatus".
+            case "warbot" when parts.Length > 4 && int.TryParse(parts[1], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int warIndex) && parts[2].Length > 0:
+                host.StartWarBot(warIndex, char.ToUpperInvariant(parts[2][0]), parts[3] == "leader", parts[4]);
+                break;
+            case "wargo" when parts.Length > 1 && int.TryParse(parts[1], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int city):
+                host.WarGo(city);
+                Write($"@log war: siege of city {city} open, war players enter");
+                break;
+            case "warstop":
+                host.WarStop();
+                Write("@log war: stopped");
+                break;
+            case "warstatus":
+                Write(host.WarStatus());
                 break;
             case "quit":
                 quit.Cancel();

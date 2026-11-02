@@ -15,6 +15,11 @@ public enum FakeBehavior
     Wanderer,
     /// <summary>Hunts monsters on a field map that fits its level; dies and revives.</summary>
     Hunter,
+    /// <summary>
+    /// Fights a guild war (the GM's "!gvg", GvgSimService): joins its side's guild, waits in Alberta and plays the
+    /// castle siege when it opens. A third class at the server's top level (docs/guide/fake-players.md "Guerra simulada").
+    /// </summary>
+    Warrior,
 }
 
 /// <summary>Everything that makes one fake player look like a person, fixed by its index (same index, same player).</summary>
@@ -22,6 +27,41 @@ public sealed record FakeProfile(int Index, int Sex, int Hair, int Job, int Base
     long TownMap = FakeProfile.Prontera)
 {
     public const long Prontera = 10100;
+
+    /// <summary>
+    /// Index ranges of the guild-war fake players (GvgSimService): the attackers 90001-90999 (90001 founds the guild),
+    /// the defenders 91001-91999 (91001 founds it) and the players "!gvg puxar" adds to a chosen guild, 92001-99999.
+    /// Within a side the number after the thousands also gives the war machine: 2-9 a cannon, 12-19 a vehicle.
+    /// </summary>
+    public const int WarAttackFirst = 90001, WarDefenseFirst = 91001, WarPullFirst = 92001, WarLast = 99999;
+
+    /// <summary>Asked levels of a war fake player: the server clamps them to its top base and job level.</summary>
+    public const int WarLevel = 999, WarJobLevel = 999;
+
+    /// <summary>
+    /// Where the war fake players wait for the siege: Alberta, not Prontera, so a hundred of them logging in and standing
+    /// around do not land in the real players' view and chat (their models and walks made the clients stutter).
+    /// </summary>
+    public const long WarTown = 10600;
+
+    /// <summary>A guild-war fake player (FakeBehavior.Warrior).</summary>
+    public static bool IsWar(int index) => index >= WarAttackFirst && index <= WarLast;
+
+    /// <summary>
+    /// The third classes of a war party in the order a side fills them: front line (Rune Knight, Royal Guard,
+    /// Guillotine Cross, Mechanic), damage from range (Warlock, Ranger) and healers (Archbishop), about 2:2:1.
+    /// </summary>
+    private static readonly int[] WarJobs = [1400, 2400, 1410, 3400, 4400, 5400, 2400, 1400, 3400, 4400, 6400, 5400];
+
+    /// <summary>The war fake player for an index: a third class at the top level, its look fixed by the index.</summary>
+    public static FakeProfile War(int index)
+    {
+        var r = new Random(unchecked(index * 6271 + 29));
+        int sex = r.Next(2) == 0 ? 1 : 2;
+        int hair = (sex == 1 ? 70000000 : 72000000) + r.Next(15);
+        int job = WarJobs[index % 1000 % WarJobs.Length];
+        return new FakeProfile(index, sex, hair, job, WarLevel, WarJobLevel, FakeBehavior.Warrior, 0, WarTown);
+    }
 
     /// <summary>Towns town players live in (each line holds ~200): Prontera gets the most, the others share the rest.</summary>
     public static readonly long[] Towns = [10100, 10100, 10300, 10200, 10500, 10101, 10600];
@@ -91,6 +131,7 @@ public sealed record FakeProfile(int Index, int Sex, int Hair, int Job, int Base
     /// </summary>
     public static FakeProfile For(int index)
     {
+        if (IsWar(index)) return War(index);
         var r = new Random(unchecked(index * 7919 + 17));
         int sex = r.Next(2) == 0 ? 1 : 2;
         int hair = (sex == 1 ? 70000000 : 72000000) + r.Next(15);
