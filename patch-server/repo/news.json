@@ -1,6 +1,13 @@
 {
   "items": [
     {
+      "tag": "PATCH 1.1.7",
+      "color": "green",
+      "title": "Patch Notes v1.1.7 - Sincronização do Emulador, Combate, Refino e Segurança",
+      "text": "• Sincronização do Emulador (Upstream): Integrados mais de 150 aprimoramentos do emulador oficial, incluindo modernização do núcleo em C# 12, otimizações de memória e estabilidade no processamento de pacotes.\n• Combate & Auto-Ataque Fluido: Calibrado o atraso de animação de auto-ataque baseado na arma em uso, eliminando cortes de animação. Preservadas a tolerância de 500 ms contra latência de rede e a regra onde movimentação não cancela conjurações (cast).\n• Arqueiros & Flechas Elementais: Habilidades físicas à distância passam a herdar corretamente a propriedade elemental da aljava e flechas equipadas (Fogo, Prata, etc.), aplicando multiplicadores elementais reais.\n• Animações de Falcão & Lobo: Corrigidas as habilidades de companheiros como Assalto do Falcão (Blitz Beat) e Ataque do Warg (Warg Strike) para exibir a trajetória visual completa do falcão e o avanço do lobo até o alvo antes do dano aterrissar.\n• Companheiros & Combate Tático: Inteligência de mira aprimorada para Falcão e Warg contra perda de alvo, mantendo intactos o empurrão da Defesa com Escudo e a investida da Investida Destemida.\n• Refino de Equipamentos: Corrigida a sincronização imediata no cliente em caso de falha de refino (pacote 5007 completo), atualizando o nível real do equipamento na hora sem exigir relogar ou desequipar.\n• Ciclo Diário de Facções: Implementado o suporte a ciclos diários (FactionDay) e pontuação de atividade (FactionPoints), sincronizados no novo formato de economia S3.\n• Segurança de Servidor & Operação: Rotas de gerenciamento operacional e painel administrativo agora contam com proteção via token de operador e validação estrita de nomes de contas.\n• Atualizador 1.1.7.",
+      "date": "2026-11-03"
+    },
+    {
       "tag": "PATCH 1.1.6",
       "color": "green",
       "title": "Patch Notes v1.1.6 - Movimentação no Modo Clássico",

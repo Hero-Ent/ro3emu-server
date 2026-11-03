@@ -18,6 +18,24 @@ public sealed partial class CombatService
 {
     private const int FalconTrack = 3, FalconArcTrack = 7, WolfTrack = 8, PendantShowEffect = 5;
 
+    private static readonly long[] PendantScales = [100, 1000];
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<long, int> _pendantEffects = new();
+
+    /// <summary>
+    /// The pendant charge of a skill show: the first EffectData row whose m_kBulletData is on the Falcon, FalconArc or Wolf
+    /// track, 0 when there is none. BulletEffect cannot find these, as it only takes bullets with a prefab and their
+    /// m_kBulletName is empty, so Blitz Beat and Warg Strike drew no falcon or wolf going to the target. The rows are the
+    /// show's own (show*100.., Warg Strike 13316 -> 1331602, Warg Bite 13321 -> 1332103, the auto-cast 1310200 ->
+    /// 131020002) or one digit further (Blitz Beat 13102 -> 13102200).
+    /// </summary>
+    private int PendantEffect(long scriptShow) => _pendantEffects.GetOrAdd(scriptShow, show =>
+    {
+        foreach (long scale in PendantScales)
+            for (long id = show * scale; id < (show + 1) * scale && id <= int.MaxValue; id++)
+                if (FalconFlightMs((int)id, 0) != null || WolfRunMs((int)id, 0) != null) return (int)id;
+        return 0;
+    });
+
     /// <summary>A Falcon/FalconArc-track effect's flight time to the target in ms, null when it is not a falcon flight
     /// (CombatService.PendantRunMs; the speed's unit is (inferred) metres per second, as for the wolf).</summary>
     private int? FalconFlightMs(int effectId, float distance) => PendantRunMs(effectId, distance, FalconTrack, FalconArcTrack);

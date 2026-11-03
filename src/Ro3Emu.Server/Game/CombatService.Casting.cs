@@ -728,18 +728,23 @@ public sealed partial class CombatService
             Independent = independent, Turret = turret,
         };
         if (!independent) s.SkillCast = action;
-        // A chanted skill that may not be cast on the move (_bMovement 0 = enum_SkillLockMoveType.Lock) holds the caster
-        // still from the press until the cast ends; the client stops the walk and resumes the player's path afterwards.
-        if (!independent && actor == null && action.ChantMs > 0 && GameData.Int(row, "_bMovement") == 0)
+        // A skill that may not be cast on the move (_bMovement 0 = enum_SkillLockMoveType.Lock) holds the caster still from
+        // the press until the cast ends, chanted or not: the client stops the walk, turns to the cast and resumes the
+        // player's path afterwards. Hero Saga: only skills that allow moving (_bMovement 1 and 2: dashes, Back Slide, moving
+        // casts) and basic attacks are played on the move; upstream played every skill pressed in mid-walk on the move.
+        var config = new SkillConfig(row);
+        bool holdStill = !independent && actor == null && config.Movement == 0 && !config.IsNormalAttack(_data)
+            && action.ChantMs + action.ActionMs > 0;
+        if (holdStill)
         {
             await _buffs.SetCastWalkLockAsync(s, id);
-            ScheduleRuntime(action.WorldScene, TimeSpan.FromMilliseconds(action.ChantMs + action.ActionMs), async () =>
+            ScheduleRuntime(action.WorldScene, TimeSpan.FromMilliseconds(leadMs + action.ChantMs + action.ActionMs), async () =>
             {
                 if (s.CastWalkLock == id) await _buffs.SetCastWalkLockAsync(s, 0);
             });
         }
         else if (!independent && s.CastWalkLock != 0) await _buffs.SetCastWalkLockAsync(s, 0);
-        if (actor == null && !s.Walking && new SkillConfig(row).Movement == 0)
+        if (actor == null && config.Movement == 0 && (holdStill || !s.Walking))
             SceneService.HoldWalk(s, DateTime.UtcNow.AddMilliseconds(leadMs + action.ChantMs + action.ActionMs), s.Walking);
         s.WorldState.ResurrectionCastId = Script(row) == "Resurrection" ? id : 0;
         s.Face = face;

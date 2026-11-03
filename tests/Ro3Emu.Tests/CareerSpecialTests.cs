@@ -407,6 +407,22 @@ public sealed class CareerSpecialTests : IAsyncLifetime
         Assert.Equal(start, Session("alice").Position);
     }
 
+    // On foot, Warg Strike (show 13316) sends the wolf: its charge 1331602 is a Wolf-track bullet with no prefab, which the
+    // client runs only from a PendantShow display (type 5), before the hit lands.
+    [ClientDataFact]
+    public async Task WargStrikeOnFootSendsTheWolfToItsTarget()
+    {
+        await using var a = await InWorld("Alice");
+        await Become("alice", 3400, 99, 13310, 13311, 13312);
+        var target = await WolfTargetAsync(10);
+        var (_, _, hit) = await CastOnAsync(a, 1331201, target);
+        Assert.Equal(1331201, hit.SkillId);
+        var run = await Next(a, CombatService.SkillEffect, SkillEffectDisplayNotify.Parser, e => e.EffectType == 5);
+        Assert.Equal(1331602, run.EffectId);
+        Assert.Equal(target.Uid, run.TargetId);
+        Assert.Equal(1331201, run.SkillId);
+    }
+
     // Warg Hunt (_kScriptLogic WolvesShadow) shows only Skill27: the three wolves are fx_skill_wughunt_01/02 in the shows of
     // the _kLogicData rows [near, far], and the dash "if you are more than ${5}m from the target" is the far row's 1333014.
     [ClientDataTheory]

@@ -38,6 +38,9 @@ tools/unluac-batch/*.class
 **/downloads/
 **/data/backups/
 **/data/*.db*
+**/data/operator.token
+**/data/.backup-integrity-checked
+**/data/updates/
 *.zip
 *.tar.gz
 Client/**/Ro3Emu.Server.exe
