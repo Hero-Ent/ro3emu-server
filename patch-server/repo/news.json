@@ -1,6 +1,13 @@
 {
   "items": [
     {
+      "tag": "PATCH 1.1.5",
+      "color": "green",
+      "title": "Patch Notes v1.1.5 - Instâncias, Ecos da Alma, Combate e Performance",
+      "text": "• Ecos da Alma: Corrigido o sistema de Ecos da Alma. Agora passa a atribuir os afixos corretamente e foi feita a correção visual dos elementos.\n• Masmorras: Ajustado o limite mínimo de 1 jogador para realizar as masmorras (grupos maiores continuam totalmente disponíveis).\n• Instâncias: Realizada a correção das instâncias narrativas, que voltam a funcionar normalmente, incluindo correções na masmorra da Rainha Maya.\n• Guerra da Guilda (GvG) & Estabilidade: Correções de estabilidade no servidor durante a GvG, sincronização do início da guerra e movimentação fluida de veículos de guerra e guardiões, evitando travamentos e desconexões.\n• Habilidades de Katar: Realizada uma melhoria na fluidez e execução das habilidades dependentes de Katar.\n• Axe Tornado: Melhoria na habilidade Axe Tornado no modo AUTO. Agora ela continua perseguindo os inimigos ativamente enquanto a conjuração estiver ativa.\n• Caça ao Tesouro: Corrigida a Caça ao Tesouro, garantindo interação correta no mapa e entrega das recompensas.\n• Vigor e Energia: Realizada a correção do vigor/energia. Agora as missões recuperam a energia normalmente.\n• Performance do Cliente: Inúmeras melhorias na performance do cliente, correção dos engasgos (stuttering) ao realizar ataques e exclusão de código obsoleto, resultando em ganhos de cerca de 20 a 30 FPS em testes locais.",
+      "date": "2026-11-03"
+    },
+    {
       "tag": "PATCH 1.1.4",
       "color": "green",
       "title": "Patch Notes v1.1.4 - Evolução 3RD, Ninho da Maya, Aeroplano, Nova Wiki & Upstream",
