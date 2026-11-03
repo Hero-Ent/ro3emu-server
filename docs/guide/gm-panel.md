@@ -39,7 +39,7 @@ GM changes made through the panel are meant for testing. Combat switches and att
 
 | Op | What it does |
 |---|---|
-| 31 GmJumpMap | Warp to a map, optionally to x, y. |
+| 31 GmJumpMap | Warp to a map, optionally to x, y (same as `!warp`). Refused, with the reason, for a dungeon scene (use 108) and for a map the game client cannot load: the October 2026 client lacks the scene of Glast Heim (10700, 10740-10791) and of Amatsu, Luoyang, Ayothaya, Dewata and Port Malaya (10601, 10603-10606), whose loading screen would retry forever, and cannot load the scene-editor module of Gonryun (10602) or the character selection scene (100), whose loading screen stops at 85%. A character saved on such a map logs in at the spawn map. |
 | 79 GmShowLocation | Scene, map, line, position and facing. |
 | 83 GmFlyToTarget | Jump to a player, monster or NPC. |
 
@@ -65,7 +65,7 @@ The preset buttons (Gear, class builds) build a test character for a class. They
 
 | Op | What it does |
 |---|---|
-| 999 GmPlayerAsset `openallfunc` | Every function counts as open for this session. |
+| 999 GmPlayerAsset `openallfunc` | Every function counts as open for the role, at later logins too (Skills, the skill bar, Cards and the rest open even though the role skipped the quests that open them). |
 | 170 GMJobProfessSkill, 171 GMJobProfessAttr | The build's recommended skills and stats for the role's level. |
 | 172 GMSetSkillWheel, 38 GMSkillQueue | The skill bar and the skill queue. |
 | 173 GMEquipWeapon | Gives and equips the weapon. |

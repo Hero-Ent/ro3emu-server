@@ -37,9 +37,9 @@ public sealed class AuctionStore(AccountStore accounts)
         public bool Auto { get; set; }
         public bool AutoPaused { get; set; }
         public long RunId { get; set; }
-        public List<long> Eligible { get; set; } = new();
-        public List<long> GiveUp { get; set; } = new();
-        public List<long> Joined { get; set; } = new();
+        public List<long> Eligible { get; set; } = [];
+        public List<long> GiveUp { get; set; } = [];
+        public List<long> Joined { get; set; } = [];
         public long Winner { get; set; }
         public bool RandomAward { get; set; }
         // Durable terminal routing obligation: escrow and lot remain intact for operator reconciliation.
@@ -53,8 +53,8 @@ public sealed class AuctionStore(AccountStore accounts)
         public long GuildId { get; set; }
         public int SrcType { get; set; }
         public int PlayBook { get; set; }
-        public Dictionary<int, long> TierGroups { get; set; } = new();
-        public List<long> Eligible { get; set; } = new();
+        public Dictionary<int, long> TierGroups { get; set; } = [];
+        public List<long> Eligible { get; set; } = [];
         public bool Finalized { get; set; }
         public bool Ready { get; set; }
     }
@@ -67,9 +67,23 @@ public sealed class AuctionStore(AccountStore accounts)
     public IReadOnlyList<Item> OpenItems()
         => _accounts.ReadSync<List<Item>>(new AuctionReadPlan(AuctionReadKind.Open));
 
-    /// <summary>Every lot of one auction type, settled ones included.</summary>
+    /// <summary>Every lot of one auction type, settled ones included. Shared instances for reading only: never mutate or
+    /// save them (read the lot again with <see cref="Get"/> for that).</summary>
     public IReadOnlyList<Item> ItemsOfType(AuctionType type)
-        => _accounts.ReadSync<List<Item>>(new AuctionReadPlan(AuctionReadKind.OfType, (long)type));
+    {
+        long generation = _accounts.Caches.Current(WrittenCache.Auction);
+        lock (_cacheLock)
+            if (_ofType.TryGetValue(type, out var hit) && hit.Generation == generation) return hit.Items;
+        var items = _accounts.ReadSync<List<Item>>(new AuctionReadPlan(AuctionReadKind.OfType, (long)type));
+        lock (_cacheLock)
+            if (_accounts.Caches.Current(WrittenCache.Auction) == generation) _ofType[type] = (generation, items);
+        return items;
+    }
+
+    // Each client asks for its own lots about once a second, and the ask runs on the game loop. AuctionItemWritePlan, the
+    // only writer of these rows, bumps the generation after its job; a read during which it changed is not cached.
+    private readonly object _cacheLock = new();
+    private readonly Dictionary<AuctionType, (long Generation, IReadOnlyList<Item> Items)> _ofType = [];
 
     /// <summary>Settled lots of one type, latest end first.</summary>
     public IReadOnlyList<Item> SettledItems(AuctionType type)

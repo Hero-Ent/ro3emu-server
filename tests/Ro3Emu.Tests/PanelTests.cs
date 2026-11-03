@@ -23,7 +23,7 @@ public sealed class PanelTests : IAsyncLifetime
 
     public Task DisposeAsync() => _host.DisposeAsync().AsTask();
 
-    internal static async Task<(SyntheticHost Host, string Panel)> StartAsync(Action<ServerOptions> configure)
+    internal static async Task<(SyntheticHost Host, string Panel)> StartAsync(Action<ServerOptions> configure, TimeProvider? clock = null)
     {
         int port = TestPorts.FreePort();
         var host = await SyntheticHost.StartAsync(o =>
@@ -31,8 +31,18 @@ public sealed class PanelTests : IAsyncLifetime
             o.Panel.Enabled = true;
             o.Panel.Port = port;
             configure(o);
-        });
+        }, clock);
         return (host, $"http://127.0.0.1:{port}");
+    }
+
+    /// <summary>
+    /// The login budget is a fixed window per wall-clock minute (CredentialLimiter): on the system clock a test that
+    /// counts attempts fails when it straddles a minute boundary (main run 41294128083, at 09:49:00).
+    /// </summary>
+    private sealed class FrozenClock : TimeProvider
+    {
+        private readonly DateTimeOffset _now = new(2026, 10, 15, 12, 0, 30, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => _now;
     }
 
     [Fact]
@@ -143,26 +153,97 @@ public sealed class PanelTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task WithAnEmptyGmListNobodyIsAdminAndLoginsAreThrottled()
+    public async Task AnEmptyGmListFollowsTheGamesGmRuleAndLoginsAreThrottled()
     {
         var (host, panel) = await StartAsync(o =>
         {
-            o.GmOpenWhenEmpty = true; // GM for everyone in game; the panel still has no admin
+            o.GmOpenWhenEmpty = true; // GM for everyone in game, so an Admin of the panel too
             o.LoginLimitIncludesLoopback = true;
             o.LoginAttemptsPerMinute = 3;
-        });
+        }, new FrozenClock());
         await using var _ = host;
         Assert.Equal(0, await SdkLoginAsync(host, "panel-anyone", "pw-game"));
         using var browser = new PanelBrowser(panel);
         var login = await browser.LoginAsync("panel-anyone", "pw-game");
-        Assert.False((await login.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("admin").GetBoolean());
-        Assert.Equal(HttpStatusCode.Forbidden, (await browser.Http.GetAsync("/api/admin/dashboard")).StatusCode);
+        Assert.True((await login.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("admin").GetBoolean());
+        Assert.Equal(HttpStatusCode.OK, (await browser.Http.GetAsync("/api/admin/dashboard")).StatusCode);
 
         // The server's credential budget (CredentialLimiter), shared with the game's login: the third check of the
         // minute is the last, then 429 before any hashing.
         Assert.Equal(HttpStatusCode.Unauthorized, (await browser.LoginAsync("panel-anyone", "wrong")).StatusCode);
         Assert.Equal(HttpStatusCode.TooManyRequests, (await browser.LoginAsync("panel-anyone", "pw-game")).StatusCode);
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await browser.RegisterAsync("panel-another", "secret-1")).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await browser.RegisterAsync("panel_another", "secret-1")).StatusCode);
+    }
+
+    [Fact]
+    public async Task WithAnEmptyGmListAndGmClosedNobodyIsAdmin()
+    {
+        var (host, panel) = await StartAsync(o => o.GmOpenWhenEmpty = false); // a Production server without a GM list
+        await using var _ = host;
+        Assert.Equal(0, await SdkLoginAsync(host, "panel-closed", "pw-game"));
+        using var browser = new PanelBrowser(panel);
+        var login = await browser.LoginAsync("panel-closed", "pw-game");
+        Assert.False((await login.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("admin").GetBoolean());
+        Assert.Equal(HttpStatusCode.Forbidden, (await browser.Http.GetAsync("/api/admin/dashboard")).StatusCode);
+    }
+
+    /// <summary>
+    /// A panel players reach through a proxy (PublicUrl) listens on loopback, yet an empty GM list closes GM there:
+    /// whoever signs up is neither GM in game nor an Admin, without any GmOpenWhenEmpty or environment setting.
+    /// </summary>
+    [Fact]
+    public async Task BehindAProxyAnEmptyGmListMakesNobodyAdmin()
+    {
+        var (host, panel) = await StartAsync(o => o.Panel.PublicUrl = "https://panel.example.com");
+        await using var _ = host;
+        var options = host.Service<Microsoft.Extensions.Options.IOptions<ServerOptions>>().Value;
+        Assert.False(options.GmOpenWhenEmpty);
+        Assert.Equal(0, await SdkLoginAsync(host, "panel-proxied", "pw-game"));
+        using var browser = new PanelBrowser(panel);
+        var login = await browser.LoginAsync("panel-proxied", "pw-game");
+        Assert.False((await login.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("admin").GetBoolean());
+        Assert.Equal(HttpStatusCode.Forbidden, (await browser.Http.GetAsync("/api/admin/dashboard")).StatusCode);
+    }
+
+    /// <summary>
+    /// A proxy nobody told the server about (no PublicUrl, no TrustedProxies) rewrites the Host to the panel's address, so
+    /// only its forwarding header tells its players from this machine: they never get the Admin of an open local server,
+    /// on any admin route, while the machine's own browser and a role given by name keep theirs.
+    /// </summary>
+    [Theory]
+    [InlineData("X-Forwarded-For", "203.0.113.20")]
+    [InlineData("X-Real-IP", "203.0.113.20")]
+    [InlineData("Forwarded", "for=203.0.113.20")]
+    public async Task AForwardedRequestNeverGetsTheAdminOfAnOpenLocalServer(string header, string value)
+    {
+        var (host, panel) = await StartAsync(o =>
+        {
+            o.GmOpenWhenEmpty = null; // decided by the server: open, it is local
+            o.Panel.Roles = new Dictionary<string, string> { ["panel-listed"] = "moderator" };
+        });
+        await using var _ = host;
+        Assert.True(host.Service<Microsoft.Extensions.Options.IOptions<ServerOptions>>().Value.GmOpenWhenEmpty);
+        Assert.Equal(0, await SdkLoginAsync(host, "panel-local", "pw-game"));
+        Assert.Equal(0, await SdkLoginAsync(host, "panel-listed", "pw-game"));
+
+        using var local = new PanelBrowser(panel);
+        var own = await (await local.LoginAsync("panel-local", "pw-game")).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("admin", own.GetProperty("role").GetString());
+        Assert.Equal(HttpStatusCode.OK, (await local.Http.GetAsync("/api/admin/server")).StatusCode);
+
+        using var proxied = new PanelBrowser(panel);
+        proxied.Http.DefaultRequestHeaders.Add(header, value);
+        var theirs = await (await proxied.LoginAsync("panel-local", "pw-game")).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.False(theirs.GetProperty("admin").GetBoolean());
+        Assert.Equal("", theirs.GetProperty("role").GetString() ?? "");
+        foreach (string path in new[] { "/api/admin/dashboard", "/api/admin/server", "/api/admin/roles", "/api/admin/audit", "/api/admin/updates", "/api/admin/backups/any.db" })
+            Assert.Equal(HttpStatusCode.Forbidden, (await proxied.Http.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await proxied.PostAsync("/api/admin/backups", new { })).StatusCode);
+
+        using var listed = new PanelBrowser(panel);
+        listed.Http.DefaultRequestHeaders.Add(header, value);
+        var role = await (await listed.LoginAsync("panel-listed", "pw-game")).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("moderator", role.GetProperty("role").GetString());
     }
 
     [Fact]
@@ -207,21 +288,29 @@ public sealed class PanelTests : IAsyncLifetime
     {
         using var browser = new PanelBrowser(_panel);
         Assert.Equal(HttpStatusCode.BadRequest, (await browser.RegisterAsync("   ", "secret-1")).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await browser.RegisterAsync("panel-new", "short")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await browser.RegisterAsync("panel_new", "short")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await browser.RegisterAsync("panel\u0001new", "secret-1")).StatusCode);
-        var created = await browser.RegisterAsync("  panel-new  ", "secret-1");
+        // The panel's own name rule (the game has none): 4 to 24 ASCII letters, digits and underscores.
+        foreach (string bad in new[] { "p", "pan", "panel-new", "panel new", "p\u00e4nel_new", new string('p', 25) })
+            Assert.Equal(HttpStatusCode.BadRequest, (await browser.RegisterAsync(bad, "secret-1")).StatusCode);
+        Assert.Null(Ro3Emu.Panel.PanelSite.NameProblem("Abc_1"));
+        Assert.Null(Ro3Emu.Panel.PanelSite.NameProblem(new string('p', 24)));
+        var created = await browser.RegisterAsync("  panel_new  ", "secret-1");
         Assert.Equal(HttpStatusCode.OK, created.StatusCode);
-        Assert.Equal("panel-new", (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("account").GetString());
-        Assert.Equal("panel-new", (await browser.GetJsonAsync("/api/account")).GetProperty("name").GetString());
+        Assert.Equal("panel_new", (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("account").GetString());
+        Assert.Equal("panel_new", (await browser.GetJsonAsync("/api/account")).GetProperty("name").GetString());
 
         // The same record as a first login in the game: the game signs in with it, and no second account appears.
-        Assert.Equal(0, await SdkLoginAsync(_host, "panel-new", "secret-1"));
-        Assert.Equal(401, await SdkLoginAsync(_host, "panel-new", "other-pw"));
+        Assert.Equal(0, await SdkLoginAsync(_host, "panel_new", "secret-1"));
+        Assert.Equal(401, await SdkLoginAsync(_host, "panel_new", "other-pw"));
         using var other = new PanelBrowser(_panel);
-        Assert.Equal(HttpStatusCode.Conflict, (await other.RegisterAsync("PANEL-NEW", "secret-2")).StatusCode);
-        Assert.Equal(0, await SdkLoginAsync(_host, "panel-game-first", "pw-game"));
-        Assert.Equal(HttpStatusCode.Conflict, (await other.RegisterAsync("panel-game-first", "secret-2")).StatusCode);
-        Assert.Equal("panel-new", await _host.Service<AccountStore>().VerifiedAccountAsync("Panel-New", "secret-1"));
+        Assert.Equal(HttpStatusCode.Conflict, (await other.RegisterAsync("PANEL_NEW", "secret-2")).StatusCode);
+        Assert.Equal(0, await SdkLoginAsync(_host, "panel_game_first", "pw-game"));
+        Assert.Equal(HttpStatusCode.Conflict, (await other.RegisterAsync("panel_game_first", "secret-2")).StatusCode);
+        Assert.Equal("panel_new", await _host.Service<AccountStore>().VerifiedAccountAsync("Panel_New", "secret-1"));
+        // A name the game made outside the sign-up rule still logs in here.
+        Assert.Equal(0, await SdkLoginAsync(_host, "p-1", "pw-game"));
+        Assert.Equal(HttpStatusCode.OK, (await other.LoginAsync("p-1", "pw-game")).StatusCode);
     }
 
     [Fact]
@@ -231,8 +320,46 @@ public sealed class PanelTests : IAsyncLifetime
         await using var _ = host;
         using var browser = new PanelBrowser(panel);
         Assert.False((await browser.SessionAsync()).GetProperty("registration").GetBoolean());
-        Assert.Equal(HttpStatusCode.Forbidden, (await browser.RegisterAsync("panel-closed", "secret-1")).StatusCode);
-        Assert.Null(await host.Service<AccountStore>().VerifiedAccountAsync("panel-closed", "secret-1"));
+        Assert.Equal(HttpStatusCode.Forbidden, (await browser.RegisterAsync("panel_closed", "secret-1")).StatusCode);
+        Assert.Null(await host.Service<AccountStore>().VerifiedAccountAsync("panel_closed", "secret-1"));
+    }
+
+    [Fact]
+    public async Task WithRefuseUnknownAccountsOnlyTheSignUpCreatesAccounts()
+    {
+        var (host, panel) = await StartAsync(o => o.RefuseUnknownAccounts = true);
+        await using var _ = host;
+        // The client words only code 401 ("Incorrect Username or Password"), so an unknown name answers like a wrong
+        // password, and nothing is written.
+        Assert.Equal(401, await SdkLoginAsync(host, "panel_unknown", "secret-1"));
+        Assert.Null(await host.Service<AccountStore>().VerifiedAccountAsync("panel_unknown", "secret-1"));
+        using var browser = new PanelBrowser(panel);
+        Assert.Equal(HttpStatusCode.OK, (await browser.RegisterAsync("panel_unknown", "secret-1")).StatusCode);
+        Assert.Equal(0, await SdkLoginAsync(host, "Panel_Unknown", "secret-1"));
+        Assert.Equal(401, await SdkLoginAsync(host, "panel_unknown", "other-pw"));
+    }
+
+    [Fact]
+    public async Task SignUpsPerAddressCountCreatedAccountsByTheForwardedClient()
+    {
+        var (host, panel) = await StartAsync(o =>
+        {
+            o.Panel.TrustedProxies = ["127.0.0.1"];
+            o.Panel.SignUpsPerAddressPerDay = 2;
+        });
+        await using var _ = host;
+        using var first = new PanelBrowser(panel);
+        first.Http.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.5");
+        Assert.Equal(HttpStatusCode.OK, (await first.RegisterAsync("panel_limit_a", "secret-1")).StatusCode);
+        // A taken name creates nothing, so it gives its slot back.
+        Assert.Equal(HttpStatusCode.Conflict, (await first.RegisterAsync("panel_limit_a", "secret-1")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await first.RegisterAsync("panel_limit_b", "secret-1")).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await first.RegisterAsync("panel_limit_c", "secret-1")).StatusCode);
+        Assert.Null(await host.Service<AccountStore>().VerifiedAccountAsync("panel_limit_c", "secret-1"));
+
+        using var second = new PanelBrowser(panel);
+        second.Http.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.6");
+        Assert.Equal(HttpStatusCode.OK, (await second.RegisterAsync("panel_limit_c", "secret-1")).StatusCode);
     }
 
     [Fact]
@@ -410,6 +537,7 @@ public sealed class PanelTests : IAsyncLifetime
         var map = Assert.Single((await anonymous.GetJsonAsync("/api/maps")).GetProperty("maps").EnumerateArray());
         Assert.Equal(("Synthetic Field", 12, 35, 2, ""), (map.GetProperty("name").GetString(), map.GetProperty("minLevel").GetInt32(),
             map.GetProperty("maxLevel").GetInt32(), map.GetProperty("monsters").GetInt32(), map.GetProperty("image").GetString()));
+        Assert.True(map.GetProperty("enterable").GetBoolean());
         var detail = await anonymous.GetJsonAsync("/api/maps/10112");
         Assert.Equal(["Synthetic Poring", "Synthetic Angeling"], detail.GetProperty("monsters").EnumerateArray()
             .Select(m => m.GetProperty("monster").GetProperty("name").GetString()));

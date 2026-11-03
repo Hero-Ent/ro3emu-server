@@ -89,6 +89,12 @@ by default: the client cuts their HP on purpose (`_kAttriScale`), so a 1:1 serve
 RO1 feel (`Ro3Emu__Ro1MonsterHp=true`). Every client monster whose name has Egg or Pupa was checked: the Thief Bug Egg (83 against 48), the Eggyra, the story dungeon's Ant Egg (5300036, 830) and the level 50 Peco Peco Egg are not below RO1 and are not listed. An RO1 reference, not client evidence
 (**inferred**).
 
+## Quest drops
+
+A drop row with a `DropGroupConfig._iQuestLimit` is a quest drop: it is a candidate only while the killer has that quest accepted
+and not delivered (**inferred**), e.g. the Egg Thief wave's Card: Poring (group 144, quest 10102100); award and AFK rolls never
+give it (`RewardService.PickFromGroup`).
+
 ## Field EXP rates (`Ro3Emu:FieldExpRates`)
 
 A kill pays what the client's drop tables say: the monster's `_iDrop` and `_iNormalDrop` chains give item 100 (Base EXP), scaled
@@ -106,7 +112,7 @@ base level; the list is empty by default, so nothing changes unless it is set (*
 }
 ```
 
-The first rule whose range holds the killer's base level scales that kill's Base EXP (and the Job EXP, which equals it) after the
+The first rule whose range holds the killer's base level scales that kill's Base EXP (and the Job EXP that comes from it) after the
 level-gap correction and the team bonus; 100 leaves it as it is. It applies only to open-field monsters (`NPCConfig._iWildMonsters`
 1), not to monsters without that flag (the story dungeons' ones, for example), and to both ordinary and Bonus Time kills. A rule with an empty range or a percent outside 1 to
 10000 is ignored, and a kill that pays EXP never pays less than 1. The `BaseExpAddConfig` catch-up is applied after it, as before.

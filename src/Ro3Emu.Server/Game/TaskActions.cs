@@ -11,9 +11,9 @@ public sealed partial class TaskService
     /// <summary>Preserve action slots, order and string parameters, including the empty sentinel (§1).</summary>
     private static string[][] Actions(JsonElement row, string field) =>
         row.TryGetProperty(field, out var array) && array.ValueKind == JsonValueKind.Array
-            ? array.EnumerateArray().Select(a => a.ValueKind == JsonValueKind.Array
+            ? [.. array.EnumerateArray().Select(a => a.ValueKind == JsonValueKind.Array
                 ? a.EnumerateArray().Select(v => v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : v.ToString()).ToArray()
-                : Array.Empty<string>()).ToArray() : [];
+                : Array.Empty<string>())] : [];
 
     // 0 is a client/no-op slot; -1 is malformed or an unknown action definition.
     private int ServerOpcode(string[] action)
@@ -30,8 +30,9 @@ public sealed partial class TaskService
     /// Host-1 effects. 20's [item,count] is an inferred inventory cost, committed with delivery.
     /// 621 tracks cutscene state; no invented packet, invulnerability or movement rule. The resource semantics of
     /// 54/412 stage mount ride/recycle state with the same award transaction; other unsupported actions hold delivery.
-    /// 115 MarkGuildActivityJoin [activity] marks the role as having joined a GuildActivityConfig activity (1601000, the
-    /// guild caravan quest: 3000). The client never reads such a mark, so it is reported through
+    /// 115 MarkGuildActivityJoin [activity] marks the role as having joined an activity, named by its DailyActivityConfig
+    /// id (1601000, the guild caravan quest: 3000; all 24 uses have that row, GuildActivityConfig links to them by
+    /// _iDailyActivity and shares only three ids by chance). The client never reads such a mark, so it is reported through
     /// <see cref="GuildActivityJoined"/> after the delivery commits, for the activity's own bookkeeping (inferred).
     /// This method only builds a plan, so a refusal cannot mutate action state or consume inventory.
     /// </summary>
@@ -39,7 +40,7 @@ public sealed partial class TaskService
         out List<(int Entry, int Count)> costs, out bool cutScene, out int? questMount, out List<long> guildActivities)
     {
         context.AssertRole(session.Role!.Id);
-        costs = new();
+        costs = [];
         cutScene = false;
         questMount = null;
         guildActivities = [];
@@ -71,7 +72,7 @@ public sealed partial class TaskService
                 case 621 when action.Length == 1: cutScene = true; break;
                 case MarkGuildActivityJoin when action.Length == 2
                     && long.TryParse(action[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out long activity)
-                    && GuildActivityConfig.Get(_data, activity) != null:
+                    && DailyActivityConfig.Get(_data, activity) != null:
                     guildActivities.Add(activity);
                     break;
                 // 116 UpdateSocialityScore [SocialRelationsConfig id]: applied after the commit (TaskService.Connect.cs).
@@ -102,7 +103,7 @@ public sealed partial class TaskService
     /// <summary>ActionConfig 115 MarkGuildActivityJoin (_iEXECHost 1).</summary>
     internal const int MarkGuildActivityJoin = 115;
 
-    /// <summary>A delivered task's 115 MarkGuildActivityJoin: the role and the GuildActivityConfig id.</summary>
+    /// <summary>A delivered task's 115 MarkGuildActivityJoin: the role and the DailyActivityConfig id.</summary>
     public List<Action<GameSession, long>> GuildActivityJoined { get; } = [];
 
     private readonly HashSet<(long Role, long Task, string Reason)> _heldLogged = [];
@@ -129,9 +130,9 @@ public sealed partial class TaskService
     private List<(long Id, string[][] Actions)>? _dialogueRows;
 
     /// <summary>Every DialogueConfig row with its _iEXECAction slots (a dialogue id holds an array of rows).</summary>
-    private List<(long Id, string[][] Actions)> DialogueRows() => _dialogueRows ??= _data.Table("DialogueConfig")
+    private List<(long Id, string[][] Actions)> DialogueRows() => _dialogueRows ??= [.. _data.Table("DialogueConfig")
         .SelectMany(kv => kv.Value.ValueKind == JsonValueKind.Array ? kv.Value.EnumerateArray() : Enumerable.Repeat(kv.Value, 1))
-        .Select(r => ((long)GameData.Int(r, "_iID"), Actions(r, "_iEXECAction"))).Where(r => r.Item2.Length > 0).ToList();
+        .Select(r => ((long)GameData.Int(r, "_iID"), Actions(r, "_iEXECAction"))).Where(r => r.Item2.Length > 0)];
 
     /// <summary>32709 exits state only. It never completes a plot objective.</summary>
     public async Task ExitCutSceneAsync(GameSession session)

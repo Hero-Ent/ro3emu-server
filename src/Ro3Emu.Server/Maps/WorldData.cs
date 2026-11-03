@@ -150,7 +150,10 @@ public sealed partial class WorldData(IOptions<ServerOptions> options, GameData 
     /// <summary>NPCConfig._iNPCSubType of the "flying trigger" air portals, skipped until flying exists.</summary>
     private const int SubTypeAirTeleport = 300;
 
-    private readonly Dictionary<long, MapWorld?> _maps = new();
+    /// <summary>Written by the data export next to config/ (Ro3Emu.DataExport.ClientScenes.FileName).</summary>
+    public const string ClientSceneList = "client-scenes.json";
+
+    private readonly Dictionary<long, MapWorld?> _maps = [];
     private readonly object _sync = new();
     private HashSet<long>? _kafraDestinations;
 
@@ -166,7 +169,7 @@ public sealed partial class WorldData(IOptions<ServerOptions> options, GameData 
         }
     }
 
-    private readonly Dictionary<long, (int NpcId, int Point)[]> _pointNpcs = new();
+    private readonly Dictionary<long, (int NpcId, int Point)[]> _pointNpcs = [];
 
     /// <summary>
     /// Server NPCs a service places on scene-editor monster spawn points whose npcId is 0 (AdventureGroupService: the
@@ -176,7 +179,7 @@ public sealed partial class WorldData(IOptions<ServerOptions> options, GameData 
     {
         lock (_sync)
         {
-            _pointNpcs[sceneEntry] = npcs.ToArray();
+            _pointNpcs[sceneEntry] = [.. npcs];
             _maps.Remove(sceneEntry);
         }
     }
@@ -197,7 +200,7 @@ public sealed partial class WorldData(IOptions<ServerOptions> options, GameData 
         {
             if (_kafraDestinations == null)
             {
-                _kafraDestinations = new();
+                _kafraDestinations = [];
                 if (DataFiles.Find(Dir("sceneeditor"), "MapLinkData.json") is { } path)
                 {
                     using var doc = JsonDocument.Parse(File.ReadAllBytes(path));
@@ -210,6 +213,74 @@ public sealed partial class WorldData(IOptions<ServerOptions> options, GameData 
             }
             return _kafraDestinations.Contains(sceneEntry);
         }
+    }
+
+    /// <summary>The export's client-scenes.json: its Unity scenes and scene-editor modules the client lacks.</summary>
+    private sealed record ClientGaps(HashSet<string> Scenes, HashSet<string> Modules);
+
+    private ClientGaps? _clientGaps;
+
+    /// <summary>Whether the game client can finish loading this scene (<see cref="WhyClientCannotEnter"/>).</summary>
+    public bool ClientCanEnter(long sceneEntry) => WhyClientCannotEnter(sceneEntry) == null;
+
+    /// <summary>
+    /// Why the game client cannot finish loading this scene, or null when it can. The export's client-scenes.json
+    /// (Ro3Emu.DataExport.ClientScenes) lists the MapResource scenes (_kResource) the client has no Unity scene for
+    /// (Glast Heim and five eastern towns in the October 2026 client: "Failed to load the area" forever, the screen creeping
+    /// to 80%) and the scene-editor modules (_kResSceneEditorName) its Lua loader refuses (Gonryun: stuck at 85%). Data
+    /// exported before a list has nothing to refuse by it; <see cref="LoadClientGaps"/> warns.
+    /// </summary>
+    public string? WhyClientCannotEnter(long sceneEntry)
+    {
+        var gaps = LoadClientGaps();
+        var map = MapConfig.Get(data, sceneEntry);
+        var dungeon = map == null ? DungeonConfig.Get(data, sceneEntry) : null;
+        long resource = map?.MapResourceId ?? dungeon?.MapResourceId ?? 0;
+        if (MapResource.Get(data, resource)?.Resource is { Length: > 0 } scene && gaps.Scenes.Contains(scene))
+            return "the game client has no scene for it (its map files are not in this client), so the client would never finish loading";
+        string module = map?.ResSceneEditorName ?? dungeon?.ResSceneEditorName ?? "";
+        return gaps.Modules.Contains(module)
+            ? $"the game client cannot load its map script {module}, so the client would never finish loading"
+            : null;
+    }
+
+    /// <summary>Tests on the real data: the lists an export would have written.</summary>
+    internal void UseClientSceneListForTest(IEnumerable<string> missing, IEnumerable<string>? modules = null)
+    {
+        lock (_sync)
+            _clientGaps = new(new(missing, StringComparer.OrdinalIgnoreCase), new(modules ?? [], StringComparer.OrdinalIgnoreCase));
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{File} in the game data has no {List}: a warp to a map the game client cannot show is not refused; export the game data again")]
+    private static partial void LogNoClientSceneList(ILogger logger, string file, string list);
+
+    private ClientGaps LoadClientGaps()
+    {
+        lock (_sync)
+        {
+            if (_clientGaps != null) return _clientGaps;
+            _clientGaps = new(new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase));
+            if (DataFiles.Find(options.Value.GameDataDir ?? options.Value.DataDir, ClientSceneList) is not { } path)
+            {
+                LogNoClientSceneList(log, ClientSceneList, "lists");
+                return _clientGaps;
+            }
+            using var doc = JsonDocument.Parse(File.ReadAllBytes(path));
+            ReadClientGapList(doc.RootElement, "Missing", _clientGaps.Scenes);
+            ReadClientGapList(doc.RootElement, "UnloadableModules", _clientGaps.Modules);
+            return _clientGaps;
+        }
+    }
+
+    private void ReadClientGapList(JsonElement root, string key, HashSet<string> into)
+    {
+        if (!root.TryGetProperty(key, out var list) || list.ValueKind != JsonValueKind.Array)
+        {
+            LogNoClientSceneList(log, ClientSceneList, key);
+            return;
+        }
+        foreach (var name in list.EnumerateArray().Where(n => n.ValueKind == JsonValueKind.String))
+            into.Add(name.GetString()!);
     }
 
     private MapWorld? Load(long sceneEntry)
@@ -365,7 +436,7 @@ public sealed partial class WorldData(IOptions<ServerOptions> options, GameData 
                 if (e.TryGetProperty("m_kConfigIds", out var ids) && ids.ValueKind == JsonValueKind.Array && ids.GetArrayLength() > 0 && GameData.Number(ids[0]) is { } c)
                     config = (int)c;
                 if (!e.TryGetProperty("position", out var pos)) continue;
-                if (!points.TryGetValue(group, out var list)) points[group] = list = new();
+                if (!points.TryGetValue(group, out var list)) points[group] = list = [];
                 list.Add(new SpawnPoint((int)GameData.Int(e, "Id"), WorldNpc.Float(pos, "x"), WorldNpc.Float(pos, "y"), WorldNpc.Float(pos, "z"),
                     WorldNpc.Float(e, "direction"), config));
             }

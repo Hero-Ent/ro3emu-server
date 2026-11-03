@@ -62,7 +62,7 @@ public sealed class TowerPetCombatTests : IAsyncLifetime
         await bot.EnterWorldAsync(id);
         using var client = new HttpClient();
         foreach (string command in new[] { "!lvl 99", "!quest done 10105020", "!quest done 10104330" })
-            (await client.PostAsync($"{_http}/ro3emu/gm?account=petcombat", new StringContent(command))).EnsureSuccessStatusCode();
+            (await client.PostAsync($"{_http}/ro3emu/gm?account=petcombat", Operator.Command(command))).EnsureSuccessStatusCode();
         await bot.SendGameAsync(TowerService.SetPets, new SetClimTowerPetsReq { Pets = { 13001, 0, 0, 0 } });
         Assert.Equal(0, (await Next(bot, TowerService.SetPets, SetClimTowerPetsRes.Parser)).Result);
         await bot.SendGameAsync(TowerService.Start, new ClimTowerStartReq { Layer = 2 });
@@ -164,6 +164,7 @@ public sealed class TowerPetCombatTests : IAsyncLifetime
         Assert.Equal(0, Service<BuffService>().ShieldAmount(caster));
         // Review regression: drive the same shield through the actual monster -> player commit path,
         // not just BuffService.AbsorbAsync. Both the wire absorption field and HP must agree.
+        s.NoRegenUntilMs = long.MaxValue; // the exact HP below must not meet a recovery tick
         long ownerHp = Service<CharacterService>().Stats(s)[2000];
         await Run(() => Service<MonsterService>().Attack!(attacker, s));
         var ownerFirst = await Next(bot, CombatService.SkillHit, SkillHitInfo.Parser,

@@ -12,7 +12,7 @@ namespace Ro3Emu.Server.Game;
 /// Socketed cards' Buff(2) special effects (CardConfig._kSkillAttribute -> SpecialEffectConfig._kSpecialEffect [2, buff],
 /// 304 of the 348 card operations; Attr(1) and Attr1CountAddAttr2(8) are EquipmentStunts'). Every referenced BuffConfig
 /// row is a zero-time passive (iPassiveBuff 1): like totem passives they are registered per source (the card GUID) for
-/// as long as the copy is socketed, which publishes their icons, applies their _kChangeAttri (Variable CT, 2024001..4)
+/// as long as the copy is socketed in an active socket (EquipmentStunts.ActiveCards), which publishes their icons, applies their _kChangeAttri (Variable CT, 2024001..4)
 /// and arms BuffService's lethal-hit revive for groups 20520/20521 (2052001.., 2052101..). (inferred) Their
 /// _iSceneClear removes them on a scene change; the loaded scene registers them again, carrying the revive cooldown.
 ///
@@ -38,13 +38,13 @@ public sealed class CardEffects
     private readonly CharacterService _character;
     private readonly BuffService _buffs;
     private readonly SkillService _skills;
-    private readonly ConditionalWeakTable<GameSession, Runtime> _runtime = new();
+    private readonly ConditionalWeakTable<GameSession, Runtime> _runtime = [];
 
     private sealed class Runtime
     {
         /// <summary>Last registered buff GUID per (card GUID, config), to carry BuffEffectCds over a re-registration.</summary>
-        public readonly Dictionary<(long Source, int Config), long> Registered = new();
-        public readonly Dictionary<long, long> Cooldowns = new(); // proc family (base buff group) -> ready at
+        public readonly Dictionary<(long Source, int Config), long> Registered = [];
+        public readonly Dictionary<long, long> Cooldowns = []; // proc family (base buff group) -> ready at
     }
 
     private sealed record Passive(InvItem Card, int Id, JsonElement Row);
@@ -63,6 +63,7 @@ public sealed class CardEffects
         this._character = character;
         this._buffs = buffs;
         cards.SocketsChanged.Add(RefreshAsync);
+        character.WornGearChanged.Add(RefreshAsync);
         scenes.Loaded.Add(RefreshAsync);
         combat.DamageAdjusters.Add(AdjustDamage);
         combat.DealtAsync.Add(OnDealtAsync);
@@ -82,7 +83,7 @@ public sealed class CardEffects
         s.Buffs.Where(b => b.IsPassive && !b.IsTotemOwned).Select(b => (b.SourceId, b.ConfigId)).ToList();
 
     /// <summary>Reconcile card-owned passives with the socketed copies (insert, remove, transfer, plan switch,
-    /// star-up, scene load).</summary>
+    /// star-up, worn gear, scene load).</summary>
     public async Task RefreshAsync(GameSession s)
     {
         if (s.Role == null) return;
@@ -133,10 +134,10 @@ public sealed class CardEffects
     }
 
     private static long[] Numbers(JsonElement row, string field) => row.TryGetProperty(field, out var list) && list.ValueKind == JsonValueKind.Array
-        ? list.EnumerateArray().Select(v => (long)(GameData.Number(v) ?? 0)).ToArray() : [];
+        ? [.. list.EnumerateArray().Select(v => (long)(GameData.Number(v) ?? 0))] : [];
 
     private static double[] Description(JsonElement row) => row.TryGetProperty("_kDescData", out var list) && list.ValueKind == JsonValueKind.Array
-        ? list.EnumerateArray().Select(v => GameData.Number(v) ?? 0).ToArray() : [];
+        ? [.. list.EnumerateArray().Select(v => GameData.Number(v) ?? 0)] : [];
 
     /// <summary>_kBuffAttributeList ["0", group, "4", "1", value, "0"]: the passive adds value to field 4 (the trigger
     /// chance, basis points) of the passive group named.</summary>

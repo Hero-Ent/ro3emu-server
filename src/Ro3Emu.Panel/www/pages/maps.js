@@ -13,10 +13,10 @@ async function mapsPage() {
     ? h('ul', { class: 'map-tiles' }, shown.map(m => h('li', null, link('/maps/' + m.id, { class: 'map-tile' },
       h('span', { class: 'map-art' }, thumb(m.image, m.name, 'map', 'fill')),
       h('b', null, m.name),
-      h('span', { class: 'sub' }, levels(m), m.monsters ? ` · ${m.monsters} ${m.monsters === 1 ? 'monster' : 'monsters'}` : '',
+      h('span', { class: 'sub' }, levels(m), m.monsters ? ` · ${plural(m.monsters, 'monster')}` : '',
         m.players ? ` · ${m.players} online` : '')))))
     : emptyState('search', 'No map matches', 'Try part of the name.');
-  return [pageHead({ crumbs: [{ href: '/', label: 'Home' }, { label: 'Maps' }], title: 'Maps',
+  return [pageHead({ crumbs: dbCrumbs({ label: 'Maps' }), title: 'Maps',
     subtitle: 'Every map in the game, with the monsters that live there and who is on it now.' }),
   h('section', { class: 'card' }, h('div', { class: 'card-head' }, filters), body(tiles),
     h('div', { class: 'card-foot' }, h('span', null, mono(num(shown.length)), shown.length === 1 ? ' map' : ' maps')))];
@@ -43,7 +43,7 @@ async function mapPage(id) {
     : emptyState('users', 'Nobody is here right now', null);
   const picture = map.image ? h('img', { class: 'picture map', src: map.image, alt: map.name }) : null;
   if (picture) picture.addEventListener('error', () => picture.closest('.card')?.remove(), { once: true });
-  return [pageHead({ crumbs: [{ href: '/', label: 'Home' }, { href: '/maps', label: 'Maps' }, { label: map.name }], title: map.name,
+  return [pageHead({ crumbs: dbCrumbs({ href: '/maps', label: 'Maps' }, { label: map.name }), title: map.name,
     after: world ? chip('plain', world.type) : null,
     meta: [['ID', mono(String(map.id))], ['Levels', map.monsters ? `${map.minLevel}-${map.maxLevel}` : '-'],
       world && world.minLevel ? ['Recommended', `Lv ${world.minLevel}-${world.maxLevel}`] : null, ['Online', num(map.players)]].filter(Boolean) }),
@@ -60,7 +60,7 @@ titles.maps = 'Maps';
 
 /** The NPCs placed on the map, with what each offers (its title, warps, windows and shop). */
 function npcCard(world) {
-  return card('NPCs', world.npcs.length ? h('span', { class: 'muted' }, num(world.npcs.length) + (world.npcs.length === 1 ? ' NPC' : ' NPCs')) : null,
+  return card('NPCs', world.npcs.length ? h('span', { class: 'muted' }, plural(world.npcs.length, 'NPC')) : null,
     world.npcs.length
       ? table([
         { label: 'NPC', value: n => h('span', { class: 'named' }, thumb(n.icon, n.name, ''), h('span', null, n.name),

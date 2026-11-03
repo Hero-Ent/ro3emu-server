@@ -10,7 +10,7 @@ the player at once, and the panel never writes the database behind the server's 
 | a player, logged in with the game account | My account (created, last played, characters with class, level, map and guild) · the sheet of each own character · password change |
 | a Moderator | Dashboard (the server's own metrics) · Accounts (search, detail, login history, deleted characters, ban and unban) · every character's sheet and mailbox · Reports · Audit log |
 | a GM | the Moderator's pages and Mail & rewards · Gift codes · GM console · News editor · Broadcasts · Economy log · Character actions (kick, teleport, rename, items and currencies, restore) · Item tracking |
-| an Admin | the GM's pages and Staff roles · Server control (restart, shutdown, maintenance, backups) · 2FA resets |
+| an Admin | the GM's pages and Staff roles · Server control (restart, shutdown, maintenance, backups, updates) · 2FA resets |
 
 Players log in with the same account name and password as in the game. An account the game created logs in here,
 and an account made on the panel's sign-up page logs in to the game: both paths write the same record
@@ -28,10 +28,12 @@ It is on by default, on port **5381**, next to the server's HTTP port 5380:
 | `Ro3Emu:Panel:TrustedProxies` | none | proxy addresses whose `X-Forwarded-For` and `X-Forwarded-Proto` are believed (see below) |
 | `Ro3Emu:Panel:SessionHours` | `12` | hours a login stays valid without use |
 | `Ro3Emu:Panel:Registration` | `true` | `false` hides the sign-up page; accounts are then created only by a first login in the game |
+| `Ro3Emu:Panel:SignUpsPerAddressPerDay` | `0` (no limit) | accounts the sign-up creates for one client address (an IPv6 one by its /64) in any 24 hours; behind a reverse proxy list it in `TrustedProxies` |
+| `Ro3Emu:Panel:SignUpsPerHour` | `0` (no limit) | accounts the sign-up creates in any hour, from every address together |
 | `Ro3Emu:Panel:ImageDir` | `icons/` of the game data | the pictures the pages show (see [Pictures](#pictures)) |
 | `Ro3Emu:Panel:Branding:*` | RO3Emu's | your server's name, tagline, logo, footer and colour (see [Branding](#branding)) |
 | `Ro3Emu:Panel:Roles:<account>` | none | a staff role, `Moderator`, `GM` or `Admin` (see [Staff roles](#staff-roles)) |
-| `Ro3Emu:Panel:RequireAdmin2FA` | `true` on a public bind, `false` on loopback | GM and Admin accounts must turn on two-factor authentication before the admin area opens to them |
+| `Ro3Emu:Panel:RequireAdmin2FA` | `true` when other machines reach the server (a public bind or `PublicHost`, or `TrustedProxies` or `PublicUrl` set), `false` for local play | GM and Admin accounts must turn on two-factor authentication before the admin area opens to them |
 | `Ro3Emu:Panel:LoginAddresses` | `false` | keep and show the address of each login in the login history |
 
 Set them in `appsettings.json` under `Ro3Emu`, as environment variables (`Ro3Emu__Panel__Port=8081`) or as
@@ -41,7 +43,8 @@ arguments (`--Ro3Emu:Panel:Port=8081`). The startup log says `Web panel on http:
 `server.sh` on Linux and `scripts/server.sh`. RO3Emu.exe checks the panel's port with the others before it starts the
 server, so a second server on the same PC needs its own (`--panel-port 5391`) or `--no-panel`.
 
-When you play on your own PC the panel listens on loopback only: open `http://127.0.0.1:5381`. On a public host it
+When you play on your own PC the panel listens on loopback only: open `http://127.0.0.1:5381`, or press **Web panel**
+on the launcher's title bar, or run `RO3Emu.exe panel` ([launcher](launcher.md)). On a public host it
 listens on every interface like the game ports; open TCP 5381 in the firewall, or better, put it behind a proxy with
 https as below and keep 5381 closed to the outside.
 
@@ -53,20 +56,29 @@ The admin area is for staff. Each role has everything of the one before it:
 |---|---|
 | Moderator | open the dashboard, accounts (with their login history and deleted characters), every character's sheet and mailbox, the reports and the audit log; ban and unban; triage reports |
 | GM | also send mail, make gift codes, run the GM console, edit news, broadcast, read the economy log, and act on characters |
-| Admin | also give and take staff roles, control the server (restart, shutdown, maintenance, backups) and reset another account's 2FA |
+| Admin | also give and take staff roles, control the server (restart, shutdown, maintenance, backups, updates) and reset another account's 2FA |
 
 An account gets its role from, in this order:
 
-1. `Ro3Emu:GmAccounts` ([GM access](gm-access.md)): every account listed there is an Admin, as before.
+1. GM in game ([GM access](gm-access.md)): every account listed in `Ro3Emu:GmAccounts` is an Admin. While that list
+   is empty, every account is an Admin only on a local panel with GM open (local play: `PublicHost`, the server and
+   the panel on loopback, no `PublicUrl`, no `TrustedProxies`); a panel that other machines reach has no Admin from the GM rule.
 2. `Ro3Emu:Panel:Roles`, account to role, spelled as stored: `Ro3Emu__Panel__Roles__anna=Moderator`, or in
    `appsettings.json` `"Panel": { "Roles": { "anna": "Moderator", "tomek": "GM" } }`.
 3. The **Staff roles** page, where an Admin gives an existing account a role or takes it away. These are stored by
    the server (`panel_role`) and audited; the roles of 1 and 2 are shown there but changed only in the configuration.
    Nobody changes their own role.
 
-**When nobody has a role, nobody is staff in the panel**, whatever `GmOpenWhenEmpty` says: the open-GM rule of local
-play applies to the game only. To administer a server, list your account in `GmAccounts` even on your own PC. A panel
-role is the panel's only: GM commands in the game still follow `GmAccounts`.
+A request that a proxy forwarded (`X-Forwarded-For`, `Forwarded` or `X-Real-IP`) never gets the Admin of an open local
+server. List your admins before you put a proxy or a tunnel in front of the panel: one that adds no such header
+cannot be told from your own browser ([GM access](gm-access.md)).
+
+**The panel follows the game's GM rule**: on your own PC with an empty `GmAccounts` every account is GM in game and an
+Admin in the panel. On a server that other machines reach (a LAN or public address, or a panel behind a proxy) or one
+started as Production, an empty list gives nobody either, and the startup log warns `!!! Web panel: no Admin in the
+configuration`. Even `GmOpenWhenEmpty=true` there opens only the game, not the admin area. A public server lists its
+admins in `GmAccounts`; the log says `Web panel Admins: ...` at start. The roles of 2 and 3 are the panel's only: GM
+commands in the game still follow `GmAccounts`.
 
 Every route of the API names the least role it needs and refuses the others (403); the sidebar shows each role only
 the pages it may use.
@@ -88,6 +100,12 @@ A ban from the Accounts page (reason, and 1 day to 30 days or no end):
 - refuses every later login of the account, in the game and on the panel, until it ends or is lifted.
 
 Lifting a ban deletes the row and is audited the same way.
+
+Staff act only below their own role: a Moderator cannot ban or unban a GM or an Admin, and two Admins cannot ban each
+other (take the role away first). A ban also stands against anyone below the one who placed it, so a Moderator cannot
+lift an Admin's ban. On your own PC with an empty `GmAccounts` the role by the lists counts, so every account can ban the
+others there. Signing an account out and resetting its 2FA stay open between Admins: they need Admin already, they are
+audited, and the reset is how an Admin who lost a phone gets back in.
 
 ## Admin tools
 
@@ -130,9 +148,11 @@ Each tool is a page of the admin area's sidebar; each change is written to the a
   stored at all.
 
 **Required for GM and Admin.** With `Ro3Emu:Panel:RequireAdmin2FA`, a GM or Admin without 2FA has no staff role in the
-panel until it is on: the admin area answers 403 and *My account* asks to set it up. Unset, it is on whenever the panel
-listens on an address that is not loopback (a public host) and off for local play; set `false` to turn it off on a
-public host, `true` to require it locally. Moderators are not required to use it.
+panel until it is on: the admin area answers 403 and *My account* asks to set it up. Unset, it is on whenever other
+machines reach the server: it listens on an address that is not loopback, `PublicHost` is not loopback (a tunnel), or a
+proxy serves the panel (`TrustedProxies` or `PublicUrl` is set, because a proxy on the same machine reaches a loopback
+panel). It is off only for local play. Set `false` to turn it off anyway, `true` to require it locally. The startup log says which.
+Moderators are not required to use it.
 
 **Limits.** A login that needs a code waits 5 minutes for it and takes 5 tries; an account takes 10 wrong codes in 15
 minutes from all its logins together, then refuses codes until the window passes. Every code also counts against the
@@ -160,7 +180,9 @@ From an account's page a GM opens **Character actions** for each of its characte
   again.
 - **Teleport**: in the game, the server's own `!warp` moves the character now (to the given x and z, or the map's
   arrival point). Out of the game, the stored position changes and the character logs in there; the login puts it on
-  the ground or, where the point is not walkable, at the map's arrival point.
+  the ground or, where the point is not walkable, at the map's arrival point. The map list leaves out, and the server refuses, a map the
+  game client cannot load (the export's `client-scenes.json`: no Unity scene for Glast Heim and five eastern towns, no
+  usable scene-editor module for Gonryun and the character selection scene): the client would never finish loading it.
 - **Rename**: the game's name rule (2 to 16 characters once trimmed, unique in any letter case). Only while the
   character is out of the game; the old name is free the moment it commits.
 - **Items and currencies**: while the character is in the game, through the GM grant (`!item`, `!delitem`): the bag
@@ -195,6 +217,81 @@ game, loading or waiting for a reconnect, as the HTTP character deletion is. Eve
   database is never swapped. The request is `data/restore-request.txt`, removed as the restore starts, so a refused
   restore is not tried again at every start; what it did is in `data/restore-result.txt` and on this page. The replaced
   database is kept in `data/restore-saved/`.
+
+## Updates
+
+**Server control > Updates** (Admins) keeps the server on the newest release. Nothing installs by itself: the page
+checks, downloads and checks again, and an Admin plans the install like a restart.
+
+- **Version.** The running version and commit against the releases of `aethai/ro3emu-server` on GitHub: the latest
+  one, every newer one with its date, its package size and its release notes (shown as plain text; the newest five
+  open, the rest behind *Show older releases*). The server asks GitHub's API without a token (60 requests an hour per
+  address) when *Check now* is pressed, at most once a minute, and every 6 hours in the background while the panel is
+  on, the first time 2 minutes after a start. It sends the last answer's ETag, so an unchanged list does not count
+  against the limit; a spent limit is waited out, and a failed check keeps the last good list and says why. The answer
+  is kept in `data/updates/releases.json`.
+- **Download** takes this server's package (`RO3Emu-server-linux-x64.tar.gz` on Linux x64, `RO3Emu-win-x64.zip` on
+  Windows x64; other platforms have none) into `data/updates/downloads`, and refuses it unless its size and SHA-256 are
+  the ones GitHub lists for it (`digest`); a release without a digest is not downloaded. The package is unpacked into
+  `data/updates/staging/<tag>`: only plain files under its one folder (`RO3Emu-server/`, `RO3Emu/`), no link, no path
+  out of it, bounded sizes. Then the server, the RO3Emu tool and `appsettings.json` must be there and the server must
+  say it is the tag's version (read from its single-file bundle, without running it). The page follows the download and
+  can cancel it; a failure says why.
+- **Install** (only where the server can come back by itself, below) plans a restart with the countdown notices of
+  *Restart or shut down* (*The server restarts for an update in ...*). When it ends, the server makes a database backup
+  with its own backup (and keeps a copy in `data/updates/backups`, the newest three, out of reach of the rotation),
+  copies the files it is about to replace to `data/updates/previous`, then swaps the release's files in one by one: the
+  current file is renamed to `*.old` in its folder (Linux and Windows both let a running executable be renamed) and the
+  new one moved in; a failure puts every file back and the restart is cancelled (the players are told). An
+  `appsettings*.json` you edited stays; the release's own lands beside it as `.new`. The process exits with code 75
+  and the process manager starts the new version, whose first start writes the outcome to the history and the audit
+  log and deletes the `*.old` files. Another plan waiting refuses an install; a planned install is cancelled like any
+  restart.
+- **Roll back** (same modes) plans a restart that puts the previous version's files back the same way (the version it
+  replaces becomes the previous one). It can also restore the database backup made just before the update: the next
+  start restores it before the realm opens, as *Restore* does, and keeps the replaced database in
+  `data/restore-saved/`. **Whether an older server can open the newer one's database:** the database has no schema
+  version. Every start runs the same idempotent steps (`DatabaseSchema`): create the tables that are missing, add the
+  columns that are missing, rebuild a table only to relax a constraint. Nothing removes a table or a column, so an
+  older server usually opens a database a newer one used and ignores what it does not know. Nothing checks that,
+  though, and rows the newer version wrote (new states, new kinds of records) may not mean the same to the older one.
+  Restoring the pre-update backup is the sure way back and loses every change since the update.
+- **Install history**: every install, rollback, failure and the start that followed, in `data/updates/history.jsonl`
+  (a database restore does not rewind it). Every action (download, cancel, delete, install, rollback and their
+  outcome) is also in the audit log as `update` on the server.
+
+What the page may do depends on how the server runs. It finds out at start, or `Ro3Emu:Updates:Hosting` says it:
+
+| Hosting | Found by | Install and rollback |
+|---|---|---|
+| systemd (`server.sh --service`) | `INVOCATION_ID`, set by systemd | yes: the unit's `Restart=always` starts the new files (`RestartPreventExitStatus=0` keeps a shutdown down) |
+| Windows service (NSSM, WinSW, ...) | no interactive session | yes, when the wrapper starts the server again after it exits with code 75; the running exe is renamed aside, not overwritten |
+| `server.sh` in a terminal, the exe in a console | none of the others | no: nothing would start it again. The page downloads and checks, then lists the steps (stop, `cp -a '<staging>/.' '<install>/'`, start) |
+| RO3Emu.exe or the launcher | `RO3EMU_STARTER`, set by them | no: they stop with the server. Quit RO3Emu and start Ro3EmuLauncher.exe, which updates itself from the same release, or copy the staged files over the folder |
+| Docker | `/.dockerenv`, `/run/.containerenv`, `DOTNET_RUNNING_IN_CONTAINER` | no: build or pull an image of the new release and recreate the container with the same data volume. The page still downloads a checked copy of the package |
+| a build of the source tree | not in a release folder | no download: `git pull` and build |
+
+The release folder is the one above the server's own `server/` folder, with the RO3Emu tool beside it (the layout of
+both packages). The server must be able to write there; an install checks every folder first and changes nothing when
+it cannot.
+
+If a new version does not start, put the previous one back with the server stopped:
+
+```
+Ro3Emu.Server --rollback-update [your config arguments]
+```
+
+It moves the files of `data/updates/previous` back (they are plain copies, so copying them by hand works too) and
+prints the `--restore-backup` command for the pre-update database backup, which it never restores by itself.
+
+| Option | Default | What |
+|---|---|---|
+| `Ro3Emu:Updates:Check` | `true` | ask GitHub for releases; `false`: no request leaves the server and the page shows the installed version only |
+| `Ro3Emu:Updates:Repository` | `aethai/ro3emu-server` | the repository whose releases are offered |
+| `Ro3Emu:Updates:CheckHours` | `6` | hours between background checks (at least 1) |
+| `Ro3Emu:Updates:Hosting` | `auto` | `systemd`, `service`, `docker`, `app` or `manual` instead of what the server finds |
+| `Ro3Emu:Updates:InstallDir` | found | the release folder, when the server runs from somewhere else |
+| `Ro3Emu:Updates:ApiUrl` | `https://api.github.com` | another releases feed with the same API, for testing; plain http only on loopback, and its downloads must be https or on the feed's own address |
 
 ## Branding
 
@@ -395,7 +492,7 @@ held changes by exactly the ledger's sources minus its sinks.
 
 | Flag | When |
 |---|---|
-| Instance seen twice | one instance guid is in two places. A guid is unique in the item table, and a clone in escrow or mail keeps its guid only while the table row is gone |
+| Instance seen twice | one instance guid is in two places. A guid is unique in the item table, and a clone in escrow or mail keeps its guid only while the table row is gone. One character's stack and the part of it they listed (an exchange listing, a stall offer, a stall's partial take-back mail) share the guid by design and are not flagged |
 | Exceeds ledger | more is held than the ledger's sources minus its sinks |
 | Unrecorded | the item is held but the ledger never recorded it |
 
@@ -434,13 +531,26 @@ server {
 }
 ```
 
-Keep `Host` as the browser sent it: the panel refuses a POST whose `Origin` names another host. Forward only the
-panel's port. The server's own HTTP port (5380) has loopback-only operator endpoints that a proxy on the same machine
-would open to everyone ([security model](../systems/security.md)).
+Set `PublicUrl` or `TrustedProxies`: without either, the API of a panel on loopback answers 404 to a `Host` that is not
+this machine (a page that resolves its own name to 127.0.0.1 could otherwise use it), and the log warns once in ten
+minutes. Keep `Host` as the browser sent it: the panel refuses a POST whose `Origin` names another host. Forward only the
+panel's port. The server's own HTTP port (5380) has operator endpoints that answer only a local tool
+([security model](../systems/security.md)). If you proxy 5380 as well (the game's login and the launcher's calls), shut
+just those off in the proxy, because `/ro3emu/status`, `/ro3emu/gate-key.pem`, `/ro3emu/panel` and
+`/ro3emu/account/delete-role` are public and the launcher needs them:
 
-Logins share the server's credential budget (`Ro3Emu:LoginAttemptsPerMinute` per address, the same counter as the
-game's login). Behind a trusted proxy that is per player address; without one, every player behind a proxy shares the
-proxy's.
+```nginx
+    location ~ ^/ro3emu/(gm|shutdown|online|reports|metrics)(/|$) {
+        deny all;
+    }
+```
+
+Logins share the server's credential budget (`Ro3Emu:LoginAttemptsPerMinute` per client address, an IPv6 one by its /64 network, the same counter as
+the game's login, on the panel and on port 5380 alike). Behind a trusted proxy the address is the player's own, from
+`X-Forwarded-For`. A proxy that is not listed in `TrustedProxies` is not believed, so every player behind it counts
+against one budget: the proxy's. Loopback is exempt from the budget only for local tools: a request with
+`X-Forwarded-For`, `Forwarded` or `X-Real-IP`, or any request on a server others reach (a public `PublicHost` or
+bind, `TrustedProxies` or `PublicUrl` set), is counted like any other.
 
 ## Security notes
 
@@ -468,6 +578,25 @@ proxy's.
 - **Load.** The online list is read on the game loop at most once every 5 seconds, the level board from the database
   at most every 30; the other boards are RankService's own cache. Heavy traffic does not reach the loop.
 
+## Suspicious activity
+
+**Suspicious activity** (`/admin/suspicious`, moderators and up) lists what the server's anti-cheat saw over a window
+(1 hour by default; the page switches between 1 h, 6 h, 24 h and 7 days). It is read only. What the server checks is in
+[anti-cheat](../systems/anticheat.md).
+
+| Alert | Listed when |
+|---|---|
+| Refused requests | an account had at least `Alerts:Refusals` (20) requests refused as forged or impossible in the window. The row names the character with the most and the counts by kind (`walk`, `flight`, `flood`, `quest-area`, ...) |
+| Zeny gain | a character gained Zeny from the game (the ledger's source legs) past `Alerts:GainFactor` (10) times the median of the characters that gained any in the window, and at least `Alerts:ZenyFloor` |
+| Item gain | the same for items, all items counted together; floor `Alerts:ItemFloor` |
+| EXP gain | the same for base EXP, from `anticheat_exp` (the ledger has no EXP); floor `Alerts:ExpFloor` |
+| Duplication | the duplication check's *Exceeds ledger* and *Instance seen twice* flags, when an Admin adds the check (it reads every holding) |
+
+Each row links to the account and the character, or to the item for a duplication. The thresholds are server options
+(`Ro3Emu:AntiCheat:Alerts`); the page shows the ones in force and the medians. The same refusals are in the server log as
+`Anticheat <kind> account <name> role <id> <character>: <detail>`: the first five of each account and kind, then every
+50th.
+
 ## What it stores
 
 | Table | What |
@@ -479,8 +608,10 @@ proxy's.
 | `account_totp` | each account's two-factor secret, last used step and recovery code hashes |
 | `feedback_triage`, `feedback_note` | the report inbox's status, assignee and notes |
 | `panel_setting` | maintenance mode |
+| `anticheat_refusal`, `anticheat_exp` | the anti-cheat's refusal counts and the EXP per character and hour, kept `AntiCheat:KeepDays` (30) days |
 
-They are created by the server at startup like its other tables and are part of every backup.
+They are created by the server at startup like its other tables and are part of every backup. The update manager keeps
+its files outside the database, in `data/updates/` ([Updates](#updates)).
 
 ## For developers
 
@@ -494,9 +625,11 @@ rectangle). Bundles are read with AssetsTools.NET and BC1/BC3/BC7 textures decod
 launcher's; the colours, spacing scale, type scale and components are the tokens at the top of `app.css`), the JSON API under `/api/` (`PanelSite`), sessions and CSRF. It knows nothing of the game: everything
 goes through `IPanelBackend`, `IPanelAdminTools` and `IPanelOperations` (roles, security, reports, character actions,
 server control), which the server implements in `Http/PanelBackend*.cs`, `Http/PanelAdminTools*.cs` and
-`Http/PanelOperations*.cs` over its stores, writer and loop. A page in its own file registers with
+`Http/PanelOperations*.cs` over its stores, writer and loop, and `IPanelUpdates`, which `Updates/UpdateManager` implements
+(`ReleaseFeed`, `UpdatePackage`, `BundleVersion`, `UpdateInstaller`, `UpdateHosting`). A page in its own file registers with
 `registerAdminPage({ ..., role })`; `adminAccountCards` takes cards for an account's admin page.
 `ServerHost` routes every request that arrives on the panel's port to `PanelSite` before the server's own
 middleware, so neither port serves the other's paths. Tests: `PanelTests`; the test hosts keep the panel off unless a
-test turns it on with a free port (`TestHostDefaults`). `PanelAdminTests` cover roles, security, reports, character
-actions and server control.
+test turns it on with a free port, and their update checks off (`TestHostDefaults`). `PanelAdminTests` cover roles,
+security, reports, character actions and server control; `UpdateTests` and `PanelUpdateTests` the update manager, with a
+fake HTTP stack or a loopback releases feed and invented packages.

@@ -14,8 +14,8 @@ public sealed class Vfs : IDisposable
     public readonly record struct Entry(ulong Asset, byte LoadType, ushort Dyn, ulong FileHash, ulong VfsHash);
 
     private readonly string _dir;
-    private readonly Dictionary<ulong, List<Entry>> _bundles = new();
-    private readonly Dictionary<ulong, List<Entry>> _bytes = new();
+    private readonly Dictionary<ulong, List<Entry>> _bundles = [];
+    private readonly Dictionary<ulong, List<Entry>> _bytes = [];
     private readonly Dictionary<string, Container> _containers = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Extract may run on several threads (the icon export): the container cache and FilesRead are shared.</summary>
     private readonly Lock _gate = new();
@@ -68,6 +68,9 @@ public sealed class Vfs : IDisposable
     /// <summary>The VFS file (bundle or container) that holds the asset, relative to the VFS folder, or null.</summary>
     public string? SourceFile(string name) =>
         Locate(name) is var (e, bundle) ? e.FileHash == e.VfsHash ? LooseFile(e) : ContainerFile(e, bundle) : null;
+
+    /// <summary>Whether the VFS index has an asset of that name.</summary>
+    public bool Has(string name) => Locate(name) != null;
 
     /// <summary>The asset's own file hash (changes with its content), or null when the VFS has no asset of that name.</summary>
     public ulong? FileHash(string name) => Locate(name)?.Entry.FileHash;

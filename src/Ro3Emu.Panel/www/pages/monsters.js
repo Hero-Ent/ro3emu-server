@@ -21,14 +21,14 @@ async function monstersPage() {
       { label: 'Monster', grow: true, value: m => [monsterName(m.id, m.name, m.rank, m.icon), variantsChip(m.variants)] },
       { label: 'ID', num: true, opt: true, value: m => mono(String(m.id)) },
       { label: 'Level', num: true, value: m => range(m.level, m.maxLevel) },
-      { label: 'HP', num: true, value: m => range(m.hp, m.maxHp) },
+      { label: 'HP', num: true, shrink: true, value: m => range(m.hp, m.maxHp) },
       { label: 'Element', opt: true, value: m => m.elementName || '-' },
       { label: 'Race', opt: true, value: m => m.race || '-' },
       { label: 'Size', opt: true, value: m => m.size || '-' },
       { label: 'Rank', opt: true, value: m => rankChip(m.rank) || h('span', { class: 'muted' }, 'Normal') },
     ], result.monsters, { onrow: m => navigate('/monsters/' + m.id) })
     : emptyState('search', 'No monster matches', 'Try part of the name, or fewer filters.');
-  return [pageHead({ crumbs: [{ href: '/', label: 'Home' }, { label: 'Monsters' }], title: 'Monsters',
+  return [pageHead({ crumbs: dbCrumbs({ label: 'Monsters' }), title: 'Monsters',
     subtitle: 'Every monster in the game, with the HP and drops the server uses.', actions: densityToggle() }),
   h('section', { class: 'card' }, h('div', { class: 'card-head' }, filters), rows,
     h('div', { class: 'card-foot' }, listPager(result, p => listHref('/monsters', { ...query, page: p }), 'monster')))];
@@ -70,7 +70,7 @@ function dropsCard(detail, m, rewards) {
 /** The monsters of this name: one row each, with where it spawns. */
 function variantsCard(detail, m) {
   if (detail.variants.length <= 1) return null;
-  return card('Monsters of this name', h('span', { class: 'muted' }, num(detail.variants.length) + ' variants'), table([
+  return card('Monsters of this name', h('span', { class: 'muted' }, plural(detail.variants.length, 'variant')), table([
     { label: 'ID', value: v => v.id === m.id || v.ids.includes(m.id) ? h('span', { class: 'mono strong' }, String(v.id)) : link('/monsters/' + v.id, { class: 'text-link mono' }, String(v.id)) },
     { label: 'Level', num: true, value: v => num(v.level) },
     { label: 'HP', num: true, value: v => num(v.hp) },
@@ -104,7 +104,7 @@ async function monsterPage(id) {
     ], detail.spawns, { short: true, onrow: s => navigate('/maps/' + s.mapId) })
     : emptyState('home', 'No field spawn', 'It appears in dungeons, events or story scenes.');
   const portrait = m.icon ? h('div', { class: 'portrait' }, thumb(m.icon, m.name, m.rank !== 'normal' ? m.rank : '', 'xxl')) : null;
-  return [pageHead({ crumbs: [{ href: '/', label: 'Home' }, { href: '/monsters', label: 'Monsters' }, { label: m.name }],
+  return [pageHead({ crumbs: dbCrumbs({ href: '/monsters', label: 'Monsters' }, { label: m.name }),
     title: m.name, art: thumb(m.icon, m.name, m.rank !== 'normal' ? m.rank : '', 'xl'),
     after: [rankChip(m.rank), m.elementName && chip('plain', m.elementName)], subtitle: variantLine(detail.ids),
     meta: [['ID', mono(String(m.id))], ['Race', m.race || '-'], ['Size', m.size || '-']] }),

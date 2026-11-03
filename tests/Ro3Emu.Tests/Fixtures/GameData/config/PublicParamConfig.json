@@ -1,5 +1,6 @@
-{
-  "AUCTION_CURRENCY": 1,
-  "VitalityInitCount": 300,
-  "VitalityExtraLimit": 800
-}
+{
+  "AUCTION_CURRENCY": 1,
+  "VitalityInitCount": 300,
+  "VitalityExtraLimit": 800,
+  "BaseToJobConversionPercent": 2500
+}

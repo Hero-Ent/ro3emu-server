@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Net.Codecrete.QrCodeGenerator;
 
 namespace Ro3Emu.Panel;
 
@@ -49,7 +50,7 @@ public sealed partial class PanelSite
     private async Task<Reply?> CheckCodeAsync(Call call, string account, string? code)
     {
         if (string.IsNullOrWhiteSpace(code) || code.Length > 64) return Bad("Enter the 6-digit code from your app, or a recovery code.");
-        if (!_sessions.MayTryCode(account) || !_backend.TryAcquireCredentialCheck(call.Client))
+        if (!_sessions.MayTryCode(account) || !_backend.TryAcquireCredentialCheck(call.From))
             return Reply.Error(StatusCodes.Status429TooManyRequests, TooManyCodes);
         if (await _ops.CheckTwoFactorAsync(account, code)) return null;
         _sessions.CodeFailed(account);
@@ -79,7 +80,19 @@ public sealed partial class PanelSite
         if (await _ops.BeginTwoFactorAsync(account) is not { } secret)
             return Reply.Error(StatusCodes.Status409Conflict, "Two-factor authentication is already on.");
         // The secret is shown once, to its owner, over this page; it is never logged.
-        return Reply.Ok(new { secret = Totp.ToBase32(secret), uri = Totp.Uri(ServerName, account, secret) });
+        string uri = Totp.Uri(ServerName, account, secret);
+        return Reply.Ok(new { secret = Totp.ToBase32(secret), uri, qr = QrCodeOf(uri) });
+    }
+
+    /// <summary>
+    /// The QR code of an otpauth URI for the authenticator app's camera: the side in modules (with the 4-module quiet
+    /// zone the standard asks for) and one SVG path of the dark modules, which the page draws in its own SVG.
+    /// </summary>
+    internal static object QrCodeOf(string text)
+    {
+        const int Border = 4;
+        var qr = QrCode.EncodeText(text, QrCode.Ecc.Medium);
+        return new { size = qr.Size + 2 * Border, path = qr.ToGraphicsPath(Border) };
     }
 
     private async Task<Reply> EnableTwoFactorAsync(Call call)
@@ -87,7 +100,7 @@ public sealed partial class PanelSite
         var form = await BodyAsync<CodeForm>(call);
         string account = call.Signed;
         if (string.IsNullOrWhiteSpace(form?.Code)) return Bad("Enter the 6-digit code your app shows.");
-        if (!_sessions.MayTryCode(account) || !_backend.TryAcquireCredentialCheck(call.Client))
+        if (!_sessions.MayTryCode(account) || !_backend.TryAcquireCredentialCheck(call.From))
             return Reply.Error(StatusCodes.Status429TooManyRequests, TooManyCodes);
         if (await _ops.EnableTwoFactorAsync(account, form.Code) is not { } recovery)
         {
@@ -136,7 +149,9 @@ public sealed partial class PanelSite
     private async Task<Reply> LogOutAccountAsync(Call call)
     {
         if (await _backend.AccountAsync(call.Args[0]) is not { } account) return Reply.Error(StatusCodes.Status404NotFound, "There is no such account.");
-        return Reply.Ok(new { ended = _sessions.EndAll(account.Name, keep: account.Name == call.Signed ? call.SessionId : null) });
+        int ended = _sessions.EndAll(account.Name, keep: account.Name == call.Signed ? call.SessionId : null);
+        await _ops.RecordPanelLogoutAsync(call.Signed, account.Name, ended);
+        return Reply.Ok(new { ended });
     }
 
     /// <summary>An Admin turns off another account's 2FA (a lost phone without recovery codes); audited by the server.</summary>

@@ -51,7 +51,7 @@ public sealed partial class DailyActivityService : IGameTicker
     public sealed class DailyState
     {
         public byte[] Rows { get; set; } = [];
-        public HashSet<int> Claims { get; set; } = new(); // shared 5059 list, not only type 7
+        public HashSet<int> Claims { get; set; } = []; // shared 5059 list, not only type 7
         public long DailyEpoch { get; set; }
         public long WeeklyEpoch { get; set; }
         public int ActiveRingStart { get; set; }
@@ -112,7 +112,7 @@ public sealed partial class DailyActivityService : IGameTicker
         DateTime now, bool synchronous = false)
     {
         long previousDailyEpoch = state.DailyEpoch, previousWeeklyEpoch = state.WeeklyEpoch;
-        state.Claims ??= new();
+        state.Claims ??= [];
         state.Compensation ??= [];
         var rows = state.Rows.Length > 0 ? DBDailyActivityInfo.Parser.ParseFrom(state.Rows) : new DBDailyActivityInfo();
         long daily = Boundary(now), weekly = WeekBoundary(now);
@@ -458,7 +458,7 @@ public sealed partial class DailyActivityService : IGameTicker
                 if (item.ValueKind == JsonValueKind.Array && item.GetArrayLength() >= 2)
                     award.Add(((int)(GameData.Number(item[0]) ?? 0), (int)(GameData.Number(item[1]) ?? 0), item.GetArrayLength() > 2 ? (int)(GameData.Number(item[2]) ?? 0) : 0));
         award.AddRange(_rewards.RollAwardBound(target, session));
-        return award.Where(a => a.Item1 > 0 && a.Item2 > 0 && _data.Row("ItemConfig", a.Item1) != null).ToList();
+        return [.. award.Where(a => a.Item1 > 0 && a.Item2 > 0 && _data.Row("ItemConfig", a.Item1) != null)];
     }
 
     public void Tick(GameTime time)
@@ -469,16 +469,36 @@ public sealed partial class DailyActivityService : IGameTicker
         // window refresh is posted (every session used to be posted every second: a 300-item queue burst).
         var now = _clock.GetLocalNow().DateTime;
         long daily = Boundary(now), weekly = WeekBoundary(now), seconds = ToUnix(now);
+        // At 05:00 every online role crosses at once (inferred pacing; server tuning): one queued reconciliation per session
+        // and at most ResetsPerTick a second, so a big realm's resets spread over seconds instead of saturating the loop.
+        int posted = 0;
         foreach (var session in _sessions.All())
         {
-            if (session.Daily is not { } state || !session.DailyReady) continue;
+            if (session.Daily is not { } state || !session.DailyReady || session.DailyReconcileQueued) continue;
             if (state.DailyEpoch >= daily && state.WeeklyEpoch >= weekly
                 && seconds < session.DailyWindowRefreshAt && seconds >= session.DailyWindowSampledAt) continue;
-            _loop.PostOwned(session, () => ReconcileAsync(session));
+            if (posted++ == ResetsPerTick) break;
+            session.DailyReconcileQueued = true;
+            _loop.PostOwned(session, async () =>
+            {
+                try { await ReconcileAsync(session); }
+                finally { session.DailyReconcileQueued = false; }
+            }, discarded: () => session.DailyReconcileQueued = false);
         }
     }
 
     private TimeSpan _lastTick;
+    internal int ResetsPerTick { get; set; } = 50;
+
+    /// <summary>The heartbeat's share: a due window refresh only. A crossed day or week is left to <see cref="Tick"/>, which
+    /// paces the realm's resets; every heartbeat starting its own role's reset would begin them all within seconds.</summary>
+    public async Task ReconcileWindowsAsync(GameSession session)
+    {
+        if (session.Daily is not { } state) return;
+        var now = _clock.GetLocalNow().DateTime;
+        if (state.DailyEpoch < Boundary(now) || state.WeeklyEpoch < WeekBoundary(now)) return;
+        await ReconcileAsync(session);
+    }
 
     public async Task ReconcileAsync(GameSession session, DateTime? localNow = null)
     {
@@ -622,8 +642,8 @@ public sealed partial class DailyActivityService : IGameTicker
                 foreach (var sub in subs.EnumerateArray())
                     if (Numbers(sub, "m_kData") is [4004, var task, ..]) ids.Add(task);
             defs[id] = new ActivityDef(id, (int)GameData.Int(row, "_iFunction"), (int)GameData.Int(row, "_iCount"),
-                (int)GameData.Int(row, "_iResetTimeType"), Numbers(row, "_kMultiverseArray").Select(n => (int)n).ToArray(),
-                ids.Where(task => _data.Row("TaskConfig", task) != null).ToArray());
+                (int)GameData.Int(row, "_iResetTimeType"), [.. Numbers(row, "_kMultiverseArray").Select(n => (int)n)],
+                [.. ids.Where(task => _data.Row("TaskConfig", task) != null)]);
         }
         _definitions = defs;
         return defs;
@@ -635,10 +655,10 @@ public sealed partial class DailyActivityService : IGameTicker
         var result = new Dictionary<long, List<int>>();
         foreach (var def in Defs().Values)
             foreach (long task in def.Tasks)
-                (result.TryGetValue(task, out var ids) ? ids : result[task] = new()).Add(def.Id);
+                (result.TryGetValue(task, out var ids) ? ids : result[task] = []).Add(def.Id);
         return _byTask = result;
     }
 
     private static long[] Numbers(JsonElement row, string field) => row.TryGetProperty(field, out var a) && a.ValueKind == JsonValueKind.Array
-        ? a.EnumerateArray().Select(v => (long)(GameData.Number(v) ?? 0)).ToArray() : [];
+        ? [.. a.EnumerateArray().Select(v => (long)(GameData.Number(v) ?? 0))] : [];
 }

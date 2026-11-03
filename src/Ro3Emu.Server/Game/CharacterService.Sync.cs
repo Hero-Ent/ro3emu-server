@@ -188,12 +188,12 @@ public sealed partial class CharacterService
     private static async Task<IDisposable?> LockIntentAsync(GameSession session, Func<bool>? stillOwner)
     {
         var cancellation = stillOwner == null ? CancellationToken.None : session.PendingCharacterIntent;
-        try { return await LockAsync(session, cancellation); }
+        try { return await LockAsync(session, cancellation: cancellation); }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested || stillOwner?.Invoke() == false) { return null; }
     }
 
-    private static async Task<IDisposable> LockAsync(GameSession session, CancellationToken cancellation = default,
-        IReadOnlyList<Ownership.ReservationKey>? additionalKeys = null)
+    private static async Task<IDisposable> LockAsync(GameSession session, IReadOnlyList<Ownership.ReservationKey>? additionalKeys = null,
+        CancellationToken cancellation = default)
     {
         if (session.Progress == null) throw new InvalidOperationException("not in game");
         // Logged out between the request and the lock (a kill reward landing as the player disconnects): nothing to lock.

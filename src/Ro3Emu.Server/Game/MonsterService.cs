@@ -10,7 +10,7 @@ namespace Ro3Emu.Server.Game;
 /// skill, spawning the scene-editor groups when a map is first entered, the AI (roam, chase, attack, leash) on the map
 /// tick, death, corpse removal and respawn. Combat math and hits go through CombatService.
 /// </summary>
-public sealed partial class MonsterService : MonsterBrain, IGameTicker
+public sealed partial class MonsterService : IMonsterBrain, IGameTicker
 {
     private readonly World _world;
     private readonly WorldData _worldData;
@@ -27,6 +27,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         this._reconstructed = reconstructed;
         _bossOptions = options?.Value.BossSkills ?? new BossSkillOptions();
         _ro1Aggressive = Ro1Aggressive(options?.Value); // MonsterService.Ro1Aggression
+        _ro1MaxLevelGap = options?.Value.Ro1AggressiveMaxLevelGap ?? 0;
         _spawnLimits = (options?.Value.SpawnLimits ?? []).Where(r => r.Npc > 0 && r.Max >= 0)
             .GroupBy(r => (r.Scene, r.Npc)).ToDictionary(g => g.Key, g => g.Last().Max);
         _ro1Hp = Ro1Hp(options?.Value); // MonsterService.Ro1Hp
@@ -64,19 +65,19 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     /// <summary>The chase stops this share of the attack range away from the target.</summary>
     private const float ApproachShare = 0.8f;
 
-    private readonly Dictionary<int, MonsterTemplate?> _templates = new();
+    private readonly Dictionary<int, MonsterTemplate?> _templates = [];
     private sealed class SpawnState
     {
         public bool InitialSpawned;
         public bool Retired;
         public int Pending;
-        public readonly Dictionary<int, HashSet<int>> UsedPoints = new();
-        public readonly HashSet<MonsterUnit> Units = new();
-        public readonly List<(TimeSpan Due, Func<Task> Work)> Deadlines = new();
+        public readonly Dictionary<int, HashSet<int>> UsedPoints = [];
+        public readonly HashSet<MonsterUnit> Units = [];
+        public readonly List<(TimeSpan Due, Func<Task> Work)> Deadlines = [];
         public readonly TaskCompletionSource Quiesced = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    private readonly Dictionary<RuntimeMapKey, SpawnState> _spawns = new();
+    private readonly Dictionary<RuntimeMapKey, SpawnState> _spawns = [];
     private readonly Random _random = new();
     private long _serial;
 
@@ -118,7 +119,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         if (data.Row("AttriMonsterConfig", attrId) is { } am)
             foreach (var (id, v) in GameData.Pairs(am, "_kAttri")) attr[id] = v;
         foreach (var (id, scale) in GameData.Pairs(npc, "_kAttriScale"))
-            if (attr.ContainsKey(id)) attr[id] = attr[id] * scale / 10000;
+            if (attr.TryGetValue(id, out var value)) attr[id] = value * scale / 10000;
         return attr;
     }
 
@@ -246,7 +247,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     private async Task<bool> SpawnAsync(RuntimeMapKey runtime, SpawnState state, MapWorld map, SpawnGroup group, int npcId, SpawnPoint? at = null)
     {
         if (state.Retired) return false;
-        if (!state.UsedPoints.TryGetValue(group.Id, out var used)) state.UsedPoints[group.Id] = used = new();
+        if (!state.UsedPoints.TryGetValue(group.Id, out var used)) state.UsedPoints[group.Id] = used = [];
         var point = at ?? group.Points.Where(p => !used.Contains(p.Id)).OrderBy(_ => _random.Next()).FirstOrDefault();
         if (point == null || Template(npcId) is not { } template) return false;
         used.Add(point.Id);
@@ -294,7 +295,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
         // every spawn state on every tick, due or not.
         List<SpawnState>? ready = null;
         foreach (var state in _spawns.Values)
-            if (!state.Retired && state.Deadlines.Count > 0 && state.Deadlines.Exists(d => d.Due <= time.Now)) (ready ??= new()).Add(state);
+            if (!state.Retired && state.Deadlines.Count > 0 && state.Deadlines.Exists(d => d.Due <= time.Now)) (ready ??= []).Add(state);
         if (ready != null) foreach (var state in ready) RunDue(state, time.Now);
     }
 
@@ -469,7 +470,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
             return;
         }
         if (_companionTargets.Count > 0 && FightsCompanion(m, map, now)) return; // MonsterService.Companions
-        if (m.Template.Aggressive && m.Viewers.Count > 0 && !m.Returning)
+        if (m.Viewers.Count > 0 && !m.Returning && AttacksOnSight(m))
         {
             var near = NearestTarget(m);
             if (near != null)
@@ -576,7 +577,7 @@ public sealed partial class MonsterService : MonsterBrain, IGameTicker
     }
 
     /// <summary>Authoritative target transitions, consumed by hatred/lock notifications and facing effects.</summary>
-    public List<Func<MonsterUnit, GameSession?, GameSession?, Task>> TargetChanged { get; } = new();
+    public List<Func<MonsterUnit, GameSession?, GameSession?, Task>> TargetChanged { get; } = [];
 
     private void SetTarget(MonsterUnit monster, GameSession? target)
     {

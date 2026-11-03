@@ -64,9 +64,8 @@ public sealed class HttpStateTests : IAsyncLifetime
         while (census.Current is not { Login: 1, Roles.Count: 1 } && DateTime.UtcNow < deadline)
             await Task.Delay(50);
 
-        using var client = new HttpClient();
-        // Hero Saga: the launcher's pill counts every connected account (walker in the world, lobby on the role screen).
-        Assert.Equal(2, (await Get(client, "/ro3emu/status")).GetProperty("players").GetInt32());
+        using var client = Operator.Client();
+        Assert.Equal(1, (await Get(client, "/ro3emu/status")).GetProperty("players").GetInt32());
         var sessions = (await Get(client, "/ro3emu/metrics")).GetProperty("sessions");
         Assert.Equal(1, sessions.GetProperty("login").GetInt32());
         Assert.Equal(1, sessions.GetProperty("inWorld").GetInt32() + sessions.GetProperty("loading").GetInt32());

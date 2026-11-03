@@ -11,8 +11,8 @@ namespace Ro3Emu.Server.Game;
 /// GM commands, two ways in: "!command" lines typed in any chat channel (replies go to the typist only, as the
 /// client's marquee, BROADCAST_NOTIFY 83270 with a raw string) and the client's own GM panel (GENERAL_PROC_GM 30300,
 /// ). ServerOptions.GmAccounts limits who may use them; empty means everyone unless
-/// ServerOptions.GmOpenWhenEmpty is false (a Production host, docs/guide/gm-access.md). The loopback HTTP /ro3emu/gm keeps
-/// "empty = everyone" (<see cref="Allowed(ServerOptions, string?, bool)"/>).
+/// ServerOptions.GmOpenWhenEmpty is false (a public, proxied or Production host, docs/guide/gm-access.md). The
+/// loopback HTTP /ro3emu/gm keeps "empty = everyone" (<see cref="Allowed(ServerOptions, string?, bool)"/>).
 /// </summary>
 public sealed partial class GmCommands(IOptions<ServerOptions> options, GameData data, SessionRegistry sessions, CharacterService character, SceneService scene, TaskService tasks, IServiceProvider services, ILogger<GmCommands> log)
 {
@@ -262,8 +262,8 @@ public sealed partial class GmCommands(IOptions<ServerOptions> options, GameData
             case OpJumpMap:
                 long scene = L(args[0]);
                 bool hasPoint = args.Length >= 3 && (F(args[1]) != 0 || F(args[2]) != 0);
-                await WarpAsync(s, scene, hasPoint ? F(args[1]) : null, hasPoint ? F(args[2]) : null);
-                return $"Warp to {scene} {data.MapName(scene)}";
+                return await TryWarpAsync(s, scene, hasPoint ? F(args[1]) : null, hasPoint ? F(args[2]) : null)
+                    ?? $"Warp to {scene} {data.MapName(scene)}";
             case OpClearPack:
                 return await character.ClearBagAsync(s);
             case OpFullHpMp:
@@ -608,14 +608,28 @@ public sealed partial class GmCommands(IOptions<ServerOptions> options, GameData
     private Task Jump(GameSession s, string[] args) =>
         scene.TeleportInMapAsync(s, new MapPoint(F(args[0]), s.Position.Y, F(args[1]), s.Face));
 
-    private Task Warp(GameSession s, string[] args) =>
-        WarpAsync(s, L(args[0]), args.Length >= 3 ? F(args[1]) : null, args.Length >= 3 ? F(args[2]) : null);
+    private async Task Warp(GameSession s, string[] args)
+    {
+        if (await TryWarpAsync(s, L(args[0]), args.Length >= 3 ? F(args[1]) : null, args.Length >= 3 ? F(args[2]) : null) is { } refused)
+            await ReplyAsync(s, refused);
+    }
 
-    /// <summary>Map change to x,z, or to the map's born point.</summary>
+    /// <summary>Starts every reply of a warp that did not go (the web panel's teleport looks for it).</summary>
+    public const string WarpRefused = "Cannot warp";
+
+    /// <summary>Map change to x,z, or to the map's born point; throws with the reason when it does not go.</summary>
     private async Task WarpAsync(GameSession s, long target, float? x, float? z)
     {
+        if (await TryWarpAsync(s, target, x, z) is { } refused) throw new ArgumentException(refused);
+    }
+
+    /// <summary>Map change to x,z, or to the map's born point: null when it went, else why not.</summary>
+    private async Task<string?> TryWarpAsync(GameSession s, long target, float? x, float? z)
+    {
+        string label = data.MapName(target) is { Length: > 0 } name ? $"{target} {name}" : $"{target}";
+        if (scene.Unplaceable(target) is { } why) return $"{WarpRefused} to {label}: {why}.";
         var at = x is { } px && z is { } pz ? new MapPoint(px, s.Position.Y, pz, s.Face) : (MapPoint?)null;
-        if (!await scene.EnterSceneAsync(s, target, at)) throw new ArgumentException("unknown scene");
+        return await scene.EnterSceneAsync(s, target, at) ? null : $"{WarpRefused} to {label} now: the character is changing maps.";
     }
 
     private static float F(string s) => float.Parse(s, CultureInfo.InvariantCulture);

@@ -108,6 +108,60 @@ public sealed class PanelAdminTests : IAsyncLifetime
         Assert.Equal(["role", "role"], await AuditActionsAsync(admin));
     }
 
+    [Fact]
+    public async Task StaffBanOnlyBelowTheirOwnRole()
+    {
+        Assert.Equal(0, await SdkLoginAsync(_host, "padmin-plain", "pw"));
+        using var admin = await SignedInAsync(Admin);
+        await SdkLoginAsync(_host, "padmin-mod2", "pw");
+        await OkAsync(admin.PostAsync("/api/admin/roles", new { account = "padmin-mod2", role = "moderator" }));
+        using var moderator = await SignedInAsync(Moderator);
+
+        foreach (string above in new[] { Admin, "padmin-mod2" })
+        {
+            var refused = await moderator.PostAsync("/api/admin/accounts/" + above + "/ban", new { reason = "coup", hours = 1 });
+            Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        }
+        await OkAsync(moderator.PostAsync("/api/admin/accounts/padmin-plain/ban", new { reason = "botting", hours = 1 }));
+        await OkAsync(admin.PostAsync("/api/admin/accounts/padmin-mod2/ban", new { reason = "abuse", hours = 1 }));
+        Assert.Equal(["ban", "ban", "role"], await AuditActionsAsync(admin));
+    }
+
+    /// <summary>A ban stands against lower roles than the one who placed it, and staff above the caller stay out of reach.</summary>
+    [Fact]
+    public async Task AnUnbanFollowsTheSameRanks()
+    {
+        Assert.Equal(0, await SdkLoginAsync(_host, "padmin-held", "pw"));
+        Assert.Equal(0, await SdkLoginAsync(_host, "padmin-minor", "pw"));
+        using var admin = await SignedInAsync(Admin);
+        using var moderator = await SignedInAsync(Moderator);
+        await OkAsync(admin.PostAsync("/api/admin/accounts/padmin-held/ban", new { reason = "cheating", hours = 1 }));
+        await OkAsync(moderator.PostAsync("/api/admin/accounts/padmin-minor/ban", new { reason = "spam", hours = 1 }));
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await moderator.PostAsync("/api/admin/accounts/padmin-held/unban", new { reason = "pals" })).StatusCode);
+        await OkAsync(moderator.PostAsync("/api/admin/accounts/padmin-minor/unban", new { reason = "appeal" }));
+        await OkAsync(admin.PostAsync("/api/admin/accounts/padmin-held/unban", new { reason = "appeal" }));
+    }
+
+    /// <summary>
+    /// On your own PC an empty GM list makes every account an Admin, which must not make them all equal for a ban. A role
+    /// given by name still ranks.
+    /// </summary>
+    [Fact]
+    public async Task AnOpenLocalPanelCanBanAndUnban()
+    {
+        var (host, panel) = await StartAsync(o => o.Panel.Roles = new(StringComparer.Ordinal) { [Moderator] = "Admin" });
+        await using var _ = host;
+        Assert.Equal(0, await SdkLoginAsync(host, "open-a", "pw"));
+        Assert.Equal(0, await SdkLoginAsync(host, "open-b", "pw"));
+        Assert.Equal(0, await SdkLoginAsync(host, Moderator, "pw"));
+        using var browser = new PanelBrowser(panel);
+        Assert.Equal(HttpStatusCode.OK, (await browser.LoginAsync("open-a", "pw")).StatusCode);
+        await OkAsync(browser.PostAsync("/api/admin/accounts/open-b/ban", new { reason = "test", hours = 1 }));
+        await OkAsync(browser.PostAsync("/api/admin/accounts/open-b/unban", new { reason = "test" }));
+        Assert.Equal(HttpStatusCode.Forbidden, (await browser.PostAsync("/api/admin/accounts/" + Moderator + "/ban", new { reason = "coup", hours = 1 })).StatusCode);
+    }
+
     // ---------------------------------------------------------------- account security
 
     private static string CurrentCode(string base32) => Totp.Code(Totp.FromBase32(base32)!, Totp.TimeStep(DateTimeOffset.UtcNow));
@@ -115,7 +169,11 @@ public sealed class PanelAdminTests : IAsyncLifetime
     /// <summary>Turns 2FA on: the secret, the code that confirmed it (spent) and the recovery codes.</summary>
     private static async Task<(string Secret, string Spent, List<string> Recovery)> EnableTwoFactorAsync(PanelBrowser browser)
     {
-        string secret = (await OkAsync(browser.PostAsync("/api/account/2fa/begin", new { }))).GetProperty("secret").GetString()!;
+        var begun = await OkAsync(browser.PostAsync("/api/account/2fa/begin", new { }));
+        string secret = begun.GetProperty("secret").GetString()!;
+        // The QR code of the otpauth URI: its side with the quiet zone, and the dark modules' path.
+        Assert.True(begun.GetProperty("qr").GetProperty("size").GetInt32() >= 21 + 8);
+        Assert.StartsWith("M", begun.GetProperty("qr").GetProperty("path").GetString());
         Assert.Equal(HttpStatusCode.BadRequest, (await browser.PostAsync("/api/account/2fa/enable", new { code = "abcdef" })).StatusCode);
         string code = CurrentCode(secret);
         var enabled = await OkAsync(browser.PostAsync("/api/account/2fa/enable", new { code }));
@@ -195,6 +253,14 @@ public sealed class PanelAdminTests : IAsyncLifetime
 
         using var moderator = await SignedInAsync(Moderator);
         Assert.Equal(3, (await moderator.GetJsonAsync("/api/admin/accounts/padmin-sessions/logins")).GetProperty("logins").GetArrayLength());
+
+        // An Admin's "log out of the panel" is audited, its target the account.
+        using var admin = await SignedInAsync(Admin);
+        Assert.Equal(1, (await OkAsync(admin.PostAsync("/api/admin/accounts/padmin-sessions/logout", new { }))).GetProperty("ended").GetInt32());
+        Assert.Equal(HttpStatusCode.Unauthorized, (await first.Http.GetAsync("/api/account")).StatusCode);
+        var entry = (await admin.GetJsonAsync("/api/admin/audit")).GetProperty("entries")[0];
+        Assert.Equal(("panel-logout", "1 panel session ended"), (entry.GetProperty("action").GetString(), entry.GetProperty("detail").GetString()));
+        Assert.Equal(("account", "padmin-sessions"), (entry.GetProperty("subject").GetProperty("kind").GetString(), entry.GetProperty("subject").GetProperty("key").GetString()));
     }
 
     [Fact]
@@ -217,6 +283,35 @@ public sealed class PanelAdminTests : IAsyncLifetime
         await EnableTwoFactorAsync(admin);
         Assert.Equal("admin", (await admin.SessionAsync()).GetProperty("role").GetString());
         Assert.Equal(HttpStatusCode.OK, (await admin.Http.GetAsync("/api/admin/dashboard")).StatusCode);
+    }
+
+    /// <summary>
+    /// Behind a reverse proxy the panel listens on loopback, yet players reach it: a listed proxy (or a public URL)
+    /// turns the 2FA requirement on unless the operator set it.
+    /// </summary>
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task BehindAProxyAdminsMustTurnOnTwoFactor(bool trustedProxy, bool publicUrl)
+    {
+        await using var host = await SyntheticHost.StartAsync(o =>
+        {
+            o.GmAccounts = [Admin];
+            o.Panel.Enabled = true;
+            o.Panel.Port = TestPorts.FreePort();
+            if (trustedProxy) o.Panel.TrustedProxies = ["127.0.0.1"];
+            if (publicUrl) o.Panel.PublicUrl = "https://panel.example.com";
+        });
+        var options = host.Service<Microsoft.Extensions.Options.IOptions<Ro3Emu.Server.ServerOptions>>().Value;
+        Assert.True(options.Panel.RequireAdmin2FA);
+        string panel = $"http://127.0.0.1:{options.Panel.Port}";
+        Assert.Equal(0, await SdkLoginAsync(host, Admin, "pw"));
+        using var admin = new PanelBrowser(panel);
+        admin.Http.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.9");
+        var session = await OkAsync(admin.LoginAsync(Admin, "pw"));
+        Assert.False(session.GetProperty("admin").GetBoolean());
+        Assert.True(session.GetProperty("twoFactorRequired").GetBoolean());
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.Http.GetAsync("/api/admin/dashboard")).StatusCode);
     }
 
     // ---------------------------------------------------------------- report inbox
@@ -270,12 +365,22 @@ public sealed class PanelAdminTests : IAsyncLifetime
         int before = await HeldAsync();
         await OkAsync(admin.PostAsync($"/api/admin/characters/{id}/items", new { item = Bagged, count = 3 }));
         Assert.Equal(before + 3, await HeldAsync());
-        await OkAsync(admin.PostAsync($"/api/admin/characters/{id}/items", new { item = Bagged, count = -2 }));
+        // Taking more than the character holds takes nothing and says how much it holds.
+        var tooMany = await admin.PostAsync($"/api/admin/characters/{id}/items", new { item = Bagged, count = -(before + 4) });
+        Assert.Equal(HttpStatusCode.Conflict, tooMany.StatusCode);
+        Assert.Contains("holds only " + (before + 3), await tooMany.Content.ReadAsStringAsync());
+        Assert.Equal(before + 3, await HeldAsync());
+        var taken = await OkAsync(admin.PostAsync($"/api/admin/characters/{id}/items", new { item = Bagged, count = -2 }));
+        Assert.StartsWith("Removed 2 ", taken.GetProperty("message").GetString());
         Assert.Equal(before + 1, await HeldAsync());
 
         await OkAsync(admin.PostAsync($"/api/admin/characters/{id}/kick", new { reason = "test" }));
         await bot.Inbox.WaitAsync(e => e.Kind == BotEventKind.Disconnect, Wait);
         Assert.Equal(["char-kick", "char-item", "char-item"], await AuditActionsAsync(admin));
+        // A character action's target is the character (its id, for the link to its page) under its name.
+        var subject = (await admin.GetJsonAsync("/api/admin/audit")).GetProperty("entries")[0].GetProperty("subject");
+        Assert.Equal(("character", id.ToString(System.Globalization.CultureInfo.InvariantCulture), "Holder"),
+            (subject.GetProperty("kind").GetString(), subject.GetProperty("key").GetString(), subject.GetProperty("label").GetString()));
     }
 
     /// <summary>Retries an offline action while the logout of the character still holds it.</summary>
@@ -321,6 +426,26 @@ public sealed class PanelAdminTests : IAsyncLifetime
         // The restored character plays again.
         await using var back = await _host.InWorldAsync("Wanderer", create: false);
         Assert.Equal(["char-restore", "char-teleport", "char-rename"], await AuditActionsAsync(admin));
+        Assert.All((await admin.GetJsonAsync("/api/admin/audit")).GetProperty("entries").EnumerateArray(), e =>
+            Assert.Equal(("character", id.ToString(System.Globalization.CultureInfo.InvariantCulture), "Strider"), (e.GetProperty("subject").GetProperty("kind").GetString(),
+                e.GetProperty("subject").GetProperty("key").GetString(), e.GetProperty("subject").GetProperty("label").GetString())));
+    }
+
+    [Fact]
+    public void AuditTargetsLinkToWhatTheRowIsAbout()
+    {
+        Assert.Equal(new PanelAuditTarget("character", "100001", "QaBotOne"), PanelAuditTarget.Of("char-kick", "QaBotOne (100001)", "kicked"));
+        // Rows written before the "Name (id)" target of a rename or restore: the name comes from the detail.
+        Assert.Equal(new PanelAuditTarget("character", "100001", "NewName"), PanelAuditTarget.Of("char-rename", "role:100001", "Old => NewName"));
+        Assert.Equal(new PanelAuditTarget("character", "100001", "Back"), PanelAuditTarget.Of("char-restore", "role:100001", "Back of qa1"));
+        Assert.Equal(new PanelAuditTarget("character", "7", "Character 7"), PanelAuditTarget.Of("char-rename", "role:7", ""));
+        Assert.Equal("account", PanelAuditTarget.Of("ban", "qa1", "").Kind);
+        Assert.Equal(new PanelAuditTarget("report", "12", "Report #12"), PanelAuditTarget.Of("report", "report:12", ""));
+        Assert.Equal(new PanelAuditTarget("character-name", "Alice", "Alice"), PanelAuditTarget.Of("mail", "character:Alice (online)", ""));
+        Assert.Equal(new PanelAuditTarget("account", "qa1", "qa1"), PanelAuditTarget.Of("mail", "account:qa1", ""));
+        Assert.Equal("none", PanelAuditTarget.Of("mail", "everyone from level 10", "").Kind);
+        Assert.Equal("server", PanelAuditTarget.Of("schedule", "server", "").Kind);
+        Assert.Equal(new PanelAuditTarget("character-name", "Alice", "Alice"), PanelAuditTarget.Of("gm", "Alice", "!where"));
     }
 
     // ---------------------------------------------------------------- server control

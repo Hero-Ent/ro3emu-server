@@ -31,6 +31,7 @@ public sealed class MountService : IGameTicker
     private TimeSpan _lastTick;
     private const string ExpiryKey = "mount-expiry";
     private const int SystemSlot = 1;
+    private const int FastUseAuto = 3; // enum_FastUseType.AutoUse (Lua_GameDefine.lua)
 
     /// <summary>
     /// How long a cast waits after its rider got off (inferred): the client has no duration for the dismount, which is a
@@ -42,8 +43,8 @@ public sealed class MountService : IGameTicker
     public sealed class SavedState
     {
         public byte[] Info { get; set; } = [];
-        public HashSet<long> Claimed { get; set; } = new();
-        public Dictionary<string, int> Previews { get; set; } = new();
+        public HashSet<long> Claimed { get; set; } = [];
+        public Dictionary<string, int> Previews { get; set; } = [];
         public int QuestMount { get; set; }
     }
 
@@ -57,6 +58,7 @@ public sealed class MountService : IGameTicker
         this._world = world; this._loop = loop; this._sessions = sessions; this._deadlines = deadlines; this._clock = clock;
         character.ExtraAttributes.Add(Attributes);
         character.SpecialItemUse.Add(TryUseItemAsync);
+        character.ItemsAwarded.Add((s, items) => { if (items.Any(i => IsAutoUsedVoucher(i.Entry))) UseHeldVouchers(s); });
         wardrobe.MountGrant = PlanShopGrant;
         character.JobChanged.Add(ReconcileAsync);
         scenes.BeforeSelf.Add(ReconcileAsync);
@@ -244,7 +246,14 @@ public sealed class MountService : IGameTicker
         if (error == 0)
         {
             var next = s.Mounts.Clone(); var state = CopyState(s); state.QuestMount = 0;
-            foreach (var (key, value) in next.MountIds) if (key == slot || on) value.IsRiding = key == slot && on;
+            // Both rides can be on at once: the client shows the system mount over the battle mount
+            // (LC_MountHelper.GetRidingMountId), and its battle mount button takes a rider on both off the system mount,
+            // back onto the battle mount (UI_Sys_Main_MountJobWidgetCtrl._onClickMount). So getting on the system mount
+            // (auto-pathing does it by itself, LC_Actor_ControlMove._tryRideSystemMount) keeps the battle ride, and the
+            // dismount before a cast lands the rider on it again; getting on the battle mount ends a system ride (inferred).
+            foreach (var (key, value) in next.MountIds)
+                if (key == slot) value.IsRiding = on;
+                else if (on && slot == 2) value.IsRiding = false;
             await CommitAsync(s, next, state);
         }
         await s.SendGameAsync(Ride, new PlayerRiderMountResp { Result = error, Tp = tp });
@@ -292,7 +301,7 @@ public sealed class MountService : IGameTicker
     }
 
     /// <summary>After a committed 5012 change (ownership, riding): BuffService adds or drops mount energy meters.</summary>
-    public List<Func<GameSession, Task>> Changed { get; } = new();
+    public List<Func<GameSession, Task>> Changed { get; } = [];
 
     /// <summary>5012 after a committed change, then the <see cref="Changed"/> listeners.</summary>
     private async Task PublishOwnedAsync(GameSession s)
@@ -407,6 +416,31 @@ public sealed class MountService : IGameTicker
         }
         return error;
     }
+
+    /// <summary>
+    /// A mount voucher is used by the server as soon as it is held. All 31 action-201 items have ItemConfig._QuickUse [3, 0]:
+    /// enum_FastUseType.AutoUse with GetAutoUseSec 0, for which LC_FastUseManager.AddFastUse shows no use widget and sends no
+    /// use (it only auto-equips gear), so the client never consumes one by itself. The first mount's guide (GuideConfig 1811-1821,
+    /// on 10101251, right after 10101250 grants the career's voucher through AwardConfig 10031125) therefore starts at the
+    /// wardrobe cell, with no bag step: its "use the voucher" steps (460-462) stayed only in the closed guides 42-47. No packet
+    /// capture shows this; that the server does it is inferred from the client doing nothing. A refusal (level, already owned)
+    /// leaves the voucher in the bag, usable by hand. Login repeats it, which repairs a role that passed the quest before
+    /// this and also covers a voucher gained outside an award (a shop, a box).
+    /// </summary>
+    internal void UseHeldVouchers(GameSession s)
+    {
+        if (s.Items.Any(i => i.Grid == 0 && IsAutoUsedVoucher(i.Entry))) _loop.PostOwned(s, () => UseHeldVouchersAsync(s));
+    }
+
+    private async Task UseHeldVouchersAsync(GameSession s)
+    {
+        foreach (long guid in s.Items.Where(i => i.Grid == 0 && IsAutoUsedVoucher(i.Entry)).Select(i => i.Guid).ToArray())
+            await _character.AutoUseItemAsync(s, guid);
+    }
+
+    private bool IsAutoUsedVoucher(int entry) => ItemConfig.Get(_data, entry) is { QuickUse: [FastUseAuto, 0] } row
+        && row.UseEffect is { ValueKind: JsonValueKind.Array } effects && effects.GetArrayLength() == 1
+        && effects[0].ValueKind == JsonValueKind.Array && effects[0].GetArrayLength() == 3 && GameData.Number(effects[0][0]) == 201;
 
     private IEnumerable<JsonElement> Etchants(long mount, int part) => _data.Table("AppearanceEtchConfig").Values
         .Where(r => GameData.Int(r, "_iAppearanceID") == mount && (part == 0 || GameData.Int(r, "_iPart") == part));

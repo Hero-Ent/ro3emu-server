@@ -440,6 +440,7 @@ public static class EconomyLedgerReader
                         {
                             "monster-kill" when leg.Kind == EconomyLegKind.Source => EconomyReason.MonsterDrop,
                             "gather-yield" when leg.Kind == EconomyLegKind.Source => EconomyReason.GatherYield,
+                            "gather-yield" when leg.Kind == EconomyLegKind.Sink => EconomyReason.LifeCost,
                             "tower-reward" when leg.Kind == EconomyLegKind.Source => EconomyReason.ActivityReward,
                             "dungeon-obligation-earn" when leg.Kind == EconomyLegKind.Source => EconomyReason.ActivityReward,
                             "dungeon-reward" when leg.Kind == EconomyLegKind.Transfer => EconomyReason.DungeonRewardDelivery,
@@ -592,7 +593,7 @@ public static class EconomyLedgerReader
             }
             foreach (var receipt in receipts)
             {
-                int[] numbers = legs.Where(x => x.OperationId == receipt.OperationId).Select(x => x.LegNumber).Order().ToArray();
+                int[] numbers = [.. legs.Where(x => x.OperationId == receipt.OperationId).Select(x => x.LegNumber).Order()];
                 if (numbers.Length != receipt.LegCount || !numbers.SequenceEqual(Enumerable.Range(0, numbers.Length)))
                     issues.Add(new(EconomyIssueKind.Corruption, "receipt/" + receipt.OperationId, "Leg count or numbering is incomplete."));
             }
@@ -723,7 +724,7 @@ public static class EconomyLedgerReader
             internal int Target = target, Reverse = reverse;
             internal long Capacity = capacity;
         }
-        private readonly List<Edge>[] _graph = Enumerable.Range(0, nodes).Select(_ => new List<Edge>()).ToArray();
+        private readonly List<Edge>[] _graph = [.. Enumerable.Range(0, nodes).Select(_ => new List<Edge>())];
 
         internal void Add(int from, int to, long capacity)
         {
@@ -803,7 +804,7 @@ public static class EconomyLedgerReader
             .ToDictionary(group => group.Key.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 group => group.Select(x => x.Part).ToHashSet(StringComparer.Ordinal), StringComparer.Ordinal);
         var mutated = childRoleWrites.SelectMany((parts, index) =>
-            childReceipts[index] is false or 0 or 0L ? Array.Empty<EscrowRolePart>() : parts).ToHashSet();
+            childReceipts[index] is false or 0 or 0L ? [] : parts).ToHashSet();
         using var before = JsonDocument.Parse(beforeJson);
         using var after = JsonDocument.Parse(afterJson);
         var prior = before.RootElement.EnumerateObject().ToDictionary(x => x.Name, x => x.Value);
@@ -948,8 +949,10 @@ public static class EconomyLedgerReader
             "cd13e/daily-reset" => [.. required, "wild_afk"],
             "gather-yield" => [.. required, "library", "task_followup"],
             "dungeon-reward" => [.. required, "auction_order", "library", "task_followup"],
+            // The Job EXP catch-up commits its marker with its EXP (CharacterService.JobExpCatchUp).
+            "cd13e/grant" => [.. required, "daily", "library", "task_followup", "activity_runtime", "mounts", "job_exp_catchup"],
             "cd13e/tower-milestone" or "cd13e/quest-award" or "cd13e/achievement-award" or "cd13e/advguild-award" or "cd13e/monsterhunt-award" or "cd13e/guild-award" or "cd13e/growthclass-award" or "cd13e/library-award" or "cd13e/firstheart-award" or "cd13e/daily-stage" or
-            "cd13e/grant" or "cd13e/gm-grant" or "cd13e/character-exp" or
+            "cd13e/gm-grant" or "cd13e/character-exp" or
                 "cd13e/journey-victory" => [.. required, "daily", "library", "task_followup", "activity_runtime", "mounts"],
             _ => required
         };
@@ -981,7 +984,7 @@ public static class EconomyLedgerReader
         if (commandKind == "monster-kill")
         {
             long[] credited = creditedKill ? (long[])childReceipts[^1]! : [];
-            long[] others = credited.Where(role => role != actorRole).ToArray();
+            long[] others = [.. credited.Where(role => role != actorRole)];
             var beforeParticipants = b.TryGetProperty("participants", out var bp)
                 ? bp.EnumerateArray().ToArray() : [];
             var afterParticipants = a.TryGetProperty("participants", out var ap)
@@ -1134,7 +1137,7 @@ public static class EconomyLedgerReader
                     throw new InvalidDataException("E05d auction lot receipt identity is invalid.");
             }
         }
-        return effects.Select(effect =>
+        return [.. effects.Select(effect =>
         {
             if (effect.Owner.Kind != EconomyOwnerKind.Escrow ||
                 !effect.Owner.Id.StartsWith(alias, StringComparison.Ordinal)) return effect;
@@ -1149,7 +1152,7 @@ public static class EconomyLedgerReader
                 Owner = new EconomyOwner(EconomyOwnerKind.Escrow,
                 "auction:" + lot.Id.ToString(System.Globalization.CultureInfo.InvariantCulture))
             };
-        }).ToArray();
+        })];
 
         static bool IsLotSource(string lotSource, string batchSource)
         {
@@ -1213,8 +1216,12 @@ public static class EconomyLedgerReader
                 command != "world-revive" && !EconomyMutation.IsOwnedExchangeCommand(command) && costs.Length != 0)
                 throw new InvalidDataException("Reward command has unsupported cost or goods amounts.");
         }
-        return new(costs.Select(q => (q.Asset, Cost: true, Amount: (BigInteger)q.Quantity))
-            .Concat(goods.Select(q => (q.Asset, Cost: false, Amount: (BigInteger)q.Quantity))).ToArray(), evidence);
+        return new(
+        [
+            .. costs.Select(q => (q.Asset, Cost: true, Amount: (BigInteger)q.Quantity))
+,
+            .. goods.Select(q => (q.Asset, Cost: false, Amount: (BigInteger)q.Quantity)),
+        ], evidence);
     }
 
     /// <summary>Receipts of an EconomyMutation (E01 NPC, cd13a/cd13b families, E04 rewards and obligations, 13e

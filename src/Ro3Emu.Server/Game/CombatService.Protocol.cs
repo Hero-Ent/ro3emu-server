@@ -21,10 +21,10 @@ public sealed partial class CombatService
     /// <summary>Transient state is scoped to a role/connection; never leaks to another selected role.</summary>
     public sealed class ProtocolState
     {
-        public Dictionary<int, int> TemporarySlotRows { get; } = new();
+        public Dictionary<int, int> TemporarySlotRows { get; } = [];
         public string ParameterSignature { get; set; } = "";
         public bool TrainingPaused { get; set; }
-        public Dictionary<(long Target, bool White, int Tag), bool> SkillSelection { get; } = new();
+        public Dictionary<(long Target, bool White, int Tag), bool> SkillSelection { get; } = [];
     }
 
     private Dictionary<(int Group, int Level, int Mode), int>? _configuredModeRows;
@@ -51,6 +51,15 @@ public sealed partial class CombatService
             return SkillParameterRules.Effective(session, _data, selected);
         if (requestedMode != 0) return null;
         return SkillParameterRules.Effective(session, _data, requested);
+    }
+
+    /// <summary>A group's configured row of a level in the mode the session's type 15 tuples select, or its mode 0 row when
+    /// that mode has none. The tuples' other fields are not applied: <see cref="CastExtraAsync"/> applies them.</summary>
+    internal JsonElement? ModeRow(GameSession session, int group, int level)
+    {
+        if (!ConfiguredModeRows.TryGetValue((group, level, 0), out int plain) || _data.Row("SkillConfig", plain) is not { } row) return null;
+        int mode = SkillParameterRules.Mode(group, SkillParameterRules.CategoriesOf(_data, row), SkillParameterRules.Active(session, _data));
+        return ConfiguredModeRows.TryGetValue((group, level, mode), out int selected) ? _data.Row("SkillConfig", selected) : row;
     }
 
     public bool SkillModeAllowed(GameSession session, JsonElement row) =>
@@ -301,10 +310,13 @@ public sealed partial class CombatService
         await viewer.SendGameAsync(BossAllSkillCds, response);
     }
 
-    /// <summary>Clear scene-scoped target and boss presentation when the scene changes.</summary>
+    /// <summary>Clear scene-scoped target and boss presentation when the scene changes. The 31133 pause ends with it:
+    /// LC_System_DamageStatistics._onSwitchScene resumes the client's own count without a request, and
+    /// UI_Sys_GVE_ExitMenu_PauseWidgetBaseCtrl.OnOpen shows Resume again (inferred: the pause is per scene).</summary>
     public async Task ClearSceneSkillProtocolAsync(GameSession viewer)
     {
         viewer.SkillProtocol.SkillSelection.Clear();
+        viewer.SkillProtocol.TrainingPaused = false;
         if (viewer.Role != null) await viewer.SendGameAsync(BossClearSkillCds, new BossClearAllSkillShowCdNotify());
     }
 

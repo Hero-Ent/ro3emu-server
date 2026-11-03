@@ -224,7 +224,7 @@ public sealed class PanelPlayersTests : IAsyncLifetime
         bagGuid = saved.Single(i => i.Entry == 3990001).Guid;
 
         // The exchange's records as TradeService writes them (market_record JSON): one listing whose escrowed instance
-        // carries the guid of the bag's stack (a duplicate), and two sales on different UTC days (two days and one hour back, so never the same day).
+        // carries the guid of the bag's stack (more than the ledger let in), and two sales on different UTC days (two days and one hour back, so never the same day).
         long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var listing = new TradeService.Listing
         {
@@ -281,7 +281,9 @@ public sealed class PanelPlayersTests : IAsyncLifetime
         Assert.Equal(["Bag", "Exchange"], trace.GetProperty("holders").EnumerateArray().Select(h => h.GetProperty("place").GetString()).Order());
         Assert.All(trace.GetProperty("holders").EnumerateArray(), h => Assert.Equal("Merchant", h.GetProperty("owner").GetString()));
         var kinds = trace.GetProperty("flags").EnumerateArray().Select(f => f.GetProperty("kind").GetString()).ToList();
-        Assert.Contains("Instance seen twice", kinds);
+        // One seller's bag stack and an exchange listing with its guid is what a partial listing looks like, so the shared
+        // instance alone flags nothing (AntiCheatPanelTests has the two-owner case); the count does.
+        Assert.DoesNotContain("Instance seen twice", kinds);
         var ledger = trace.GetProperty("ledger");
         // The ledger saw the GM grant of 3; the listing's 2 came from nowhere it recorded.
         Assert.Contains(ledger.GetProperty("entries").GetInt32() > 0 ? "Exceeds ledger" : "Unrecorded", kinds);
@@ -290,5 +292,48 @@ public sealed class PanelPlayersTests : IAsyncLifetime
         var report = await admin.GetJsonAsync("/api/admin/items/dupes");
         Assert.Contains(report.GetProperty("items").EnumerateArray(), r => r.GetProperty("item").GetProperty("id").GetInt64() == 3990001);
         Assert.Equal(HttpStatusCode.OK, (await admin.Http.GetAsync("/admin/items/3990001")).StatusCode);
+    }
+
+    [Fact]
+    public async Task ANewCharactersStarterKitIsInTheLedgerAndOlderKitsAreCounted()
+    {
+        await using (var newcomer = await _host.InWorldAsync("Newcomer")) { }
+        var connection = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+        { DataSource = Path.Combine(_host.DataDir, "ro3emu.db"), Pooling = false, DefaultTimeout = 10 };
+        using var db = new Microsoft.Data.Sqlite.SqliteConnection(connection.ToString());
+        db.Open();
+        // The kit's items and Zeny are starter grants (EconomyReason.StarterGrant source legs) of one receipt.
+        var granted = new Dictionary<long, long>();
+        using (var legs = db.CreateCommand())
+        {
+            legs.CommandText = "SELECT asset_id,SUM(delta) FROM economy_entry WHERE reason_code=$reason AND leg_kind=$source GROUP BY asset_id";
+            legs.Parameters.AddWithValue("$reason", (int)Ro3Emu.Server.Economy.EconomyReason.StarterGrant);
+            legs.Parameters.AddWithValue("$source", (int)Ro3Emu.Server.Economy.EconomyLegKind.Source);
+            using var rows = legs.ExecuteReader();
+            while (rows.Read()) granted[rows.GetInt64(0)] = rows.GetInt64(1);
+        }
+        Assert.Equal(CharacterService.StarterKit.ToDictionary(k => (long)k.Entry, k => (long)k.Count), granted);
+        var accounts = _host.Service<AccountStore>();
+        var unrecorded = new PanelUnrecordedStarterKitsRead(CharacterService.StarterKitEconomyKind);
+        Assert.Equal(0L, await accounts.ReadAsync<long>(unrecorded));
+
+        // A character that got its kit before kits were recorded (no starter receipt) is counted, so the duplication
+        // check explains its kit.
+        using (var forget = db.CreateCommand())
+        {
+            forget.CommandText = "UPDATE operation_receipt SET command_kind='test/older' WHERE command_kind=$kind";
+            forget.Parameters.AddWithValue("$kind", CharacterService.StarterKitEconomyKind);
+            Assert.Equal(1, forget.ExecuteNonQuery());
+        }
+        Assert.Equal(1L, await accounts.ReadAsync<long>(unrecorded));
+    }
+
+    [Fact]
+    public void AnAchievementCategorysLevelReadsAsALevel()
+    {
+        Assert.Equal("Level 1", Ro3Emu.Server.Http.PanelBackend.LevelName("Growth", "Growth1"));
+        Assert.Equal("Level 12", Ro3Emu.Server.Http.PanelBackend.LevelName("Server", "Server 12"));
+        Assert.Equal("Master Explorer", Ro3Emu.Server.Http.PanelBackend.LevelName("Growth", "Master Explorer"));
+        Assert.Equal("Growth", Ro3Emu.Server.Http.PanelBackend.LevelName("Growth", "Growth"));
     }
 }

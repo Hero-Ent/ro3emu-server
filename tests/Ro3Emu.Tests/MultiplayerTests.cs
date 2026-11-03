@@ -23,6 +23,7 @@ public sealed class MultiplayerTests : IAsyncLifetime
         _app = ServerHost.Create([], o =>
         {
             o.DataDir = _dataDir;
+            o.GameDataDir = SyntheticData.Dir;
             o.HttpPort = httpPort;
             o.MicroGatePort = microPort;
             o.GameGatePort = gamePort;
@@ -238,6 +239,56 @@ public sealed class MultiplayerTests : IAsyncLifetime
         var data = (Dictionary<object, object?>)entry["Data"]!;
         Assert.Equal("Alice", data["Name"]);
         Assert.IsType<byte[]>(data["Base"]);
+    }
+
+    [Fact]
+    public async Task TheRegistryKnowsASessionExactlyWhileItIsListed()
+    {
+        var registry = _app.Services.GetRequiredService<Ro3Emu.Server.Game.SessionRegistry>();
+        Assert.False(registry.Contains(new Ro3Emu.Server.Game.GameSession(null!, null!)));
+        Ro3Emu.Server.Game.GameSession session;
+        await using (var alice = await InWorld("Alice"))
+        {
+            session = registry.All().Single(s => s.Role?.Id == (long)alice.Self!.Uuid);
+            Assert.True(registry.Contains(session));
+        }
+        var until = DateTime.UtcNow + Wait;
+        while (registry.All().Contains(session) && DateTime.UtcNow < until) await Task.Delay(20);
+        Assert.DoesNotContain(session, registry.All());
+        Assert.False(registry.Contains(session));
+    }
+
+    [Fact]
+    public async Task AProfileLookupDoesNotWaitForTheOtherPlayersOwnWork()
+    {
+        await using var alice = await InWorld("Alice");
+        await using var bob = await InWorld("Bob");
+        long bobId = (long)bob.Self!.Uuid;
+        static object? Name(Dictionary<string, object?> reply) =>
+            ((Dictionary<object, object?>)((Dictionary<object, object?>)((object[])reply["Results"]!).Single()!)["Data"]!)["Name"];
+        Assert.Equal("Bob", Name(await alice.GetRoleAttributesAsync(bobId)));
+
+        // Bob's own work holds his character: Alice's client asking for his name and look must not queue behind it.
+        var loop = _app.Services.GetRequiredService<Ro3Emu.Server.Game.GameLoop>();
+        var owners = _app.Services.GetRequiredService<Ro3Emu.Server.Game.Ownership.OwnerRegistry>();
+        var held = new TaskCompletionSource();
+        var release = new TaskCompletionSource();
+        var holder = loop.InvokeAsync(async () =>
+        {
+            using var scope = await owners.EnterAsync("test/bob-busy", Ro3Emu.Server.Game.Ownership.ReservationKey.Role(bobId));
+            held.SetResult();
+            await release.Task;
+        });
+        await held.Task.WaitAsync(Wait);
+        try
+        {
+            Assert.Equal("Bob", Name(await alice.GetRoleAttributesAsync(bobId).WaitAsync(Wait)));
+        }
+        finally
+        {
+            release.SetResult();
+            await holder;
+        }
     }
 
     private static string RepoRoot()

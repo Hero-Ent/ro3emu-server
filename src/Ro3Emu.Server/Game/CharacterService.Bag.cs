@@ -19,7 +19,7 @@ public sealed partial class CharacterService
         var removed = session.Items.Where(i => i.Grid == 0 && !EmblemService.IsReserved(session, i) && !TotemService.IsReserved(session, i)).ToList();
         var next = session.Items.Except(removed).Select(i => i.Clone()).ToList();
         await CommitCharacterAsync(session, "gm-clear", nextItems: next,
-            costs: removed.Select(i => (i.Entry, (long)i.Stack)).ToArray());
+            costs: [.. removed.Select(i => (i.Entry, (long)i.Stack))]);
         await SyncItemsAsync(session);
         if (removed.Count > 0) foreach (var handler in StateChanged) handler(session);
         return $"Removed {removed.Count} item(s).";
@@ -44,6 +44,10 @@ public sealed partial class CharacterService
 
     /// <summary>31323: uses one item from a stack (the client plays the item's own effect list).</summary>
     public Task UseItemAsync(GameSession session, ItemUseReq req) => UseItemCoreAsync(session, req, reply: true);
+
+    /// <summary>The server uses one unit itself: the same validated path, without a 31323 reply nobody asked for.</summary>
+    internal Task<int> AutoUseItemAsync(GameSession session, long guid) =>
+        UseItemCoreAsync(session, new ItemUseReq { ItemGuid = guid, ItemCount = 1 }, reply: false);
 
     /// <summary>BuffService supplies live item-use restrictions to every use path, including shortcuts.</summary>
     public Func<GameSession, bool>? IsItemUseForbidden { get; set; }
@@ -72,7 +76,7 @@ public sealed partial class CharacterService
             : req.ItemParam.Count > 0 && WingDestination(row.Value, req) == null && !CarriesPetChoice(row.Value, req)
                 && !CarriesBoxParam(row.Value, req)
                 && !AcceptsItemActionParam(row.Value, req) ? ErrorCodes.FeatureUnavailable
-            : item.BindExpire > 0 && item.BindExpire <= DateTimeOffset.UtcNow.ToUnixTimeSeconds() ? ErrorCodes.ItemMissing
+            : item.BindExpire > 0 && item.BindExpire <= UseClock.GetUtcNow().ToUnixTimeSeconds() ? ErrorCodes.ItemMissing
             : session.Dead ? ErrorCodes.UseWhileDead
             : IsItemUseForbidden?.Invoke(session) == true ? ErrorCodes.ItemUseForbidden
             : session.ItemCds.GetValueOrDefault(item.Entry) > now || group > 0 && session.ItemGroupCds.GetValueOrDefault(group) > now ? ErrItemInCd
@@ -366,7 +370,7 @@ public sealed partial class CharacterService
             replacements[old] = item;
         }
         roles.Commit(builder, "character/card-pack-migration");
-        session.Items = session.Items.Select(i => replacements.GetValueOrDefault(i, i)).ToList();
+        session.Items = [.. session.Items.Select(i => replacements.GetValueOrDefault(i, i))];
     }
 
     /// <summary>Mail-only preflight for combined plain, bound, exact-instance and long-currency grants under StateLock.</summary>
@@ -447,6 +451,11 @@ public sealed partial class CharacterService
             ItemGuid = item.Guid, ItemEntry = item.Entry, Stack = item.Stack, IsLocked = item.IsLocked,
             ItemBindInfo = new ItemBindInfo { ItemBindType = (ItemBindType)item.BindType, ExpireTimeStamp = item.BindExpire },
         };
+        // A seasonal item with no season reads "This item has expired" (LC_ItemHelper.GetIsSeasonItemValid). Nothing lapses
+        // here (all content stays open), so it belongs to the current season (inferred).
+        var config = Data.Config.ItemConfig.Get(data, item.Entry);
+        if (config is { SeasonResetType: not 0 }) info.Season = seasons.SeasonId;
+        if (config is { TimeBoundEnum: AcquireTimeBound }) info.ExpireTm = item.BindExpire; // AcquireExpiry
         info.ItemInfos[AttrSetUpSource] = new ItemAttrValue { LongVal = 0 };
         if (IsEquipment(item.Entry)) info.ItemInfos[AttrAppraise] = new ItemAttrValue { LongVal = IsAppraised(item) ? 1 : 0 };
         if (item.Attrs != null)

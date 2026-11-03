@@ -84,8 +84,8 @@ public sealed partial class BuffService
 
     private long[]? _energyMounts;
 
-    private long[] EnergyMounts() => _energyMounts ??= _data.Table("EnergyConfig").Values
-        .Select(row => GameData.Int(row, "_iBelongMount")).Where(id => id > 0).Distinct().ToArray();
+    private long[] EnergyMounts() => _energyMounts ??= [.. _data.Table("EnergyConfig").Values
+        .Select(row => GameData.Int(row, "_iBelongMount")).Where(id => id > 0).Distinct()];
 
     /// <summary>
     /// SkillConfig._kCost type 8 [8,energyConfigId,ratioOfMax,minimumFlat].
@@ -93,7 +93,7 @@ public sealed partial class BuffService
     /// </summary>
     private bool TryEnergyCosts(JsonElement skill, out List<(int EnergyId, long Amount)> result)
     {
-        result = new();
+        result = [];
         if (!skill.TryGetProperty("_kCost", out var costs) || costs.ValueKind != JsonValueKind.Array) return true;
         var totals = new Dictionary<int, long>();
         foreach (var entry in costs.EnumerateArray())
