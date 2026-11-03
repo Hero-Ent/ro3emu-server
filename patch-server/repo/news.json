@@ -1,6 +1,13 @@
 {
   "items": [
     {
+      "tag": "PATCH 1.1.6",
+      "color": "green",
+      "title": "Patch Notes v1.1.6 - Movimentação no Modo Clássico",
+      "text": "• Modo Clássico: Corrigido o bug em que a célula de movimento não aparecia sob o mouse e o clique esquerdo apenas girava a câmera, principalmente nos mapas de campo. Agora clicar no chão volta a mover o personagem normalmente.\n• Configurações: O servidor passa a reparar automaticamente as configurações de movimento por mouse dos personagens no Modo Clássico.\n• Atualizador 1.1.6.",
+      "date": "2026-11-03"
+    },
+    {
       "tag": "PATCH 1.1.5",
       "color": "green",
       "title": "Patch Notes v1.1.5 - Instâncias, Ecos da Alma, Combate e Performance",
