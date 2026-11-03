@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Ro3Emu.ClientHooks
@@ -30,6 +31,15 @@ namespace Ro3Emu.ClientHooks
     /// ResetStatus or PossessBegin it is put back and applied with ChangeCameraDistance(0), which clamps it to the new
     /// camera's limits.
     /// </para>
+    /// <para>
+    /// The range: RD_CameraTransition._processParam (module "rd_cameratransition") turns the row into m_kParam whenever a
+    /// camera config is applied, and reads _fZoomOutLimit as the farthest distance only when it builds the camera's range
+    /// (_fZoomRangeL/R) from the row. Every other switch (Reset, SwitchTo: map changes, the Classic mode's camera) keeps the
+    /// range it already had and rewrites _fZoomOutLimit as _fZoomRangeR - _fDistance, and ChangeCameraDistance clamps the
+    /// distance to _fZoomRangeR as well. So a range built before the raised rows (or from a row read earlier) kept the
+    /// client's own limit and the camera went no farther. After each _processParam the range is raised to the row's
+    /// farthest distance, and the kept zoom is applied again under it.
+    /// </para>
     /// </summary>
     public static class CameraZoom
     {
@@ -44,12 +54,20 @@ namespace Ro3Emu.ClientHooks
         public delegate void Method2(Obf_R.Obf_ff self, object a, object b);
         /// <summary>self:Method(a, b, c)</summary>
         public delegate void Method3(Obf_R.Obf_ff self, object a, object b, object c);
+        /// <summary>self:Method(a, b, c, d, e)</summary>
+        public delegate void Method5(Obf_R.Obf_ff self, object a, object b, object c, object d, object e);
 
         private static Obf_R.Obf_Ef _change, _scaleDone, _resetStatus, _possessBegin;
         // Kept alive here: Lua holds the pushed delegates only weakly through xLua's object pool.
         private static readonly Method2 ChangeWrapper = ChangeCameraDistance;
         private static readonly Method1 ScaleDoneWrapper = ScaleDone, PossessWrapper = PossessBegin;
         private static readonly Method3 ResetWrapper = ResetStatus;
+        private static readonly Method5 ProcessWrapper = ProcessParam;
+        private static Obf_R.Obf_Ef _processParam;
+        // The farthest distance of each raised camera config row, by _iId.
+        private static readonly Dictionary<double, double> Farthest = new Dictionary<double, double>();
+        // The player's camera controller (RD_CameraController_LockTr), as last seen by a wrapper.
+        private static Obf_R.Obf_ff _lockTr;
         private static bool _loaded, _has;
         private static double _scale;
 
@@ -58,6 +76,7 @@ namespace Ro3Emu.ClientHooks
         {
             RaiseLimits(global, module("camera"));
             KeepZoom(module("rd_cameracontroller_locktr"));
+            KeepRange(module("rd_cameratransition"));
         }
 
         private static void RaiseLimits(Obf_R.Obf_ff global, Obf_R.Obf_ff camera)
@@ -81,7 +100,10 @@ namespace Ro3Emu.ClientHooks
                 // The limit is an offset from _fDistance: the farthest distance goes up by the factor.
                 double distance = Number(row.Obf_RuA<object>("_fDistance")), zoomOut = Number(row.Obf_RuA<object>("_fZoomOutLimit"));
                 if (double.IsNaN(distance) || double.IsNaN(zoomOut) || zoomOut <= 0) continue;
-                rawset.Obf_HuA(row, "_fZoomOutLimit", (distance + zoomOut) * ZoomOutFactor - distance);
+                double raised = (distance + zoomOut) * ZoomOutFactor - distance;
+                rawset.Obf_HuA(row, "_fZoomOutLimit", raised);
+                double id = Number(row.Obf_RuA<object>("_iId"));
+                Farthest[double.IsNaN(id) ? Number(key) : id] = raised;
                 changed++;
             }
             Debug.Log("[Ro3Emu.CameraZoom] farthest zoom x" + ZoomOutFactor + " on " + changed + " camera config(s)");
@@ -114,26 +136,57 @@ namespace Ro3Emu.ClientHooks
             Debug.Log("[Ro3Emu.CameraZoom] the player's zoom is kept" + (_has ? " (saved offset " + _scale.ToString("0.##") + ")" : ""));
         }
 
+        private static void KeepRange(Obf_R.Obf_ff transition)
+        {
+            if (transition == null) { Debug.LogWarning("[Ro3Emu.CameraZoom] rd_cameratransition not found: range not raised"); return; }
+            if (transition.Obf_RuA<object>(Marker) != null) return;
+            _processParam = transition.Obf_RuA<Obf_R.Obf_Ef>("_processParam");
+            if (_processParam == null) { Debug.LogWarning("[Ro3Emu.CameraZoom] RD_CameraTransition._processParam not found: range not raised"); return; }
+            transition.Obf_luA<string, Method5>("_processParam", ProcessWrapper);
+            transition.Obf_luA<string, object>(Marker, true);
+            Debug.Log("[Ro3Emu.CameraZoom] the camera range follows the raised limit");
+        }
+
+        private static void ProcessParam(Obf_R.Obf_ff self, object a, object b, object c, object d, object e)
+        {
+            _processParam?.Obf_HuA(self, a, b, c, d, e);
+            try
+            {
+                var param = self?.Obf_RuA<Obf_R.Obf_ff>("m_kCamera")?.Obf_RuA<Obf_R.Obf_ff>("m_kParam");
+                if (param == null || !Farthest.TryGetValue(Number(param.Obf_RuA<object>("_iId")), out double farthest)) return;
+                double distance = Number(param.Obf_RuA<object>("_fDistance")), range = Number(param.Obf_RuA<object>("_fZoomRangeR"));
+                if (double.IsNaN(distance) || (!double.IsNaN(range) && range >= farthest)) return;
+                param.Obf_luA<string, object>("_fZoomRangeR", farthest);
+                param.Obf_luA<string, object>("_fZoomOutLimit", Math.Max(farthest, distance) - distance);
+                Restore(_lockTr);
+            }
+            catch (Exception ex) { Debug.LogWarning("[Ro3Emu.CameraZoom] range: " + ex.Message); }
+        }
+
         private static void ChangeCameraDistance(Obf_R.Obf_ff self, object delta, object param)
         {
+            _lockTr = self;
             _change?.Obf_HuA(self, delta, param);
             if (param == null) Remember(self); // the player's wheel; a script passes its own parameters
         }
 
         private static void ScaleDone(Obf_R.Obf_ff self, object delta)
         {
+            _lockTr = self;
             _scaleDone?.Obf_HuA(self, delta);
             Remember(self);
         }
 
         private static void ResetStatus(Obf_R.Obf_ff self, object a, object b, object c)
         {
+            _lockTr = self;
             _resetStatus?.Obf_HuA(self, a, b, c);
             Restore(self);
         }
 
         private static void PossessBegin(Obf_R.Obf_ff self, object unit)
         {
+            _lockTr = self;
             _possessBegin?.Obf_HuA(self, unit);
             Restore(self);
         }
