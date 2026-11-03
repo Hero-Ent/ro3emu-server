@@ -17,6 +17,34 @@ compartilhado. Integramos as novidades deles por **merge** (nunca cherry-pick), 
 | 2026-10-22 | `6befb4b..9f3c04d8` (145 commits, PRs #10-#61) | tudo, em 4 etapas (`de99453e`, `9cd23f33`, `249a72be`, `9f3c04d8`) | nenhum revertido; ajustes abaixo | ver "Sync 2026-10-22" |
 | 2026-10-27 | `bbc9e3b2..7122af4f` (38 commits, PRs #85-#117) | tudo | nenhum revertido | ver "Sync 2026-10-27" |
 | 2026-10-31 | `7122af4f..077e59e9` (176 commits, PRs #118-#214) | tudo com preservação dos pontos críticos | nenhum revertido; launcher e identidades mantidos | ver "Sync 2026-10-31" |
+| 2026-11-03 | `077e59e9..ff0ad473` (152 commits, PRs #215-#366) | Grupos A, C, D, E, F, G | Grupo B (Dungeons/Raids/Maya DG - já corrigidas no Hero Saga) | ver "Sync 2026-11-03" |
+
+## Sync 2026-11-03
+
+Faixa `077e59e9..ff0ad473` (152 commits de conteúdo, cobrindo PRs #215 a #366): refinamento de combate e animações,
+novas fórmulas e mecânicas de arqueiro/flechas elementais, segurança de endpoints de operação (`OperatorToken`),
+sistemas de facção (`FactionDay`/`FactionPoints`), suporte a montarias e veículos, correções no sistema de refino
+(sync 5007), e modernização das coleções para C# 12.
+
+Decisões do usuário e pontos preservados:
+
+- **Grupo B (Dungeons, Raids, Maya DG / cenários reconstruídos):** Pulado / rejeitado intencionalmente a pedido do usuário ("B pode pular, se for da DG da maya, essa já corrigimos"). As correções e mecânicas customizadas das dungeons do Hero Saga foram mantidas intactas.
+- **Identidade Visual e Launcher (Crítico):** Mantida 100% a identidade do Hero Saga (`HeroLauncher`), rotas de patcher e contagem de censo (`ActiveAccounts` + in-game).
+- **Combate e Auto-ataque:** Incorporadas as melhorias do upstream (atraso de animação de auto-ataque, elemento de flecha para arqueiros, alvos nulos seguros no Falcon), preservando estritamente:
+  1. Tolerância de 500 ms de auto-ataque (`AttackStopGraceMs = 500`).
+  2. Movimento não cancelar cast do jogador.
+  3. Empurrão da Defesa com Escudo (`Shield Defense` / `MechanicDisplacement`).
+  4. Avanço da Investida Destemida (`CasterCharges`).
+- **Barra de Atalhos:** Preservado o suporte e normalização aos 9 slots (`ShortcutSlotLimit = 9`, `BarSlots = 9`) do Hero Saga.
+- **README da Raiz:** Mantido o README customizado do Hero Saga.
+
+Como os conflitos foram resolvidos:
+
+- **Segurança e OpsEndpoints:** Upstream introduziu `OperatorToken` com `.RequireOperator()` para rotas sensíveis (`/ro3emu/online`, `/ro3emu/gm`, `/ro3emu/reports`, `/ro3emu/shutdown`). Foram eliminados mappings duplicados em `ServerHost.cs` que causavam `AmbiguousMatchException` e os testes legados foram compatibilizados para autenticação de operador (`Operator.Client()`).
+- **Economia S3 (`ExpectedFormatManifestHash`):** Compatibilizado `TaskRuntimeState` unindo `FactionDay` e `FactionPoints` do upstream com `GmResets` do Hero Saga. O hash do manifesto foi atualizado para `"C9BD18647272BD159C9DD658F6036A42D4FE681E8D7944A8129EB6EBDF99AA9C"`.
+- **Registro no Jogo vs RefuseUnknownAccounts:** Ajustada a checagem em `SdkEndpoints.cs` para validar nomes contra caracteres ilegais e espaços (`AccountNames.Problem(identity) == null`) respeitando a flag `AllowInGameRegistration` e `RefuseUnknownAccounts`.
+- **Testes Unitários:** 1.306 testes rápidos passando com 0 falhas (`tests/Ro3Emu.Tests -c Release --filter "Category!=Slow"`).
+
 
 ## Sync 2026-10-31
 
