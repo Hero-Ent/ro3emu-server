@@ -47,7 +47,7 @@ public sealed partial class CombatService
     private static (long Id, Vec3 Pos)? FalconTarget(long requested, IReadOnlyList<MonsterUnit> targets,
         GameSession[] players)
     {
-        var monster = targets.FirstOrDefault(m => m.Uid == requested) ?? targets.FirstOrDefault();
+        var monster = targets.FirstOrDefault(m => m.Uid == requested) ?? (targets.Count > 0 ? targets[0] : null);
         if (monster != null) return (monster.Uid, monster.Pos);
         var player = players.FirstOrDefault(p => p.Role?.Id == requested)
             ?? players.FirstOrDefault(p => p.Role != null);

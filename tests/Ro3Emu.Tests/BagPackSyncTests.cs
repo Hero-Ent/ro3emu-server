@@ -118,10 +118,10 @@ public sealed class BagPackSyncTests
         var first = new InvItem { Entry = 1000000, Stack = 50, Pack = 1, Sort = 2 };
         var second = new InvItem { Entry = 1000000, Stack = 7, Pack = 1, Sort = 5 };
         var third = new InvItem { Entry = 1004000, Stack = 1, Pack = 1, Sort = 5 };
-        foreach (var item in new[] { first, second, third }) store.Insert(role, item);
+        foreach (var item in (InvItem[])[first, second, third]) store.Insert(role, item);
         await bot.EnterWorldAsync(role);
         var sorted = (await Next(bot)).PackInfo[1].All.SortedIndex;
-        Assert.Equal(new long[] { 1, 2, 3 }, sorted.Values.Order());
+        Assert.Equal([1L, 2L, 3L], sorted.Values.Order());
         Assert.Equal(1L, sorted[first.Guid]);
         Assert.Equal(second.Guid < third.Guid, sorted[second.Guid] < sorted[third.Guid]);
     }

@@ -40,8 +40,9 @@ public sealed class FakePlayerTests
     public void ProfilesMixClassesHairAndBehaviours()
     {
         var profiles = Enumerable.Range(1, 1000).Select(FakeProfile.For).ToList();
-        foreach (FakeBehavior behavior in Enum.GetValues<FakeBehavior>())
+        foreach (FakeBehavior behavior in Enum.GetValues<FakeBehavior>().Where(b => b != FakeBehavior.Warrior))
             Assert.Contains(profiles, p => p.Behavior == behavior);
+        Assert.Equal(FakeBehavior.Warrior, FakeProfile.For(FakeProfile.WarAttackFirst).Behavior);
         Assert.All(profiles, p =>
         {
             Assert.InRange(p.Hair, p.Sex == 1 ? 70000000 : 72000000, p.Sex == 1 ? 70000014 : 72000014);
@@ -54,7 +55,7 @@ public sealed class FakePlayerTests
         Assert.True(profiles.Select(p => p.Job).Distinct().Count() >= 25);
         // Every rank shows up: Novice, first, second, transcendent and third classes.
         int Rank(int job) => job == 1000 ? 1 : job % 1000 / 100 + 1;
-        Assert.All(new[] { 1, 2, 3, 4, 5 }, rank => Assert.Contains(profiles, p => Rank(p.Job) == rank));
+        Assert.All([1, 2, 3, 4, 5], rank => Assert.Contains(profiles, p => Rank(p.Job) == rank));
         Assert.InRange(profiles.Count(p => Rank(p.Job) >= 3), 600, 750); // most players have a second class or above
         Assert.All(profiles.Where(p => Rank(p.Job) == 5), p => Assert.True(p.BaseLevel >= 70));
         Assert.InRange(profiles.Count(p => p.Behavior == FakeBehavior.Hunter), 250, 450);
@@ -101,7 +102,7 @@ public sealed class FakePlayerTests
     {
         // Enough players for every behaviour (the host starts indices 1..n).
         var profiles = Enumerable.Range(1, 200).Select(FakeProfile.For).ToList();
-        int count = Enum.GetValues<FakeBehavior>().Max(b => profiles.First(p => p.Behavior == b).Index);
+        int count = Enum.GetValues<FakeBehavior>().Where(b => b != FakeBehavior.Warrior).Max(b => profiles.First(p => p.Behavior == b).Index);
         var dataDir = Path.Combine(Path.GetTempPath(), "ro3emu-fake-" + Guid.NewGuid().ToString("N"));
         var (httpPort, microPort, gamePort) = TestPorts.FreePorts();
         var app = ServerHost.Create([], o =>

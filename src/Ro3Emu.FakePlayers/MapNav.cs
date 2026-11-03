@@ -44,7 +44,7 @@ public sealed class MapNav
                 queue.Enqueue((nx, nz, ny));
             }
         }
-        return result.ToArray();
+        return [.. result];
     }
 
     private static readonly (int, int)[] Neighbours = [(1, 0), (-1, 0), (0, 1), (0, -1)];

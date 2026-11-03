@@ -124,7 +124,7 @@ public sealed partial class DungeonService
     /// <summary>A shown unit plays a skill's show (31100 from it): an actor, an ally, a cue unit or a rider.</summary>
     private async Task CueCastAsync(Attempt a, ReconstructedDungeons.Cue cue)
     {
-        foreach (var unit in a.SceneActors.Concat(a.Allies).Concat(a.CueUnits).Concat(a.Riders.Values.SelectMany(c => c))
+        foreach (var unit in a.SceneActors.Concat(a.Allies).Concat(a.CueUnits).Concat(a.UnitRiders.Values.SelectMany(c => c))
                 .Where(u => u.NpcId == cue.Speaker && !u.Removed).ToArray())
             await SkillShowAsync(unit, cue.Cast);
     }
@@ -178,7 +178,7 @@ public sealed partial class DungeonService
     private async Task DismissAsync(Attempt a, int npcId)
     {
         foreach (var unit in a.CueUnits.Where(u => u.NpcId == npcId).ToArray())
-            if (a.Riders.Remove(unit.Uid, out var crew))
+            if (a.UnitRiders.Remove(unit.Uid, out var crew))
                 foreach (var rider in crew) await _instances.RemovePropAsync(a.Room, rider);
     }
 
@@ -186,7 +186,7 @@ public sealed partial class DungeonService
     private async Task RemoveCueUnitAsync(Attempt a, SceneActorUnit unit)
     {
         a.CueUnits.Remove(unit);
-        if (a.Riders.Remove(unit.Uid, out var crew))
+        if (a.UnitRiders.Remove(unit.Uid, out var crew))
             foreach (var rider in crew) await _instances.RemovePropAsync(a.Room, rider);
         await _instances.RemovePropAsync(a.Room, unit);
     }
@@ -268,7 +268,7 @@ public sealed partial class DungeonService
         if (unit.Removed) return;
         long now = MonsterService.NowMs;
         await _world.MoveUnitAsync(unit, unit.Walk(to.X, to.Y, to.Z, now, now + ms));
-        foreach (var rider in a.Riders.GetValueOrDefault(unit.Uid) ?? [])
+        foreach (var rider in a.UnitRiders.GetValueOrDefault(unit.Uid) ?? [])
         {
             if (rider.Seat is not { } seat || rider.Removed) continue;
             var (x, z) = Seat(to.X, to.Z, unit.Face, seat);
@@ -307,7 +307,7 @@ public sealed partial class DungeonService
         unit.Seat = rider;
         AddBornBuffs(unit);
         if (!await _instances.AddPropAsync(a.Room, unit)) return;
-        if (!a.Riders.TryGetValue(ship.Uid, out var crew)) a.Riders[ship.Uid] = crew = [];
+        if (!a.UnitRiders.TryGetValue(ship.Uid, out var crew)) a.UnitRiders[ship.Uid] = crew = [];
         crew.Add(unit);
         if (ship.SightRadius > 0) await _world.WidenSightAsync(unit, ship.SightRadius);
     }
@@ -327,7 +327,7 @@ public sealed partial class DungeonService
         var to = path[next];
         int ms = _monsters.Fly(ship, to.X, to.Y, to.Z);
         if (ms <= 0) return;
-        foreach (var rider in a.Riders.GetValueOrDefault(ship.Uid) ?? [])
+        foreach (var rider in a.UnitRiders.GetValueOrDefault(ship.Uid) ?? [])
         {
             if (rider.Seat is not { } seat || rider.Removed) continue;
             var (x, z) = Seat(to.X, to.Z, ship.Face, seat);
@@ -345,7 +345,7 @@ public sealed partial class DungeonService
         if (a.Settled || a.Room.Closed || ship.Dead) return;
         _monsters.Turn(ship, face);
         long now = MonsterService.NowMs;
-        foreach (var rider in a.Riders.GetValueOrDefault(ship.Uid) ?? [])
+        foreach (var rider in a.UnitRiders.GetValueOrDefault(ship.Uid) ?? [])
         {
             if (rider.Seat is not { } seat || rider.Removed) continue;
             var (x, z) = Seat(ship.X, ship.Z, face, seat);
@@ -364,7 +364,7 @@ public sealed partial class DungeonService
                         SourceId = monster.Uid, TargetId = monster.Uid, TargetPos = monster.Pos, Is3DPosition = true,
                         EffectId = effect, EffectType = kind, SkillId = OwnerSkill(effect),
                     });
-        if (a.Riders.Remove(monster.Uid, out var crew))
+        if (a.UnitRiders.Remove(monster.Uid, out var crew))
             foreach (var rider in crew) await _instances.RemovePropAsync(a.Room, rider);
     }
 

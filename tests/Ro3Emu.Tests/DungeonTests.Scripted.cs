@@ -15,8 +15,8 @@ namespace Ro3Emu.Tests;
 /// </summary>
 public sealed partial class DungeonTests
 {
-    public static TheoryData<long> ScriptedScenes() => new(new ReconstructedDungeons(
-        Options.Create(new ServerOptions())).AllScripted.Select(s => s.Scene).Order());
+    public static TheoryData<long> ScriptedScenes() => [.. new ReconstructedDungeons(
+        Options.Create(new ServerOptions())).AllScripted.Select(s => s.Scene).Order()];
 
     [ClientDataTheory]
     [MemberData(nameof(ScriptedScenes))]
@@ -61,7 +61,7 @@ public sealed partial class DungeonTests
             r => r.Result == 0 && r.Req.NpcUid == chief.Uid && r.Req.InteractionId == 5300052);
         await Next(alice, 1022, SystemBoardCastMsgNtf.Parser, m => m.ChatId == 5300550);
         Task<int> Crew() => Service<GameLoop>().InvokeAsync(() =>
-            Task.FromResult(Session(alice).DungeonAttempt?.Riders.Values.Sum(c => c.Count(u => !u.Removed)) ?? 0));
+            Task.FromResult(Session(alice).DungeonAttempt?.UnitRiders.Values.Sum(c => c.Count(u => !u.Removed)) ?? 0));
         for (int i = 0; i < 150 && await Crew() < 4; i++) await Task.Delay(20);
         Assert.Equal(4, await Crew()); // the pirates' ship and its crew
 
@@ -733,7 +733,7 @@ public sealed partial class DungeonTests
         {
             shown = await Service<GameLoop>().InvokeAsync(() => Task.FromResult(
                 Session(bot).DungeonAttempt?.SceneActors.ToArray() ?? []));
-            if (ready(shown)) return shown.Where(a => match == null || match(a)).ToArray();
+            if (ready(shown)) return [.. shown.Where(a => match == null || match(a))];
             await Task.Delay(20);
         }
         throw new TimeoutException($"The scene actors did not reach the expected state; shown: {string.Join(", ", shown.Select(a => $"{a.NpcId}@{a.Point}[{string.Join('/', a.Buffs.Select(b => b.ConfigId))}]"))}");

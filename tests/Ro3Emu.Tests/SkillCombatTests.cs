@@ -393,9 +393,6 @@ public sealed partial class SkillCombatTests : IAsyncLifetime
         Assert.Equal(1_000_000, takeoff.Hp);
     }
 
-    private System.Text.Json.JsonElement SkillRow(int id) =>
-        _app.Services.GetRequiredService<Ro3Emu.Server.Data.GameData>().Row("SkillConfig", id)!.Value;
-
     [ClientDataFact]
     public async Task GroundNpcUsesRequestedPositionAndDespawnsOnTeardown()
     {

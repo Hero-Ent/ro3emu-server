@@ -18,9 +18,9 @@ public sealed partial class LifeJobService
     private int[]? _energyCurrencies;
     private readonly HashSet<GameSession> _energyQueued = [];
 
-    private int[] EnergyCurrencies() => _energyCurrencies ??= ItemConfig.All(_data)
+    private int[] EnergyCurrencies() => _energyCurrencies ??= [.. ItemConfig.All(_data)
         .Where(item => item.Type == CharacterService.ItemTypeCurrency && item.SubType == LifeEnergySubType)
-        .Select(item => (int)item.Id).ToArray();
+        .Select(item => (int)item.Id)];
 
     /// <summary>
     /// RestrictConfig[1004]._iDes shows VitalityExtraLimit as the most Vigor a role can accumulate, the cap the Vivify

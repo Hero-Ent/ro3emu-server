@@ -343,7 +343,7 @@ public sealed class SkillGrowthTests : IAsyncLifetime
     public void WheelKeysKeepTheOriginalSixAndMoveTheExtraSlotsPastTheClientEnum()
     {
         Assert.Equal([1, 2, 3, 4, 5, 6, 101, 102, 103],
-            Enumerable.Range(1, SkillService.BarSlots).Select(SkillService.WheelKey).ToArray());
+            [.. Enumerable.Range(1, SkillService.BarSlots).Select(SkillService.WheelKey)]);
     }
 
     [ClientDataFact]

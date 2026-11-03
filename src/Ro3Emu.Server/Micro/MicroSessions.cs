@@ -39,7 +39,7 @@ public sealed class MicroSessions(ILogger<MicroSessions> log)
     /// <summary>Active signed-in accounts on the micro gate.</summary>
     public IReadOnlyCollection<string> ActiveAccounts
     {
-        get { lock (_sync) return _byAccount.Keys.ToArray(); }
+        get { lock (_sync) return [.. _byAccount.Keys]; }
     }
 
     public void Remove(MicroSession session)

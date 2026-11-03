@@ -21,7 +21,7 @@ public sealed class GmSendTests : GmSendTestsBase
         await using var player = bob;
         var (alice, _) = await InWorld("Alice");
         await using var gm = alice;
-        using var client = new HttpClient();
+        using var client = Operator.Client();
         (await client.PostAsync($"{http}/ro3emu/gm?account=alice", new StringContent("!anuncio Teste global"))).EnsureSuccessStatusCode();
         await Reply(alice, "jogador");
         await Reply(bob, "Teste global");
@@ -46,7 +46,7 @@ public abstract class GmSendTestsBase : MailTestsHost
         var (alice, _) = await InWorld("Alice");
         await using var gm = alice;
 
-        using var client = new HttpClient();
+        using var client = Operator.Client();
         (await client.PostAsync($"{http}/ro3emu/gm?account=alice", new StringContent("!enviar Ninguem 1 500"))).EnsureSuccessStatusCode();
         await Reply(alice, "não encontrado");
         (await client.PostAsync($"{http}/ro3emu/gm?account=alice", new StringContent($"!enviar Bob {item} {count}"))).EnsureSuccessStatusCode();

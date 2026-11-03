@@ -25,7 +25,7 @@ public sealed partial class CombatService
     private const int SceneTrapShare = 3;
 
     private sealed class TrapClock { public long LastMs; }
-    private readonly ConditionalWeakTable<GameSession, TrapClock> _sceneTraps = new();
+    private readonly ConditionalWeakTable<GameSession, TrapClock> _sceneTraps = [];
 
     /// <summary>True when the request is a scene trap's self-hit, which is handled here and never cast.</summary>
     private bool SceneTrap(GameSession s, CastSkillReq req, JsonElement row)

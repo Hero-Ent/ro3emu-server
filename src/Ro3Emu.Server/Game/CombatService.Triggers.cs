@@ -13,7 +13,7 @@ namespace Ro3Emu.Server.Game;
 /// </summary>
 public sealed partial class CombatService
 {
-    private readonly Dictionary<(long Holder, int Buff), long> _triggerReady = new();
+    private readonly Dictionary<(long Holder, int Buff), long> _triggerReady = [];
 
     private void WireSkillTriggers()
     {

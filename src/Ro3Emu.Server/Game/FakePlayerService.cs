@@ -24,7 +24,7 @@ public sealed class FakePlayerService : IDisposable
     private readonly IServiceProvider _services;
     private readonly ILogger<FakePlayerService> _log;
     private readonly SemaphoreSlim _busy = new(1, 1);
-    private readonly HashSet<int> _registered = new();
+    private readonly HashSet<int> _registered = [];
     private readonly object _sync = new();
     private Process? _process;
     private string _lastStatus = "";
@@ -466,7 +466,7 @@ public sealed class FakePlayerService : IDisposable
     /// <summary>Spends every free stat point on the job line's usual build (each stat at most 99).</summary>
     private bool AllocateStats(RoleProgress p)
     {
-        var cost = _statCost ??= Enumerable.Range(0, CharacterService.MaxStat + 2).Select(v => v < 1 ? 0 : _character.StatCost(v)).ToArray();
+        var cost = _statCost ??= [.. Enumerable.Range(0, CharacterService.MaxStat + 2).Select(v => v < 1 ? 0 : _character.StatCost(v))];
         int total = _character.TotalPoints(p);
         int used = p.Stats.Sum(v => cost[Math.Clamp(v, 0, cost.Length - 1)]);
         if (total - used <= 0) return false;

@@ -124,7 +124,7 @@ public static class SkillMechanics
         return Triggers.TryGetValue(buff, out var t) ? t : buffGroup != 0 && GroupTriggers.TryGetValue(buffGroup, out var g) ? g : null;
     }
 
-    public static IReadOnlyCollection<BuffTrigger> EveryTrigger { get { _ = All.Value; return Triggers.Values.Concat(GroupTriggers.Values).ToList(); } }
+    public static IReadOnlyCollection<BuffTrigger> EveryTrigger { get { _ = All.Value; return [.. Triggers.Values.Concat(GroupTriggers.Values)]; } }
 
     private static readonly Lazy<IReadOnlyDictionary<long, Mechanic>> All = new(Load);
 
@@ -264,7 +264,7 @@ public static class SkillMechanics
             if (shape.TryGetProperty("fan", out var f)) fan = (f[0].GetSingle(), f[1].GetSingle());
         }
         static List<(int, int, int)> Buffs(JsonElement e, string key) => e.TryGetProperty(key, out var list)
-            ? list.EnumerateArray().Select(t => (t[0].GetInt32(), t[1].GetInt32(), t[2].GetInt32())).ToList() : [];
+            ? [.. list.EnumerateArray().Select(t => (t[0].GetInt32(), t[1].GetInt32(), t[2].GetInt32()))] : [];
         return new Mechanic(
             group, mode,
             e.TryGetProperty("name", out var name) ? name.GetString() ?? "" : "",
@@ -307,7 +307,7 @@ public static class SkillMechanics
             e.TryGetProperty("dash", out var dash3) && dash3.TryGetProperty("minDistance", out var dmin) ? dmin.GetSingle() : 0,
             e.TryGetProperty("stackGrant", out var sgr)
                 ? new StackGrant(sgr.GetProperty("counter").GetInt32(), sgr.GetProperty("at").GetInt32(),
-                    sgr.GetProperty("grants").EnumerateArray().Select(v => v.GetInt32()).ToList(),
+                    [.. sgr.GetProperty("grants").EnumerateArray().Select(v => v.GetInt32())],
                     sgr.TryGetProperty("piles", out var sgp) ? sgp.GetInt32() : 1)
                 : null,
             e.TryGetProperty("consumePiles", out var cp) ? cp.EnumerateArray().Select(v => v.GetInt32()).ToList() : null,
@@ -315,5 +315,5 @@ public static class SkillMechanics
     }
 
     private static List<int> Ints(JsonElement e, string block, string key) =>
-        e.TryGetProperty(block, out var b) && b.TryGetProperty(key, out var list) ? list.EnumerateArray().Select(v => v.GetInt32()).ToList() : [];
+        e.TryGetProperty(block, out var b) && b.TryGetProperty(key, out var list) ? [.. list.EnumerateArray().Select(v => v.GetInt32())] : [];
 }

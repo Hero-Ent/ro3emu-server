@@ -16,14 +16,14 @@ public static class PublishCache
         [JsonPropertyName("mtime")] public long MtimeTicks { get; set; }
         [JsonPropertyName("sha256")] public string Sha256 { get; set; } = "";
         /// <summary>Chunk hash and raw size, in file order.</summary>
-        [JsonPropertyName("chunks")] public List<CachedChunk> Chunks { get; set; } = new();
+        [JsonPropertyName("chunks")] public List<CachedChunk> Chunks { get; set; } = [];
 
         public static Entry From(ManifestFile file, FileInfo source) => new()
         {
             Size = source.Length,
             MtimeTicks = source.LastWriteTimeUtc.Ticks,
             Sha256 = file.Sha256,
-            Chunks = file.Chunks.Select(c => new CachedChunk { Hash = c.Hash, Size = c.Size }).ToList(),
+            Chunks = [.. file.Chunks.Select(c => new CachedChunk { Hash = c.Hash, Size = c.Size })],
         };
     }
 
@@ -36,7 +36,7 @@ public static class PublishCache
     sealed class CacheFile
     {
         [JsonPropertyName("chunking")] public string Chunking { get; set; } = "";
-        [JsonPropertyName("files")] public Dictionary<string, Entry> Files { get; set; } = new();
+        [JsonPropertyName("files")] public Dictionary<string, Entry> Files { get; set; } = [];
     }
 
     static string Key(ChunkingParameters p) => $"{p.Min}/{p.Avg}/{p.Max}";

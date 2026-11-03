@@ -190,9 +190,13 @@ public sealed partial class ReconstructedDungeons
     /// <paramref name="RestartOnDeath"/>: a participant's death starts the scene over from its beginning.
     /// </summary>
     public sealed record ScriptedScene(long Scene, string Name, string Confidence, IReadOnlyList<ScriptedStep> Steps,
-        IReadOnlyList<int> Unplayed, long Next = 0, bool RestartOnDeath = false);
+        IReadOnlyList<int> Unplayed, long Next = 0, bool RestartOnDeath = false, long ContinuesTo = 0, bool LeavesAfterClear = false)
+    {
+        public long ContinuesTo { get; init; } = ContinuesTo != 0 ? ContinuesTo : Next;
+        public bool LeavesAfterClear { get; init; } = LeavesAfterClear;
+    }
 
-    private readonly Dictionary<long, ScriptedScene> _scripted = new();
+    private readonly Dictionary<long, ScriptedScene> _scripted = [];
 
     public IReadOnlyCollection<ScriptedScene> AllScripted => _scripted.Values;
 
@@ -211,10 +215,14 @@ public sealed partial class ReconstructedDungeons
             if (steps.Length == 0) throw new InvalidOperationException($"Scripted scene {scene} has no steps.");
             var unplayed = entry.Value.TryGetProperty("unplayed", out var u)
                 ? u.EnumerateArray().Select(q => q.GetProperty("quest").GetInt32()).ToArray() : [];
+            long nextScene = entry.Value.TryGetProperty("continuesTo", out var ct) ? ct.GetInt64()
+                : entry.Value.TryGetProperty("next", out var n) ? n.GetInt64() : 0;
+            bool leaves = entry.Value.TryGetProperty("leavesAfterClear", out var l) && l.GetBoolean();
             _scripted[scene] = new ScriptedScene(scene, entry.Value.GetProperty("name").GetString() ?? "",
                 entry.Value.GetProperty("confidence").GetString() ?? "", steps, unplayed,
-                entry.Value.TryGetProperty("next", out var next) ? next.GetInt64() : 0,
-                entry.Value.TryGetProperty("restartOnDeath", out var restart) && restart.GetBoolean());
+                nextScene,
+                entry.Value.TryGetProperty("restartOnDeath", out var restart) && restart.GetBoolean(),
+                nextScene, leaves);
         }
     }
 

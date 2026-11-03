@@ -20,9 +20,9 @@ public sealed class FieldDummyService : IGameTicker
     private readonly World world;
     private readonly GameLoop loop;
     private readonly ILogger<FieldDummyService> log;
-    private readonly List<(long Scene, float X, float Z)> spots = new();
-    private readonly Dictionary<int, MonsterUnit> live = new();
-    private readonly HashSet<int> spawning = new();
+    private readonly List<(long Scene, float X, float Z)> spots = [];
+    private readonly Dictionary<int, MonsterUnit> live = [];
+    private readonly HashSet<int> spawning = [];
     private long nextCheckMs;
 
     public FieldDummyService(IOptions<ServerOptions> options, MonsterService monsters, World world, CombatService combat,

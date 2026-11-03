@@ -24,7 +24,7 @@ public sealed partial class FakePlayer(FakePlayerHost host, FakeProfile profile)
     private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(15);
 
     private readonly Random _r = new(profile.Index * 31 + Environment.TickCount);
-    private readonly Dictionary<ulong, DateTime> _ignored = new();
+    private readonly Dictionary<ulong, DateTime> _ignored = [];
     private volatile bool _dead, _disconnected;
     private float _x, _y, _z;
     /// <summary>Facing in degrees (0 = +z, clockwise): where the character looks and walks.</summary>
@@ -361,8 +361,8 @@ public sealed partial class FakePlayer(FakePlayerHost host, FakeProfile profile)
 
     private ulong _target;
     private long _targetScene;
-    private readonly Dictionary<int, DateTime> _skillReady = new();
-    private readonly HashSet<int> _skillBroken = new();
+    private readonly Dictionary<int, DateTime> _skillReady = [];
+    private readonly HashSet<int> _skillBroken = [];
     private DateTime _skillsRestUntil;
 
     /// <summary>Attack skills the server taught this player (FakePlayerService "skills" line); cast between normal hits.</summary>

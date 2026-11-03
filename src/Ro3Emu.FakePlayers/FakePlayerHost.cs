@@ -75,8 +75,8 @@ public sealed class FakePlayerHost : IAsyncDisposable
     private readonly GameData _data;
     private readonly WorldData _world;
     private readonly ConcurrentDictionary<long, Lazy<MapNav?>> _navs = new();
-    private readonly Dictionary<int, (FakePlayer Player, Task Run, CancellationTokenSource Stop)> _bots = new();
-    private readonly List<Task> _stopping = new();
+    private readonly Dictionary<int, (FakePlayer Player, Task Run, CancellationTokenSource Stop)> _bots = [];
+    private readonly List<Task> _stopping = [];
     private readonly object _sync = new();
     private readonly CancellationTokenSource _shutdown = new();
     private readonly Task _manager;
@@ -84,7 +84,7 @@ public sealed class FakePlayerHost : IAsyncDisposable
     private long _deaths, _revives, _attacks, _skillCasts, _rests, _chats, _failures, _logs;
     // The guild war: its players (apart from the target-managed ones), the guild each side's founder reported, the city
     // whose siege they enter (0: none open), what both sides focus on, and the counters of "@warstatus".
-    private readonly Dictionary<int, (FakePlayer Player, Task Run, CancellationTokenSource Stop)> _war = new();
+    private readonly Dictionary<int, (FakePlayer Player, Task Run, CancellationTokenSource Stop)> _war = [];
     private readonly ConcurrentDictionary<char, long> _warGuilds = new();
     private readonly ConcurrentDictionary<long, (ulong Target, DateTime Until)> _warFocus = new();
     private volatile int _warCity;
@@ -135,13 +135,13 @@ public sealed class FakePlayerHost : IAsyncDisposable
 
     public IReadOnlyList<FakePlayer> Players()
     {
-        lock (_sync) return _bots.Values.Select(b => b.Player).ToArray();
+        lock (_sync) return [.. _bots.Values.Select(b => b.Player)];
     }
 
     /// <summary>The guild-war players (GvgSimService's "warbot" lines).</summary>
     public IReadOnlyList<FakePlayer> WarPlayers()
     {
-        lock (_sync) return _war.Values.Select(b => b.Player).ToArray();
+        lock (_sync) return [.. _war.Values.Select(b => b.Player)];
     }
 
     private async Task ManageAsync()
@@ -553,7 +553,7 @@ public sealed class FakePlayerHost : IAsyncDisposable
         Task[] running;
         lock (_sync)
         {
-            running = _bots.Values.Select(b => b.Run).Concat(_war.Values.Select(b => b.Run)).Concat(_stopping).ToArray();
+            running = [.. _bots.Values.Select(b => b.Run).Concat(_war.Values.Select(b => b.Run)).Concat(_stopping)];
             foreach (var bot in _bots.Values) bot.Stop.Cancel();
             foreach (var bot in _war.Values) bot.Stop.Cancel();
             _bots.Clear();

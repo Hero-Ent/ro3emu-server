@@ -124,10 +124,10 @@ public sealed class BossSkillSetsTests(ITestOutputHelper output)
     {
         // The Evil Boss (AI MainStory_DevilBoss, no _kSkills): its four MainStory_EvilBossSkill rows, the cone and front
         // circle, the three-rectangle fan, the pull and the circle with its blast.
-        Assert.All(new[] { 5352301, 5352601, 5352701, 5352801 }, id => Assert.Contains(id, Ids(5300018)));
+        Assert.All([5352301, 5352601, 5352701, 5352801], id => Assert.Contains(id, Ids(5300018)));
         // The boarders' listed specials: the warriors' charge and slash, the archers' arrow rain and line shot.
-        Assert.All(new[] { 5350101, 5350201 }, id => Assert.Contains(id, Ids(5300016)));
-        Assert.All(new[] { 5351101, 5351201 }, id => Assert.Contains(id, Ids(5300046)));
+        Assert.All([5350101, 5350201], id => Assert.Contains(id, Ids(5300016)));
+        Assert.All([5351101, 5351201], id => Assert.Contains(id, Ids(5300046)));
         var boss = Book(5300018)!;
         Assert.Equal((BossSkillArea.AroundTarget, 10f, 5352807), (boss.Skills.Single(k => k.Id == 5352801).Area,
             boss.Skills.Single(k => k.Id == 5352801).Radius, boss.Skills.Single(k => k.Id == 5352801).WarningEffect));

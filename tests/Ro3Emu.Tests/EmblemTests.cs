@@ -398,7 +398,7 @@ public sealed partial class EmblemTests : IAsyncLifetime
         FixtureSql.Execute(_app.Services.GetRequiredService<AccountStore>(),
             $"""UPDATE item SET attrs = json_set(attrs, '$."1001"', 20, '$."1021"', 1001, '$."1022"', 0, '$."1023"', 0, '$."1024"', 0) WHERE guid = {guid}""");
         var store = _app.Services.GetRequiredService<ItemStore>();
-        long[] Marks() => Enumerable.Range(1021, 4).Select(k => store.Load(role).Single(i => i.Guid == guid).Attrs![k]).ToArray();
+        long[] Marks() => [.. Enumerable.Range(1021, 4).Select(k => store.Load(role).Single(i => i.Guid == guid).Attrs![k])];
         await using (var again = await InWorld("Alice", create: false))
             await Next(again, EmblemService.PlanSync, DBEmblemInfoIncrement.Parser);
         var lit = Marks();

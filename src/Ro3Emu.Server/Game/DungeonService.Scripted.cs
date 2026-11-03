@@ -44,7 +44,7 @@ public sealed partial class DungeonService
         public required string Name { get; init; }
         public MonsterTemplate? Template { get; init; }
         public long BornMs { get; init; }
-        public List<BuffInfo> Buffs { get; } = new();
+        public List<BuffInfo> Buffs { get; } = [];
         /// <summary>NPCConfig _iSpeed (cm/s): how fast a cue unit walks its patrol path (DungeonService.Cues).</summary>
         public int SpeedCm { get; init; }
         /// <summary>The place of a unit riding a fight's monster (DungeonService.Cues); null for any other.</summary>
