@@ -379,6 +379,13 @@ public sealed class RoleSessionService(RoleStore roles, Data.GameData data, Buff
                 await session.SendGameAsync(MsgId.AutoSyncSettings, SettingsSync(stored));
             }
             else settings.MarkDirty(session, urgent: false);
+            if (RepairClassicMovement(stored))
+            {
+                // Classic chosen without its keyboard settings (see RepairClassicMovement): the full sync re-runs
+                // LC_DAL_Setting's handlers, so the mouse walks the character in this session already.
+                settings.MarkDirty(session, urgent: false);
+                await session.SendGameAsync(MsgId.AutoSyncSettings, SettingsSync(stored));
+            }
         }
         await session.SendGameAsync(MsgId.SaveSetting, new SaveSettingResp { Result = 0 });
     }
@@ -387,7 +394,38 @@ public sealed class RoleSessionService(RoleStore roles, Data.GameData data, Buff
     {
         var settings = roles.LoadSettings(roleId) is { } bytes ? DBSettingInfo.Parser.ParseFrom(bytes) : new DBSettingInfo();
         settings.WildAFKInfo ??= new SettingWildAFKInfo(); // OnHook's setting editor requires a real object.
+        RepairClassicMovement(settings);
         return settings;
+    }
+
+    /// <summary>
+    /// Classic mode (GameModeSetting.gameMode 1, enum_GameMode.OldSchool) walks by mouse, but the client takes mouse
+    /// movement from the saved KeyBoardInfo only: LC_DAL_Setting._processKeyBoardInfo turns EnableMouseMove on only when it
+    /// is saved (or MovementCtrl is 2) and falls back to the mode's defaults only when both movement flags are off. The
+    /// mode panel saves those defaults (_applyPCInteractDefault) only when the chosen mode differs from the one it opened
+    /// with, and its close/timeout path (_returnCloseClock) never does: a role that keeps Classic that way has no
+    /// KeyBoardInfo, keyboard movement on and mouse movement off, so no ground cell under the cursor and clicks do not
+    /// walk. Such settings get mouse movement and the Classic key map. True when they changed.
+    /// </summary>
+    internal static bool RepairClassicMovement(DBSettingInfo settings)
+    {
+        const int oldSchool = 1;
+        if (!settings.ClientSetting.TryGetValue((int)SettingType.GameMode, out var modeBytes)) return false;
+        GameModeSetting mode;
+        try { mode = GameModeSetting.Parser.ParseFrom(modeBytes); }
+        catch (InvalidProtocolBufferException) { return false; }
+        if (mode.GameMode != oldSchool) return false;
+        var keys = new KeyBoardInfo();
+        if (settings.ClientSetting.TryGetValue((int)SettingType.KeyBoard, out var keyBytes))
+        {
+            try { keys = KeyBoardInfo.Parser.ParseFrom(keyBytes); }
+            catch (InvalidProtocolBufferException) { keys = new KeyBoardInfo(); }
+        }
+        if (keys.EnableMouseMove && keys.KeyBoardMode == oldSchool) return false;
+        keys.EnableMouseMove = true;
+        keys.KeyBoardMode = oldSchool;
+        settings.ClientSetting[(int)SettingType.KeyBoard] = keys.ToByteString();
+        return true;
     }
 
     /// <summary>Full-state increment (syncAllMark): each field N of DBSettingInfo travels as field N*10 { all = value }.</summary>

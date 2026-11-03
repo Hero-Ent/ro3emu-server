@@ -220,16 +220,15 @@ public sealed class ClientPatcherTests : IDisposable
     }
 
     [Fact]
-    public void TheTerrainColliderBakeNeverRuns()
+    public void TheTerrainColliderBakeIsLeftAlone()
     {
-        // Every region it loads fails PhysX's mesh cleaning twice, once on the main thread, and bakes an empty collider.
+        // Emptying TerrainColliderManager.Update left the Classic mode's mouse ray without ground on the fields. The file
+        // stays patched (URLs only) so that the clients carrying that patch get their original back.
         Assert.Contains("HappyEngine.TerrainColliderBake.dll", ClientPatcher.PatchedFiles);
+        Assert.Null(ClientPatcher.Extra("HappyEngine.TerrainColliderBake.dll", "hooks.dll", "loc.dll"));
         using var bake = TerrainColliderBake();
-        Assert.Equal("TerrainColliderManager.Update -> return",
-            ClientPatcher.Extra("HappyEngine.TerrainColliderBake.dll", "hooks.dll", "loc.dll")!(bake.MainModule));
         var update = bake.MainModule.GetType("HappyEngine.TerrainColliderBake.TerrainColliderManager").Methods.Single();
-        Assert.Equal([OpCodes.Ret], update.Body.Instructions.Select(i => i.OpCode));
-        Assert.Empty(update.Body.Variables);
+        Assert.Equal(3, update.Body.Instructions.Count);
     }
 
     static OpCode ShowLogConstant(AssemblyDefinition assembly) =>

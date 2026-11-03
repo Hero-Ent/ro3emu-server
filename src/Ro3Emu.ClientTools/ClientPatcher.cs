@@ -34,6 +34,12 @@ public static class ClientPatcher
     /// </summary>
     private const string GmtManagerType = "GMT.GMTManager";
 
+    /// <summary>
+    /// HappyEngine.TerrainColliderBake.dll is no longer changed (only its URLs, like every file here), but stays listed: a
+    /// client that got the patch which emptied TerrainColliderManager.Update is rewritten from its original. Without the
+    /// streamed terrain's colliders the Classic mode's mouse ray hit no ground: no cell under the cursor, clicks only
+    /// turned the camera (towns built of meshes still worked, fields did not).
+    /// </summary>
     internal static readonly string[] PatchedFiles = ["Happyengine.Network.dll", "Assembly-CSharp.dll", "Phonest.Common.dll", "Happyengine.Base.Runtime.dll", "Unity.TextMeshPro.dll", "HUD.dll", "HappyEngine.Resource.dll", "UnityEngine.UI.dll", "UnityEngine.CoreModule.dll", "HappyEngine.TerrainColliderBake.dll"];
 
     /// <summary>--verbose: GS_Debug.ShowLog true, so the Lua debug logs (Lua_Debug reads it) reach Player.log.</summary>
@@ -53,25 +59,6 @@ public static class ClientPatcher
         il.Append(il.Create(on ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0));
         il.Append(il.Create(OpCodes.Ret));
         return "GS_Debug.ShowLog -> " + (on ? "true" : "false");
-    }
-
-    /// <summary>
-    /// The streamed terrain's colliders (StreamingWorld's TerrainColliderManager) bake from a height map whose data this
-    /// client does not have (HeightmapDataViewer.IsEmptyData is true; GPU mode reads back a degenerate grid): every region
-    /// that loads fails PhysX's mesh cleaning twice, in Physics.BakeMesh on a worker and again on the main thread when the
-    /// MeshCollider takes the uncooked mesh ("cleaning the mesh failed", measured 2 per region load), and the colliders it
-    /// leaves collide with nothing. TerrainColliderManager.Update returns at once: no region is loaded or baked.
-    /// </summary>
-    internal static string SkipTerrainColliderBake(ModuleDefinition module)
-    {
-        var manager = module.GetType("HappyEngine.TerrainColliderBake.TerrainColliderManager")
-            ?? throw new InvalidOperationException("TerrainColliderManager not found");
-        var update = manager.Methods.Single(m => m.Name == "Update" && !m.HasParameters);
-        update.Body.Instructions.Clear();
-        update.Body.ExceptionHandlers.Clear();
-        update.Body.Variables.Clear();
-        update.Body.GetILProcessor().Append(Instruction.Create(OpCodes.Ret));
-        return "TerrainColliderManager.Update -> return";
     }
 
     private const string HooksFile = "Ro3Emu.ClientHooks.dll";
@@ -145,7 +132,6 @@ public static class ClientPatcher
         "HappyEngine.Resource.dll" => m => TextSink.PatchLauncher(m, locDll),
         "UnityEngine.UI.dll" => m => ImageSwapPatch.Patch(m, hooksDll),
         "UnityEngine.CoreModule.dll" => m => OpenUrlPatch.Patch(m, hooksDll),
-        "HappyEngine.TerrainColliderBake.dll" => SkipTerrainColliderBake,
         _ => null,
     };
 
