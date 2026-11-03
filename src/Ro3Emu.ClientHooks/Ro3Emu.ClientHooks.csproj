@@ -43,6 +43,7 @@
     <Reference Include="Happyengine.Base.Runtime"><HintPath>$(ClientManaged)\Happyengine.Base.Runtime.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Phonest.ClientForUnity"><HintPath>$(ClientManaged)\Phonest.ClientForUnity.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.CoreModule"><HintPath>$(ClientManaged)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(ClientManaged)\UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Unity.TextMeshPro"><HintPath>$(ClientManaged)\Unity.TextMeshPro.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.UI"><HintPath>$(ClientManaged)\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.UIModule"><HintPath>$(ClientManaged)\UnityEngine.UIModule.dll</HintPath><Private>false</Private></Reference>

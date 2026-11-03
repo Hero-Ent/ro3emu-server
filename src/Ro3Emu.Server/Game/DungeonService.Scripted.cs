@@ -38,7 +38,7 @@ public sealed partial class DungeonService
     internal sealed class SceneActorUnit : WorldUnit
     {
         public required int NpcId { get; init; }
-        public required long Point { get; init; }
+        public required long Point { get; set; }
         public required int EntityType { get; init; }
         public required long Camp { get; init; }
         public required string Name { get; init; }
@@ -49,6 +49,10 @@ public sealed partial class DungeonService
         public int SpeedCm { get; init; }
         /// <summary>The place of a unit riding a fight's monster (DungeonService.Cues); null for any other.</summary>
         internal ReconstructedDungeons.Rider? Seat { get; set; }
+        /// <summary>The AnimationString row it idles with instead of Idle (0: its own; SceneActor.Idle).</summary>
+        public int Idle { get; set; }
+        /// <summary>A vehicle NPC (NPCConfig _iNPCSubType 103), which its driver's client moves.</summary>
+        public bool Vehicle { get; init; }
 
         // A straight walk in progress: from (_fromX, _fromY, _fromZ) to (_toX, _toY, _toZ) over [_startMs, _endMs].
         private float _fromX, _fromY, _fromZ, _toX, _toY, _toZ, _speed;
@@ -107,7 +111,13 @@ public sealed partial class DungeonService
                 foreach (var (idx, value) in new (long, long)[] { (101, t.MaxHp), (2000, t.MaxHp), (2002, t.Level), (113, t.SpeedCm),
                              (102, t.MaxSp), (2001, t.MaxSp) })
                     entity.Property.Add(new AoIProperty { Idx = idx, Data = value, BaseData = value });
+            // The driver's client moves the vehicle it controls (LC_PassengerComponent.ChangeControlUnit) at the vehicle
+            // unit's own speed, attribute 113, as TerritoryWarsService.VehicleUnit carries it: an NPC-type vehicle had
+            // none, and the Deniro stood still under its rider. NPCConfig _iSpeed (the Deniro 1200 cm/s).
+            else if (Vehicle && SpeedCm > 0)
+                entity.Property.Add(new AoIProperty { Idx = AttributeId.Speed, Data = SpeedCm, BaseData = SpeedCm });
             if (Buffs.Count > 0) entity.BuffData = new AoIBuffInfo { AddBuffs = { Buffs.Select(b => b.Clone()) } };
+            if (Idle != 0) entity.AnimationInfo[IdleAnimation] = Idle;
             return entity;
         }
     }
@@ -157,7 +167,8 @@ public sealed partial class DungeonService
         var added = new List<ReconstructedDungeons.SceneActor>();
         foreach (var spec in wanted)
         {
-            var same = shown.FirstOrDefault(u => u.NpcId == spec.NpcId && u.Point == spec.Point);
+            var same = shown.FirstOrDefault(u => u.NpcId == spec.NpcId && u.Point == spec.Point)
+                ?? (spec.Walks ? shown.FirstOrDefault(u => u.NpcId == spec.NpcId) : null);
             if (same == null) { added.Add(spec); continue; }
             shown.Remove(same);
             kept.Add((same, spec));
@@ -168,7 +179,12 @@ public sealed partial class DungeonService
             a.RetiredActors.Add(gone.Uid);
             await _instances.RemovePropAsync(a.Room, gone);
         }
-        foreach (var (unit, spec) in kept) await SetActorBuffsAsync(unit, spec.Buffs);
+        foreach (var (unit, spec) in kept)
+        {
+            if (unit.Point != spec.Point) await WalkActorAsync(a, unit, spec);
+            await SetActorBuffsAsync(unit, spec.Buffs);
+            if (unit.Idle != spec.Idle) await SetActorIdleAsync(a, unit, spec.Idle);
+        }
         foreach (var spec in added)
         {
             if (a.Settled || a.Room.Closed) return;
@@ -176,8 +192,42 @@ public sealed partial class DungeonService
                 || SceneUnit(a, spec.NpcId, spec.Point, at with { X = at.X + spec.Dx, Z = at.Z + spec.Dz }) is not { } unit)
                 continue; // the catalog validated both; a changed export only loses the actor
             unit.Buffs.AddRange(spec.Buffs.Select(id => ActorBuff(unit, id)));
+            unit.Idle = spec.Idle;
             if (await _instances.AddPropAsync(a.Room, unit)) a.SceneActors.Add(unit);
         }
+    }
+
+    /// <summary>
+    /// A kept actor that walks (SceneActor.Walks) goes to its new point at its NPCConfig _iSpeed in a straight line: the
+    /// Deniro, tried once, leaves the glowing things for the foot of the wall where the ride begins (inferred: guide 35
+    /// "ride the soldier ant" leads from its point 29 to there; how the original moved it is not in the client).
+    /// </summary>
+    private async Task WalkActorAsync(Attempt a, SceneActorUnit unit, ReconstructedDungeons.SceneActor spec)
+    {
+        unit.Point = spec.Point;
+        if (_catalog.ScenePoint(a.Plan.SceneEntry, spec.Point) is not { } at) return;
+        var to = at with { X = at.X + spec.Dx, Z = at.Z + spec.Dz };
+        float metres = MonsterService.Distance(unit.X, unit.Z, to.X, to.Z), speed = unit.SpeedCm / 100f;
+        int ms = speed > 0 ? (int)Math.Max(1, metres / speed * 1000) : 1;
+        await WalkSegmentAsync(a, unit, to, ms);
+        if (unit.EntityType == 2) _loop.ScheduleLegacy(Paced(ms), () => ReplaceActorAsync(a, unit, to), "dungeon actor arrived");
+    }
+
+    /// <summary>
+    /// An NPC actor that walked is shown again where it arrived, as a new unit with the same buffs and idle: the client
+    /// kept offering its interactions where it was first shown (inferred from the live client, where the Deniro could
+    /// not be used after its walk; an NPC unit is not expected to move). An NPC has no born state, so nothing shows the swap.
+    /// </summary>
+    private async Task ReplaceActorAsync(Attempt a, SceneActorUnit unit, MapPoint at)
+    {
+        if (a.Settled || a.Room.Closed || unit.Removed || !a.SceneActors.Contains(unit)
+            || SceneUnit(a, unit.NpcId, unit.Point, at with { Face = unit.Face }) is not { } fresh) return;
+        fresh.Buffs.AddRange(unit.Buffs.Select(b => ActorBuff(fresh, b.ConfigId)));
+        fresh.Idle = unit.Idle;
+        a.SceneActors.Remove(unit);
+        a.RetiredActors.Add(unit.Uid);
+        await _instances.RemovePropAsync(a.Room, unit);
+        if (await _instances.AddPropAsync(a.Room, fresh)) a.SceneActors.Add(fresh);
     }
 
     /// <summary>A scene unit of an NPCConfig row, without buffs: the client creates _iNPCType 1 as a monster unit (with
@@ -186,14 +236,39 @@ public sealed partial class DungeonService
     {
         if (_data.Row("NPCConfig", npcId) is not { } row) return null;
         int type = (int)GameData.Int(row, "_iNPCType");
+        var npc = new NPCConfig(row);
         return new SceneActorUnit
         {
             Uid = SceneActorUidBase | Interlocked.Increment(ref _sceneActorSerial), SceneEntry = a.Plan.SceneEntry,
             InstanceId = a.Room.Id, X = at.X, Y = at.Y, Z = at.Z, Face = at.Face, NpcId = npcId, Point = point,
             EntityType = type, Camp = GameData.Int(row, "_iCamp"), Name = type == 2 ? _data.TextOf(row, "_kName") : "",
             Template = type == 1 ? _monsters.Template(npcId) : null, BornMs = MonsterService.NowMs,
-            SpeedCm = (int)new NPCConfig(row).Speed,
+            SpeedCm = (int)npc.Speed, Vehicle = npc.NPCSubType == VehicleSubType,
         };
+    }
+
+    /// <summary>AnimationString 1 Idle: the key of an idle override in EntityBase.animationInfo.</summary>
+    private const int IdleAnimation = 1;
+
+    /// <summary>How far, in metres, and how long, in ms, a kept actor steps forward to take up its new idle (inferred).</summary>
+    private const float IdleStepMetres = 0.3f;
+    private const int IdleStepMs = 300;
+
+    /// <summary>
+    /// A kept actor's idle changes (Bobo, helped up, stands): 31026 UpdateEntityAnimation recaches Idle
+    /// (LC_Scene_Sync._updateAnimation only fills LC_AnimCache, and the Idle state reads its animation once, as it begins),
+    /// then a short step ahead makes the client enter Idle again with it (inferred: how the original stood Bobo up is
+    /// not in the client).
+    /// </summary>
+    private async Task SetActorIdleAsync(Attempt a, SceneActorUnit unit, int idle)
+    {
+        unit.Idle = idle;
+        var packet = new UpdateEntityAnimation { EntityID = unit.Uid };
+        packet.AnimationInfo[IdleAnimation] = idle == 0 ? IdleAnimation : idle;
+        await _world.ToUnitViewersAsync(unit, WorldEffectsService.Animation, packet);
+        float rad = unit.Face * MathF.PI / 180f;
+        await WalkSegmentAsync(a, unit, new MapPoint(unit.X + MathF.Sin(rad) * IdleStepMetres, unit.Y,
+            unit.Z + MathF.Cos(rad) * IdleStepMetres, unit.Face), IdleStepMs);
     }
 
     private BuffInfo ActorBuff(SceneActorUnit unit, int configId) => new()
@@ -410,7 +485,8 @@ public sealed partial class DungeonService
             if (step.TeleportAfter != 0 && _catalog.ScenePoint(a.Plan.SceneEntry, step.TeleportAfter) is { } to)
                 foreach (var member in Present(a).Where(m => a.Loaded.Contains(m) && !m.SceneLoading))
                     await _scenes.TeleportInMapAsync(member, to);
-            await EndStepAsync(a, step); // its slide and ride stop, its show and fall play (DungeonService.Story)
+            // Its slide and ride stop, its show and fall play (DungeonService.Story); a rider gets off before the scene goes on.
+            hold = Math.Max(hold, await EndStepAsync(a, step));
             // The next step or the settlement runs in its own owner scope, like the room's timers: the message that
             // completed the step (a walk, an interaction, a plot end) reserves only what its own route needs. A completing
             // reaction's line is read first (inferred).

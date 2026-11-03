@@ -355,7 +355,10 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
             foreach (var actor in step.Actors.Concat(step.Allies ?? []))
                 if (data.Row("NPCConfig", actor.NpcId) is not { } npc || GameData.Int(npc, "_iNPCType") is not (1 or 2)
                     || !map.Points.ContainsKey(actor.Point)
-                    || actor.Buffs.Any(b => data.Row("BuffConfig", b) is not { } buff || GameData.Int(buff, "_iBuffID") <= 0)) return [];
+                    || actor.Buffs.Any(b => data.Row("BuffConfig", b) is not { } buff || GameData.Int(buff, "_iBuffID") <= 0)
+                    // An idle override is an AnimationString row of a monster-type actor (only LC_Unit_Monster reads it).
+                    || (actor.Idle != 0 && (NPCConfig.Get(data, actor.NpcId) is not { NPCType: 1 }
+                        || data.Row("AnimationString", actor.Idle) == null))) return [];
             // A companion is a client NPC that can fight beside the player (CompanionUnit.Build); it carries no buffs.
             if (step.Companions.Any(c => !map.Points.ContainsKey(c.Point) || c.Buffs.Count > 0
                     || CompanionUnit.Build(data, monsters, c.NpcId) == null)) return [];
@@ -545,7 +548,7 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
 
     /// <summary>
     /// A step's cue (DungeonService.Cues) does one thing that resolves: a ChatConfig line (over one of the step's actors
-    /// when it names a speaker), an actor's bubble interaction, a crew sent away, an effect (of one enum_DisplayEffectType
+    /// when it names a speaker), a client dungeon function, an actor's bubble interaction, a crew sent away, an effect (of one enum_DisplayEffectType
     /// 1-10, or 0: each kind it has), or a unit the client creates at a point or on a route, with its riders. A cue that
     /// waits for a share of HP waits on a monster of the step's fight.
     /// </summary>
@@ -555,6 +558,10 @@ public sealed class DungeonCatalog(GameData data, WorldData worldData, MonsterSe
             || (cue.HpBelow > 0 && !step.Fight.Any(f => f.NpcId == cue.Of))) return false;
         // A cue waiting for a region plays once: it cannot also repeat or wait for a share of HP.
         if (cue.Region != 0 && (!map.Regions.ContainsKey(cue.Region) || cue.EveryMs > 0 || cue.HpBelow > 0)) return false;
+        // A client function: its name, and nothing else the cue would also do.
+        if (cue.Call is { } call)
+            return call.Func.Length > 0 && call.Func.All(c => char.IsAsciiLetterOrDigit(c) || c == '_') && cue.Chat == 0
+                && cue.Effect == 0 && cue.Npc == 0 && cue.Cast == 0 && cue.Walk == 0 && cue.Remove == 0 && cue.Buff == 0;
         if (cue.Remove != 0)
             return cue.Chat == 0 && cue.Effect == 0 && cue.Npc == 0 && cue.Cast == 0 && step.Actors.Any(a => a.NpcId == cue.Remove);
         if (cue.Buff != 0)

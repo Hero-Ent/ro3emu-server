@@ -51,6 +51,7 @@ public sealed partial class DungeonService
 
     private async Task PlayCueAsync(Attempt a, ReconstructedDungeons.Cue cue)
     {
+        if (cue.Call is { } call) { await ClientCallAsync(a, call); return; }
         if (cue.Remove != 0) { await RemoveActorAsync(a, cue.Remove); return; }
         if (cue.Buff != 0 || cue.PlayerCast != 0) { await PlayerCueAsync(a, cue); return; }
         if (cue.Chat != 0)
@@ -67,6 +68,34 @@ public sealed partial class DungeonService
         else if (cue.Effect != 0) await CueEffectAsync(a, cue);
         else await CueUnitAsync(a, cue);
     }
+
+    /// <summary>
+    /// A client dungeon function on the scene's clock (a camera timeline): 30404 DungeonEventInvokeClientFunc, which
+    /// LC_DunGeon_Base.CELL_DUNGEON_EVENT_NOTIFY runs as CallClientFuncWithSelf(dungeon, cliFuncname, ..., params), each
+    /// EventParams one argument (DraculaWeddingService.Story sends ClientPlayCutSceneStory the same way).
+    /// </summary>
+    private async Task ClientCallAsync(Attempt a, ReconstructedDungeons.ClientCall call)
+    {
+        if (a.Settled || a.Room.Closed) return;
+        var notify = new DungeonEventNotify
+        {
+            DungeonEntry = a.Plan.SceneEntry, EventType = DungeonEventType.DungeonEventInvokeClientFunc,
+            StageNum = a.Wave + 1, LevelNum = 1, CliFuncname = call.Func,
+        };
+        notify.Params.AddRange(call.Args.Select(ClientParam));
+        _log.LogInformation("Scripted scene {Scene} step {Step}: client function {Func}({Args})",
+            a.Plan.SceneEntry, a.Wave + 1, call.Func, string.Join(", ", call.Args));
+        await BroadcastAsync(a, Event, notify);
+    }
+
+    private static EventParams ClientParam(object arg) => arg switch
+    {
+        string text => new EventParams { StrParams = { text } },
+        bool flag => new EventParams { BoolParams = { flag } },
+        long number => new EventParams { IntParams = { number } },
+        double number => new EventParams { DoubleParams = { number } },
+        _ => throw new ArgumentException($"A client call's argument cannot be {arg.GetType().Name}.", nameof(arg)),
+    };
 
     /// <summary>
     /// An actor's head bubble on the scene's clock: the 32700 reply of its bubble interaction, as if the player had walked

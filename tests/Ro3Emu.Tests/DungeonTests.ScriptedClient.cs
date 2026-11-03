@@ -66,8 +66,18 @@ public sealed partial class DungeonTests
                             // An NPC is shaped like the world NPCs the live client interacts with (portals, Kafras): no born time.
                             if (view.Entity.EntityType == 2) Assert.Equal(0, view.Entity.BornTimeMs);
                             var point = map.Points[actor.Point];
-                            Assert.Equal(point.X, view.Entity.MovementInfo.Pos.X, 0.01f);
-                            Assert.Equal(point.Z, view.Entity.MovementInfo.Pos.Z, 0.01f);
+                            // An actor that walked to its point (SceneActor.Walks) was born elsewhere: it is where it arrives.
+                            bool walked = plan.Waves.Take(wave + 1).Any(w => w.Step?.Actors.Any(s => s.NpcId == actor.NpcId && s.Walks) == true);
+                            // It is shown again where it arrives, as a new unit (DungeonService.ReplaceActorAsync).
+                            int npcId = actor.NpcId;
+                            for (int i = 0; walked && i < 400 && MonsterService.Distance(actor.X, actor.Z, point.X, point.Z) > 0.01f; i++)
+                            {
+                                await Task.Delay(20);
+                                actor = await Service<GameLoop>().InvokeAsync(() => Task.FromResult(
+                                    Session(alice).DungeonAttempt!.SceneActors.First(u => u.NpcId == npcId)));
+                            }
+                            Assert.Equal(point.X, walked ? actor.X : view.Entity.MovementInfo.Pos.X, 0.01f);
+                            Assert.Equal(point.Z, walked ? actor.Z : view.Entity.MovementInfo.Pos.Z, 0.01f);
                             // It registers for interaction and offers the step's interaction (directly, or from its dialogue).
                             Assert.NotEqual(0, catalog.Interactions(actor.NpcId).FirstOrDefault());
                             int offered = Reachable(actor.NpcId, interaction);

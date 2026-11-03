@@ -35,6 +35,9 @@ namespace Ro3Emu.ClientHooks
                     case "dumpalltex":
                         DumpAllTextures(parts.Length > 1 ? parts[1] : "");
                         break;
+                    case "unit":
+                        UnitTrace.Arm(parts.Length > 1 ? parts[1] : "");
+                        break;
                     case "panels":
                         Panels();
                         break;

@@ -134,9 +134,9 @@ public sealed partial class DungeonService
         /// (DungeonService.Cannon).</summary>
         /// <summary>The current step's region cues already played (their index in the step's cues).</summary>
         internal HashSet<int> FiredCues { get; } = [];
-        /// <summary>Participants seated on a scene actor that is a vehicle (DungeonService.Story), by their seat's
-        /// WorldInteractionService token.</summary>
-        internal Dictionary<GameSession, long> Riding { get; } = [];
+        /// <summary>Participants seated on a scene actor that is a vehicle (DungeonService.Story): the actor, whether they
+        /// drive it, and their seat's WorldInteractionService token.</summary>
+        internal Dictionary<GameSession, SeatedRide> Riding { get; } = [];
         /// <summary>Participants sliding down the step's slope (DungeonService.Story).</summary>
         internal HashSet<GameSession> Sliding { get; } = [];
         /// <summary>The longest fall a completed step started, in ms: the next scene waits for the landing.</summary>

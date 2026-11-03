@@ -131,84 +131,84 @@ public sealed partial class FakePlayer
         switch (e.MsgId)
         {
             case GuildService.Full:
-            {
-                // The own guild (0: the empty info that follows leaving or being removed).
-                Interlocked.Exchange(ref _guildId, GuildFullInfoNtf.Parser.ParseFrom(e.Body).Guid);
-                break;
-            }
+                {
+                    // The own guild (0: the empty info that follows leaving or being removed).
+                    Interlocked.Exchange(ref _guildId, GuildFullInfoNtf.Parser.ParseFrom(e.Body).Guid);
+                    break;
+                }
             case GuildService.Leave:
-            {
-                if (GuildMemberLeaveResp.Parser.ParseFrom(e.Body).Result == 0) Interlocked.Exchange(ref _guildId, 0);
-                break;
-            }
+                {
+                    if (GuildMemberLeaveResp.Parser.ParseFrom(e.Body).Result == 0) Interlocked.Exchange(ref _guildId, 0);
+                    break;
+                }
             case DungeonBaseInfo:
-            {
-                var info = DungeonBaseInfoNotify.Parser.ParseFrom(e.Body);
-                if (info.DungeonEntry != SiegeScene) break;
-                _siegeStage = info.Stage;
-                foreach (var v in info.Vars)
-                    if (v.VarId == AirWallListVar) _walls = [.. v.Vi64.Order()];
-                break;
-            }
+                {
+                    var info = DungeonBaseInfoNotify.Parser.ParseFrom(e.Body);
+                    if (info.DungeonEntry != SiegeScene) break;
+                    _siegeStage = info.Stage;
+                    foreach (var v in info.Vars)
+                        if (v.VarId == AirWallListVar) _walls = [.. v.Vi64.Order()];
+                    break;
+                }
             case GlobalObjects:
-            {
-                foreach (var (uid, data) in GlobalObjectDataNotify.Parser.ParseFrom(e.Body).GlobalDatas)
-                    if (data.Hp <= 0) _objectives.TryRemove(uid, out _);
-                    else _objectives[uid] = data;
-                break;
-            }
+                {
+                    foreach (var (uid, data) in GlobalObjectDataNotify.Parser.ParseFrom(e.Body).GlobalDatas)
+                        if (data.Hp <= 0) _objectives.TryRemove(uid, out _);
+                        else _objectives[uid] = data;
+                    break;
+                }
             case CombatService.SkillHit:
-            {
-                if (_warPhase != WarPhase.Battle) break;
-                var now = DateTime.UtcNow;
-                foreach (var dst in SkillHitInfo.Parser.ParseFrom(e.Body).Dsts)
                 {
-                    if (dst.IsDead) _fallen[(ulong)dst.DstID] = now;
-                    else if (dst.Damage > 0 && dst.DstID is > 0 and < UnitUidBase) _hurt[(ulong)dst.DstID] = now;
+                    if (_warPhase != WarPhase.Battle) break;
+                    var now = DateTime.UtcNow;
+                    foreach (var dst in SkillHitInfo.Parser.ParseFrom(e.Body).Dsts)
+                    {
+                        if (dst.IsDead) _fallen[(ulong)dst.DstID] = now;
+                        else if (dst.Damage > 0 && dst.DstID is > 0 and < UnitUidBase) _hurt[(ulong)dst.DstID] = now;
+                    }
+                    break;
                 }
-                break;
-            }
             case CharacterService.AoiAttrChange:
-            {
-                if (_warPhase != WarPhase.Battle) break;
-                var change = AOIAttrChange.Parser.ParseFrom(e.Body);
-                UpdateVitals(change.EntityUuid, change.Property);
-                break;
-            }
-            case CharacterService.EntityBaseChange:
-            {
-                if (_warPhase != WarPhase.Battle) break;
-                foreach (var entity in EntityChange.Parser.ParseFrom(e.Body).Bases)
-                    if (entity.State == EntityState.Dead) _fallen[entity.Uuid] = DateTime.UtcNow;
-                    else if (entity.State == EntityState.Alive) _fallen.TryRemove(entity.Uuid, out _);
-                break;
-            }
-            case WorldInteractionService.Change:
-            {
-                var change = InteractChangeNtf.Parser.ParseFrom(e.Body);
-                if (change.Uid == _roleId && (change.DataInfo == null || change.DataInfo.EType == InteractInfo.Types.EState.Idle))
                 {
-                    _onCannon = false;
-                    _riding = false;
+                    if (_warPhase != WarPhase.Battle) break;
+                    var change = AOIAttrChange.Parser.ParseFrom(e.Body);
+                    UpdateVitals(change.EntityUuid, change.Property);
+                    break;
                 }
-                break;
-            }
+            case CharacterService.EntityBaseChange:
+                {
+                    if (_warPhase != WarPhase.Battle) break;
+                    foreach (var entity in EntityChange.Parser.ParseFrom(e.Body).Bases)
+                        if (entity.State == EntityState.Dead) _fallen[entity.Uuid] = DateTime.UtcNow;
+                        else if (entity.State == EntityState.Alive) _fallen.TryRemove(entity.Uuid, out _);
+                    break;
+                }
+            case WorldInteractionService.Change:
+                {
+                    var change = InteractChangeNtf.Parser.ParseFrom(e.Body);
+                    if (change.Uid == _roleId && (change.DataInfo == null || change.DataInfo.EType == InteractInfo.Types.EState.Idle))
+                    {
+                        _onCannon = false;
+                        _riding = false;
+                    }
+                    break;
+                }
             case GameAoiSink.MovementChange:
-            {
-                var move = MovementChangeNtf.Parser.ParseFrom(e.Body);
-                if (move.Uid == _roleId && move.TransType is MovementTransitionType.MoveTransResetPos or MovementTransitionType.MoveTransForceTeleport
-                    && move.MovementInfo?.Pos is { } at)
-                    Interlocked.Exchange(ref _teleport, at.Clone());
-                break;
-            }
+                {
+                    var move = MovementChangeNtf.Parser.ParseFrom(e.Body);
+                    if (move.Uid == _roleId && move.TransType is MovementTransitionType.MoveTransResetPos or MovementTransitionType.MoveTransForceTeleport
+                        && move.MovementInfo?.Pos is { } at)
+                        Interlocked.Exchange(ref _teleport, at.Clone());
+                    break;
+                }
             case MsgId.SwitchSceneLine:
-            {
-                // A switch this player did not ask for (the siege ended and sent it back): followed by the war loop.
-                if (_switching) break;
-                Interlocked.Exchange(ref _switchedScene, SwitchSceneLineResp.Parser.ParseFrom(e.Body).SceneEntry);
-                _sceneSwitched = true;
-                break;
-            }
+                {
+                    // A switch this player did not ask for (the siege ended and sent it back): followed by the war loop.
+                    if (_switching) break;
+                    Interlocked.Exchange(ref _switchedScene, SwitchSceneLineResp.Parser.ParseFrom(e.Body).SceneEntry);
+                    _sceneSwitched = true;
+                    break;
+                }
         }
     }
 
@@ -1002,12 +1002,12 @@ public sealed partial class FakePlayer
                         return (ram.X + (back ? 12 : 5) + jx / 2, ram.Z + jz);
                     return ((back ? 640 : 621) + jx, laneZ + jz);
                 case StrongholdStage:
-                {
-                    // The Knight Guardian of the lane, else any standing one: the next stage opens when all three fall.
-                    var guardian = _objectives.Values.Where(o => o.ConfigId == KnightGuardianNpc && o.Pos != null)
-                        .OrderBy(o => MathF.Abs(o.Pos.Z - laneZ)).FirstOrDefault();
-                    return guardian != null ? (guardian.Pos.X + (back ? 14 : 5) + jx, guardian.Pos.Z + jz) : (440 + jx, laneZ + jz);
-                }
+                    {
+                        // The Knight Guardian of the lane, else any standing one: the next stage opens when all three fall.
+                        var guardian = _objectives.Values.Where(o => o.ConfigId == KnightGuardianNpc && o.Pos != null)
+                            .OrderBy(o => MathF.Abs(o.Pos.Z - laneZ)).FirstOrDefault();
+                        return guardian != null ? (guardian.Pos.X + (back ? 14 : 5) + jx, guardian.Pos.Z + jz) : (440 + jx, laneZ + jz);
+                    }
                 default:
                     return ((back ? 176 : 160) + jx, 120 + jz);
             }

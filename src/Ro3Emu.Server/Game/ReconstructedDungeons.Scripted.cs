@@ -22,8 +22,11 @@ public sealed partial class ReconstructedDungeons
 
     /// <summary>A scene actor: an NPCConfig id at a scene-editor point, with the buffs (BuffConfig ids) it carries.
     /// <paramref name="Dx"/>/<paramref name="Dz"/> (metres) place it beside the point when the scene has no point of its own
-    /// for it (inferred placement).</summary>
-    public sealed record SceneActor(int NpcId, long Point, IReadOnlyList<int> Buffs, float Dx = 0, float Dz = 0);
+    /// for it (inferred placement). <paramref name="Idle"/> is the AnimationString row it idles with instead of Idle (0: its
+    /// own): EntityBase.animationInfo {Idle: row}, which LC_Unit_Monster.OnCreateOver puts in its LC_AnimCache and
+    /// LC_UnitActConfigRecord.GetUnitIdleAnim plays (Bobo lying on the ground, 22 IdleLie).</summary>
+    public sealed record SceneActor(int NpcId, long Point, IReadOnlyList<int> Buffs, float Dx = 0, float Dz = 0, int Idle = 0,
+        bool Walks = false);
 
     /// <summary>
     /// One scripted step. <paramref name="Story"/> is a PlotInterpretation id the client plays at the step's start
@@ -136,7 +139,16 @@ public sealed partial class ReconstructedDungeons
     public sealed record Cue(int AtMs, int EveryMs, int Chat, int Speaker, int Effect, int EffectType, int Npc, long Point,
         long Patrol, int LifeMs, bool Vanish, float Sight, int Bubble = 0, int Dismiss = 0, IReadOnlyList<MapPoint>? Path = null,
         IReadOnlyList<Rider>? Riders = null, int HpBelow = 0, int Of = 0, int Walk = 0, int Cast = 0, float Burn = 0,
-        float Fuse = 0, int Blast = 0, long Region = 0, int Remove = 0, int Buff = 0, int BuffMs = 0, int PlayerCast = 0);
+        float Fuse = 0, int Blast = 0, long Region = 0, int Remove = 0, int Buff = 0, int BuffMs = 0, int PlayerCast = 0,
+        ClientCall? Call = null);
+
+    /// <summary>
+    /// A cue that makes every participant's client run one of its dungeon functions (LC_DunGeon_Actions
+    /// <paramref name="Func"/>): 30404 DungeonEventInvokeClientFunc, whose params LC_DunGeon_Base.CELL_DUNGEON_EVENT_NOTIFY
+    /// turns into one argument each (the first value of its first filled field). An argument is a string, an integer,
+    /// a number with a fraction or a bool.
+    /// </summary>
+    public sealed record ClientCall(string Func, IReadOnlyList<object> Args);
 
     /// <summary>
     /// A turret the player boards (the airship's cannons): <paramref name="Interaction"/> is the actor's NPCInteractConfig
@@ -260,7 +272,8 @@ public sealed partial class ReconstructedDungeons
 
     private static SceneActor Actor(JsonElement x) => new(x.GetProperty("npc").GetInt32(), x.GetProperty("point").GetInt64(),
         x.TryGetProperty("buffs", out var b) ? b.EnumerateArray().Select(v => v.GetInt32()).ToArray() : [],
-        x.TryGetProperty("offset", out var o) ? o[0].GetSingle() : 0, x.TryGetProperty("offset", out o) ? o[1].GetSingle() : 0);
+        x.TryGetProperty("offset", out var o) ? o[0].GetSingle() : 0, x.TryGetProperty("offset", out o) ? o[1].GetSingle() : 0,
+        OptionalInt(x, "idle"), x.TryGetProperty("walks", out var w) && w.GetBoolean());
 
     private static Reaction ParseReaction(JsonElement r) => new(r.GetProperty("speaker").GetInt32(),
         r.TryGetProperty("start", out var start) ? [.. start.EnumerateArray().Select(v => v.GetInt32())] : [],
@@ -298,7 +311,21 @@ public sealed partial class ReconstructedDungeons
         OptionalInt(c, "hpBelow"), OptionalInt(c, "of"), OptionalInt(c, "walk"), OptionalInt(c, "cast"),
         c.TryGetProperty("burn", out var burn) ? burn.GetSingle() : 0, c.TryGetProperty("fuse", out var fuse) ? fuse.GetSingle() : 0,
         OptionalInt(c, "blast"), c.TryGetProperty("region", out var region) ? region.GetInt64() : 0, OptionalInt(c, "remove"),
-        OptionalInt(c, "buff"), OptionalInt(c, "buffMs"), OptionalInt(c, "playerCast"));
+        OptionalInt(c, "buff"), OptionalInt(c, "buffMs"), OptionalInt(c, "playerCast"),
+        c.TryGetProperty("call", out var call) ? ClientCallOf(call) : null);
+
+    /// <summary>"call": {"func": name, "args": [values]}: a JSON string, integer, fraction or bool per argument.</summary>
+    private static ClientCall ClientCallOf(JsonElement c) => new(c.GetProperty("func").GetString() ?? "",
+        c.TryGetProperty("args", out var args) ? [.. args.EnumerateArray().Select(ClientArg)] : []);
+
+    private static object ClientArg(JsonElement v) => v.ValueKind switch
+    {
+        JsonValueKind.String => v.GetString() ?? "",
+        JsonValueKind.True or JsonValueKind.False => v.GetBoolean(),
+        JsonValueKind.Number when v.TryGetInt64(out long i) => i,
+        JsonValueKind.Number => v.GetDouble(),
+        _ => throw new InvalidOperationException($"A client call's argument must be a string, a number or a bool: {v}"),
+    };
 
     private static int OptionalInt(JsonElement e, string field) => e.TryGetProperty(field, out var v) ? v.GetInt32() : 0;
 

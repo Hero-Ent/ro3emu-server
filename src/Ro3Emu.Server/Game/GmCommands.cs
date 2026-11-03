@@ -304,6 +304,12 @@ public sealed partial class GmCommands(IOptions<ServerOptions> options, GameData
             await ReplyAsync(s, $"Dungeon {scene}: entry requested (test aid).");
         }
         ),
+        ["step"] = ("<n> (test aid: the scripted scene you are in goes to its step n)", async (s, a) =>
+        {
+            if (a.Length != 1 || !int.TryParse(a[0], out int step)) throw new ArgumentException("<n>");
+            await ReplyAsync(s, await services.GetRequiredService<DungeonService>().JumpToStepAsync(s, step));
+        }
+        ),
         ["chicken"] = ("shape <players> <team>|shape reset|skip|rank <n> (Survivor Battle test aids)", async (s, a) =>
         {
             // Test aids, not original behaviour: a small Survivor Battle lobby, and skipping a pre-battle stage.
@@ -380,7 +386,7 @@ public sealed partial class GmCommands(IOptions<ServerOptions> options, GameData
         ["points"] = ("<n>", (s, a) => Op(s, OpAddAttrPnt, a)),
         ["job"] = ("<jobId>", (s, a) => Op(s, OpSetJob, a)),
         ["clearbag"] = ("", (s, a) => Op(s, OpClearPack, a)),
-        ["client"] = ("<find name>", ClientDiagnostics),
+        ["client"] = ("<find name | unit <npcId> [seconds]>", ClientDiagnostics),
         ["fieldexp"] = ("[set <minLevel> <maxLevel> <percent> [...] | clear | reset] (in memory, until the next start)", async (s, a) =>
         {
             // FieldExpRates (inferred): the operator's rate for open-field kills, changed here without a restart.

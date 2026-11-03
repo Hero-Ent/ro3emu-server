@@ -110,7 +110,9 @@
         "The crawling ant 5300029 is born after 'Something's crawling toward us!' and leaves after its 10 s crawl; the Deniro then stands at its point 29 (inferred timing; the official run shows one ant crawling in, which the client data does not let the server reproduce on the walls).",
         "Trying to ride (5300008) does not seat the player; Bobo's next line says the ant wants the glowing things.",
         "The last ride seats the player as the Deniro's driver; it ends in the end region 31 (or after 60 s), and the run goes on into Maya's nest 1000401.",
-        "The lines along the ride play in regions 38, 37 and 31; the camera of the ride is the client's own (MainStoryAntNestNewbieCamera, mianstorybingyicamera).",
+        "The lines along the ride play in regions 38, 37 and 31; the camera of the ride is the client's own (MainStoryAntNestNewbieCamera).",
+        "Bobo lies on the ground (idle IdleLie) until he is helped up; standing up is a short step in place, which makes the client take up his own idle again (the original's way is not in the client).",
+        "The scene editor's camera animation mianstorybingyicamera plays as the crawling ant is born, through DungeonEventInvokeClientFunc ActiveCameraTimeline; it runs for the crawl's 14 s (inferred), the time argument being the camera's whole run.",
         "Collecting the fluorescent substance grants no item: no item is named by the client data."
       ],
       "steps": [
@@ -118,7 +120,7 @@
           "quest": 1,
           "stage": "Find Bobo: help Bobo up",
           "actors": [
-            { "npc": 5300041, "point": 23, "buffs": [5301401], "why": "Bobo at 'Bobo position'; buff group 53014 opens 'Rescue Bobo' (5300028)" }
+            { "npc": 5300041, "point": 23, "buffs": [5301401], "idle": 22, "why": "Bobo at 'Bobo position'; buff group 53014 opens 'Rescue Bobo' (5300028); he lies on the ground waiting to be helped up: idle 22 IdleLie (his model 100102 has it: NPC 400216 of the same model idles with _kIdleAnim IdleLie)" }
           ],
           "cues": [
             { "at": 1500, "chat": 5300401, "why": "Bobo: You're finally here!" }
@@ -132,17 +134,18 @@
           "goal": [1, 1],
           "stage": "Find Bobo: the Deniro crawls in",
           "actors": [
-            { "npc": 5300041, "point": 23, "why": "Bobo, helped up" }
+            { "npc": 5300041, "point": 23, "why": "Bobo, helped up: his own idle again" }
           ],
           "cues": [
             { "at": 500, "chat": 5300402, "why": "Ugh, I'm filthy!" },
             { "at": 3500, "chat": 5300403, "why": "Where are we?" },
             { "at": 6500, "chat": 5300404, "why": "It's a dead end... Something's crawling toward us!" },
-            { "at": 6500, "npc": 5300029, "point": 22, "life": 10500, "sight": 120, "why": "the crawling ant: born, the client crawls it along patrol 25 on the surfaces (NoviceDungeonBornPatrolNPCID); seen from the whole cave" },
+            { "at": 6500, "npc": 5300029, "point": 22, "life": 14000, "sight": 120, "why": "the crawling ant: born at point 22, the far end of patrol 25 up the wall (scene editor sc_plot_yhcx_002_dg01), and the client crawls it along the patrol by itself, about 13.5 s with the walk on to point 29 (LC_State_Unit_Born.StateStart: NoviceDungeonBornPatrolNPCID, NoviceDungeonBornPatrolID, NoviceDungeonMoveOnSurfaceDungeonsID; StartLocalPatrol). The client patch walks this patrol from its last point down the wall to the cave floor (Ro3Emu.ClientHooks BornPatrolReverse, inferred from the original run: the ant comes down the wall toward the substance) and on to point 29 by the substance, where it leaves as the Deniro takes its place, and along its points where the surface ray misses (PatrolSurfaceFallback). Seen from the whole cave. No server walk: a server move would end the Born state and its crawl" },
+            { "at": 6500, "call": { "func": "ActiveCameraTimeline", "args": ["mianstorybingyicamera.prefab", 14000] }, "why": "the camera that follows the crawling ant: the scene editor's camera animation 32 (m_kCameraAnims, prefab mianstorybingyicamera.prefab, 'bingyi' the soldier ant), which nothing in the client plays; LC_DunGeon_Actions.ActiveCameraTimeline(prefab, ms) plays a camera prefab for ms milliseconds: CA_CameraAnim.ActiveCamera takes ms * 0.001 as its m_fTotalTime and releases the camera once that much time has run, so 0 ends it on its first frame. 14000 ms: the ant's crawl down the wall and walk to point 29 (inferred; the clip's own length is not in the client data)" },
             { "at": 15500, "chat": 5300408, "why": "It seems to know exactly where it's going" }
           ],
           "complete": [
-            { "after": 17000, "why": "once the Deniro has arrived (inferred timing)" }
+            { "after": 20500, "why": "once the crawling ant has arrived at point 29, where the Deniro stands from the next step (inferred timing)" }
           ]
         },
         {
@@ -161,7 +164,7 @@
           "stage": "Earn the Deniro's faith: collect the fluorescent substance",
           "actors": [
             { "npc": 5300041, "point": 23, "why": "Bobo" },
-            { "npc": 5300005, "point": 29, "why": "the Deniro" },
+            { "npc": 5300005, "point": 30, "walks": true, "why": "the Deniro, tried once, walks from the glowing things to the foot of the wall: point 30, by where guide 35 'ride the soldier ant' leads from its point 29 and guide 36 'riding' begins (inferred)" },
             { "npc": 5300055, "point": 27, "buffs": [5365201], "why": "the fluorescent substance at its labelled point; buff group 53652 opens 'Collect' (5300010)" }
           ],
           "cues": [
@@ -176,7 +179,7 @@
           "stage": "Feed the Deniro",
           "actors": [
             { "npc": 5300041, "point": 23, "why": "Bobo" },
-            { "npc": 5300005, "point": 29, "buffs": [5365301], "why": "buff group 53653 opens 'Feed' (5300009)" }
+            { "npc": 5300005, "point": 30, "buffs": [5365301], "why": "at the foot of the wall; buff group 53653 opens 'Feed' (5300009)" }
           ],
           "cues": [
             { "at": 0, "chat": 5300409, "why": "This should be enough. Let's go find that giant ant!" }
@@ -190,7 +193,7 @@
           "stage": "Ride the Deniro to the depths of the Ant Hell",
           "actors": [
             { "npc": 5300041, "point": 23, "why": "Bobo" },
-            { "npc": 5300005, "point": 29, "buffs": [5365401], "why": "buff group 53654 opens 'Ride the Deniro' (5300005), the vehicle driver's seat" }
+            { "npc": 5300005, "point": 30, "buffs": [5365401], "why": "at the foot of the wall; buff group 53654 opens 'Ride the Deniro' (5300005), the vehicle driver's seat" }
           ],
           "cues": [
             { "at": 0, "chat": 5300410, "why": "Great! Our bribe worked!" },

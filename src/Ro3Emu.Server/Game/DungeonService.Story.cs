@@ -36,6 +36,19 @@ public sealed partial class DungeonService
     /// <summary>(inferred) The fall before the next scene, the pause before a restart, and the longest ride: a ride whose
     /// end region the client never reports still ends.</summary>
     private const int NextSceneDelayMs = 1500, RestartDelayMs = 3000, RideLimitMs = 60000;
+    /// <summary>(inferred) How long a dismounting rider takes to get off: the seat's _kExitAnim (the Deniro's
+    /// MainStoryDeniroLeisure2) and the walk off it (LC_PassengerComponent._beginSmoothExit, _startDismountWalk) end in
+    /// _detachFromVehicle, which reads the vehicle's m_kVehicleConfig; a vehicle that leaves the view first has none
+    /// (LC_VehicleComponent.Release) and the client's passenger breaks. The scene goes on, and clears its actors, after.</summary>
+    private const int DismountMs = 3000;
+    /// <summary>enum_PassengerType.Driver as VehicleSeatConfig._iType: 0, the seat whose rider controls the vehicle (as
+    /// TerritoryWarsService.VehicleMovedAsync reads it; the Deniro's seat 5300005, _iType 0, is entered through
+    /// GameplayStatusConfig 3 "vehicle driver").</summary>
+    private const long DriverSeat = 0;
+
+    /// <summary>A participant on a scene actor that is a vehicle: the actor, whether its seat drives it, and the seat's
+    /// WorldInteractionService token.</summary>
+    internal sealed record SeatedRide(SceneActorUnit Actor, bool Driver, long Token);
     /// <summary>PublicParamConfig.FallDownData [0 initial speed, 9.8 gravity, ...]: the client's fall (LC_Scene_Sync,
     /// enum_PosAnimsType.Fall) drops from rest at 9.8 m/s².</summary>
     private const double FallGravity = 9.8;
@@ -95,30 +108,54 @@ public sealed partial class DungeonService
         int seat = (int)interaction.StatusLocation - 1;
         if (seat < 0 || seat >= vehicle.Seats.Length || VehicleSeatConfig.Get(_data, vehicle.Seats[seat]) == null) return;
         long token = await _vehicles.SeatOnSceneActorAsync(s, actor.Uid, actor.NpcId, (int)interactionId);
+        _log.LogInformation("{Name} rides scene actor {Npc} {Uid} in seat {Seat} (VehicleSeatConfig {SeatConfig}): token {Token}",
+            s.Role.Name, actor.NpcId, actor.Uid, seat, vehicle.Seats[seat], token);
         if (token == 0) return;
-        a.Riding[s] = token;
+        a.Riding[s] = new SeatedRide(actor, VehicleSeatConfig.Get(_data, vehicle.Seats[seat])?.Type == DriverSeat, token);
         if (Step(a) is { } step && step.Complete.FirstOrDefault(t => t.Kind == Kind.Region) is { } end)
             StepLater(a, a.StepGeneration, RideLimitMs, () => StepEventAsync(a, null, [(Kind.Region, end.Id)]));
     }
 
-    private async Task DismountRidersAsync(Attempt a, GameSession? only = null)
+    /// <summary>Puts the riders down; whether anyone was riding.</summary>
+    private async Task<bool> DismountRidersAsync(Attempt a, GameSession? only = null)
     {
-        foreach (var (s, token) in a.Riding.Where(r => only == null || r.Key == only).ToArray())
+        bool any = false;
+        foreach (var (s, ride) in a.Riding.Where(r => only == null || r.Key == only).ToArray())
         {
             a.Riding.Remove(s);
-            await _vehicles.PutDownFromSceneActorAsync(s, token);
+            await _vehicles.PutDownFromSceneActorAsync(s, ride.Token);
+            any = true;
         }
+        return any;
     }
 
-    /// <summary>A completed step's own end: the slide and the ride stop, and its show plays on every participant.</summary>
-    private async Task EndStepAsync(Attempt a, ReconstructedDungeons.ScriptedStep step)
+    /// <summary>
+    /// After a driver's 31082 moved the player: the walk is the vehicle's (the driver controls it,
+    /// LC_PassengerComponent.ChangeControlUnit), so the scene actor goes there for everyone else, as
+    /// TerritoryWarsService.VehicleMovedAsync moves a war vehicle.
+    /// </summary>
+    public async Task DriverMovedAsync(GameSession s, WalkReq walk)
+    {
+        if (s.DungeonAttempt == null || Active(s) is not { } a || !a.Riding.TryGetValue(s, out var ride) || !ride.Driver
+            || ride.Actor.Removed) return;
+        var actor = ride.Actor;
+        (actor.X, actor.Y, actor.Z, actor.Face) = (walk.Pos.X, walk.Pos.Y, walk.Pos.Z, walk.Face);
+        var movement = GameAoiSink.Movement(s, walk);
+        movement.Uid = actor.Uid;
+        await _world.MoveUnitAsync(actor, movement, except: s);
+    }
+
+    /// <summary>A completed step's own end: the slide and the ride stop, and its show plays on every participant. Returns
+    /// how long the scene waits before it goes on: a dismounting rider's exit (DismountMs).</summary>
+    private async Task<int> EndStepAsync(Attempt a, ReconstructedDungeons.ScriptedStep step)
     {
         if (step.Slide != null) await StopSlideAsync(a);
-        await DismountRidersAsync(a);
+        bool dismounted = await DismountRidersAsync(a);
         if (step.ShowAfter != 0)
             foreach (var member in Playing(a).ToArray()) await PlayerShowAsync(a, member, step.ShowAfter);
         if (step.FallAfter != 0 && _catalog.ScenePoint(a.Plan.SceneEntry, step.FallAfter) is { } bottom)
             foreach (var member in Playing(a).ToArray()) await FallAsync(a, member, bottom);
+        return dismounted ? DismountMs : 0;
     }
 
     /// <summary>

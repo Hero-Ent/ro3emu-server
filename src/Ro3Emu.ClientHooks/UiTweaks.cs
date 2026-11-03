@@ -75,6 +75,7 @@ namespace Ro3Emu.ClientHooks
                 HotbarExpansion.TickInput();
                 HotbarExpansion.TickLayout();
                 LuaPatches.Tick();
+                UnitTrace.Tick();
                 PassChallenges.Tick();
                 PassButton.Tick();
                 TitleButton.Tick();

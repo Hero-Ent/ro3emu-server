@@ -327,6 +327,7 @@ public sealed partial class DungeonTests
         var seen = alice.Inbox.Snapshot().Where(e => e.IsGame(GameAoiSink.SyncAoiView))
             .SelectMany(e => AoIViewChangeData.Parser.ParseFrom(e.Body).Bases).Last(b => b.Uuid == (ulong)bobo.Uid);
         Assert.Equal((5300041UL, 1, 5301401), (seen.EntityTemplateID, seen.EntityType, seen.BuffData.AddBuffs.Single().ConfigId));
+        Assert.Equal(22, seen.AnimationInfo[1]); // he lies on the ground: Idle (1) is IdleLie (22) until he is helped up
 
         (int Npc, int Interaction, int Buff)[] chain =
         [
@@ -342,10 +343,18 @@ public sealed partial class DungeonTests
             {
                 // The crawling ant is born: the client crawls it along patrol 25 by itself (NoviceDungeonBornPatrolNPCID).
                 await Stage(alice, 2, quest: 1);
+                // Helped up, Bobo takes up his own idle again (31026 Idle -> Idle) and steps to enter it.
+                var stands = await Next(alice, WorldEffectsService.Animation, UpdateEntityAnimation.Parser, u => u.EntityID == bobo.Uid);
+                Assert.Equal(1, stands.AnimationInfo[1]);
                 var ant = (await Next(alice, GameAoiSink.SyncAoiView, AoIViewChangeData.Parser,
                     v => v.Bases.Any(b => b.EntityTemplateID == 5300029))).Bases.Single(b => b.EntityTemplateID == 5300029);
                 Assert.Equal(1, ant.EntityType);
                 Assert.True(ant.BornTimeMs > 0, "a born monster-type unit, so LC_State_Unit_Born starts its crawl");
+                // ... and the camera that follows it plays (the scene editor's camera animation 32).
+                var camera = await Next(alice, DungeonService.Event, DungeonEventNotify.Parser,
+                    e => e.EventType == DungeonEventType.DungeonEventInvokeClientFunc);
+                Assert.Equal("ActiveCameraTimeline", camera.CliFuncname);
+                Assert.Equal(("mianstorybingyicamera.prefab", 14000L), (camera.Params[0].StrParams.Single(), camera.Params[1].IntParams.Single()));
             }
             if (step > 0) await Stage(alice, step + 2, quest: step + 1);
             var (npc, buff) = (chain[step].Npc, chain[step].Buff);
@@ -619,6 +628,19 @@ public sealed partial class DungeonTests
         var off = new ReconstructedDungeons(Options.Create(new ServerOptions { ReconstructedDungeons = false }));
         Assert.Null(off.Scripted(1000201));
         Assert.NotEmpty(off.AllScripted);
+    }
+
+    // An actor's idle and a cue's client function come from scripted-scenes.json (no client data needed): Bobo lies on
+    // the ground until he is helped up, and the camera of the crawling Deniro is a client dungeon function.
+    [Fact]
+    public void AnActorsIdleAndACuesClientFunctionAreReadFromTheScriptedScenes()
+    {
+        var steps = new ReconstructedDungeons(Options.Create(new ServerOptions())).Scripted(1000301)!.Steps;
+        Assert.Equal(22, steps[0].Actors.Single(a => a.NpcId == 5300041).Idle);
+        Assert.Equal(0, steps[1].Actors.Single(a => a.NpcId == 5300041).Idle);
+        var call = steps[1].Cues.Select(c => c.Call).Single(c => c != null)!;
+        Assert.Equal("ActiveCameraTimeline", call.Func);
+        Assert.Equal(["mianstorybingyicamera.prefab", 14000L], call.Args);
     }
 
     // A step's reactions come from scripted-scenes.json (no client data needed): Louie's shell game, both rounds.

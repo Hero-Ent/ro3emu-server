@@ -61,6 +61,7 @@ namespace Ro3Emu.ClientHooks
         private static int _frame;
         // The controller class tables already wrapped in this LuaEnv (their modules load on first use of the UI).
         private static Obf_R.Obf_ff _global, _topBarClass, _evePanelClass;
+        internal static Obf_R.Obf_ff Global => _global;
         private static Obf_R.Obf_Ef _topBarState, _topBarRefresh, _evePanelOriginal;
         // Kept alive here: Lua holds the pushed delegates only weakly through xLua's object pool.
         private static readonly SelfMethod TopBarStateWrapper = UpdateCountdownState, TopBarRefreshWrapper = RefreshCountdown,
@@ -131,6 +132,8 @@ namespace Ro3Emu.ClientHooks
                 PersonalCards.Install((Obf_R.Obf_Cf)env, Module(manager, global, "lc_dal_personal"));
                 KatarHold.Install(global, name => Module(manager, global, name));
                 AxeTornadoChase.Install(global, name => Module(manager, global, name));
+                PatrolSurfaceFallback.Install(name => Module(manager, global, name));
+                BornPatrolReverse.Install((Obf_R.Obf_Cf)env, global, name => Module(manager, global, name));
                 LuaLogFilter.Install(global, name => Module(manager, global, name));
                 HotbarExpansion.Install(manager, (Obf_R.Obf_Cf)env, global, name => Module(manager, global, name));
                 CameraZoom.Install(global, name => Module(manager, global, name));
