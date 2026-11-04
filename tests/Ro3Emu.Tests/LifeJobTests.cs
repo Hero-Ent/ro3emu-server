@@ -305,6 +305,30 @@ public sealed class LifeJobTests : IAsyncLifetime
         Assert.Equal(ErrorCodes.LifeRequirements, await OnLoop("alice", s => life.CheckGather(s, 100300))); // Mining 5
         var saved = DBLifeJobInfo.Parser.ParseFrom(_app.Services.GetRequiredService<RoleStore>().LoadLifeJob((long)b.Self!.Uuid)!);
         Assert.True(saved.LifeJobInfoMap[1].GatherInfo.ItemDetails.ContainsKey(100200));
+        Assert.True(saved.LifeJobUnLockDrop.ContainsKey(122)); // main yield, condition 49000006: Mining 3
+        Assert.False(saved.LifeJobUnLockDrop.ContainsKey(132)); // Lv. 3 ore's yield waits for Mining 5
+    }
+
+    /// <summary>#bug-reports "Lv. 2 plants and ore give nothing": the resource paid vigor and no item, its main drop locked.</summary>
+    [ClientDataFact]
+    public async Task LevelTwoOrePaysItsMainYield()
+    {
+        await using var b = await InWorld("Alice"); Assert.Equal(0, await Learn(b, "alice", 1, 1));
+        var life = _app.Services.GetRequiredService<LifeJobService>();
+        int before = 0, after = 0;
+        await _app.Services.GetRequiredService<GameLoop>().InvokeAsync(async () =>
+        {
+            var s = _app.Services.GetRequiredService<SessionRegistry>().All().Single(s => s.Account == "alice");
+            using var gate = await CharacterService.Lock(s);
+            // A role saved before the fix: Lv. 2 ore learned, its conditioned drops never unlocked.
+            s.LifeJob!.LifeJobInfoMap[1].JobLevel = 3;
+            s.LifeJob.LifeJobInfoMap[1].GatherInfo.ItemDetails[100200] = 1;
+            before = s.Items.Count;
+            Assert.Equal(0, await life.CompleteGatherAsync(s, 100200, sceneEntry: 10522, pointId: 312));
+            after = s.Items.Count;
+            Assert.True(s.LifeJob.LifeJobUnLockDrop.ContainsKey(122));
+        });
+        Assert.True(after > before);
     }
 
     /// <summary>

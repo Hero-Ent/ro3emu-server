@@ -133,13 +133,11 @@ public sealed partial class SkillCombatTests
         Assert.Equal(0, await Cast(Bash));
         long start = await Loop.InvokeAsync(() => Task.FromResult(session.SkillCast!.StartMs));
 
-        // Before Bash's interrupt time neither it nor a swing gets in.
-        Assert.Equal(ErrorCodes.SkillBusy, await Cast(Bash));
-        Assert.Equal(ErrorCodes.SkillBusy, await Cast(SwordAttack));
+        // Before Bash's interrupt time a swing does not get in: the press is held (CombatService.QueueCast, as the client
+        // holds one for PublicParamConfig MaxCacheSkillTime) and cast once Bash gives way.
         Assert.True(MonsterService.NowMs < start + 400 - CombatService.SwingJitterMs, "the test ran past the interrupt time; nothing left to check");
-
-        // From there it gives way.
-        await Task.Delay(TimeSpan.FromMilliseconds(Math.Max(0, start + 420 - MonsterService.NowMs)));
         Assert.Equal(0, await Cast(SwordAttack));
+        long swing = await Loop.InvokeAsync(() => Task.FromResult(session.SkillCast!.StartMs));
+        Assert.True(swing >= start + 400 - CombatService.SwingJitterMs, $"the swing cut Bash {start + 400 - swing} ms before its interrupt time");
     }
 }

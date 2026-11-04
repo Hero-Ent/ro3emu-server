@@ -551,7 +551,8 @@ public sealed partial class BuffService : IGameTicker
         {
             // Every session, every tick: copy the list only when something in it has expired.
             if (AnyExpired(s.Buffs, now))
-                foreach (var b in s.Buffs.Where(b => b.ExpireMs <= now).ToList()) ExpireOnce(b, "buff expiration", () => RemoveAsync(s, b));
+                foreach (var b in s.Buffs.Where(b => b.ExpireMs <= now).ToList())
+                    ExpireOnce(b, "buff expiration", () => s.Buffs.Contains(b), () => RemoveAsync(s, b), s, null);
             TickEnergy(s, now);
             TickImmuneDeath(s, now);
         }
@@ -562,7 +563,9 @@ public sealed partial class BuffService : IGameTicker
             foreach (var buff in list.Where(b => b.ExpireMs <= now).ToList())
             {
                 var unit = _world.AllUnits().FirstOrDefault(u => u.Uid == uid);
-                if (unit != null) ExpireOnce(buff, "unit buff expiration", () => RemoveUnitBuffAsync(unit, buff));
+                if (unit != null)
+                    ExpireOnce(buff, "unit buff expiration", () => _unitBuffs.TryGetValue(unit.Uid, out var current) && current.Contains(buff),
+                        () => RemoveUnitBuffAsync(unit, buff), null, unit);
                 else list.Remove(buff);
             }
             if (list.Count == 0) _unitBuffs.Remove(uid);
@@ -577,7 +580,11 @@ public sealed partial class BuffService : IGameTicker
 
     /// <summary>One queued removal per expired buff: a removal waits for its reservation, and queuing one every tick
     /// meanwhile built tens of thousands of waiters on a busy live realm.</summary>
-    private void ExpireOnce(ActiveBuff buff, string name, Func<Task> remove)
+    /// <summary>
+    /// Removes a buff that ran out, then tells <see cref="Expired"/> (a skill released when its buff ends: Venom Splasher's
+    /// detonation) when it was still held, so a buff removed some other way meanwhile releases nothing.
+    /// </summary>
+    private void ExpireOnce(ActiveBuff buff, string name, Func<bool> held, Func<Task> remove, GameSession? holder, WorldUnit? unit)
     {
         long now = MonsterService.NowMs;
         // A loop at its work limit drops the job without running it, so one that never finished is queued again.
@@ -585,7 +592,12 @@ public sealed partial class BuffService : IGameTicker
         _expiring[buff.Guid] = now;
         _loop.TrackLegacyDetached(name, async () =>
         {
-            try { await remove(); }
+            try
+            {
+                bool live = held();
+                await remove();
+                if (live) foreach (var handler in Expired) await handler(holder, unit, buff);
+            }
             finally { _expiring.Remove(buff.Guid); }
         });
     }

@@ -51,10 +51,8 @@ public sealed partial class NewActivityService
             .Where(r => GameData.Int(r, "_iId") > 0 && GameData.Int(r, "_iMapId") == session.SceneEntry
                 && _scene.TreasurePoint(GameData.Int(r, "_iId")) != null)
             .OrderBy(r => GameData.Int(r, "_iId")).ToArray();
-        if (points.Length == 0) return ErrorCodes.FeatureUnavailable;
-        var local = points.Where(r => GameData.Int(r, "_iMapId") == session.SceneEntry).ToArray();
-        if (local.Length == 0) return ErrorCodes.TreasurePointMissing;
-        var chosen = local[Random.Shared.Next(local.Length)];
+        if (points.Length == 0) return ErrorCodes.TreasurePointNotOnMap;
+        var chosen = points[Random.Shared.Next(points.Length)];
         var runtime = CloneRuntime(session);
         runtime.AdventureTreasure = new AdventureTreasureCursor
         {

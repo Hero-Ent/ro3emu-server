@@ -29,31 +29,6 @@
         13326
       ]
     },
-    "13320:1": {
-      "name": "Myriad Stars Chase the Moon (talent mode 1)",
-      "why": "Mode-1 rows 1332011-1332015: 'continuously dealing PATK * «1600..2000»%' = 10 x _kDamageParam1[0] (160..200%); template 133201 has 12 attack points (launch at 0, then 0.5-2.5 s): ten hits at points 1-10 on the 18 x 4 m strip from where the arrow was fired. The group entry's 7 hits under-hit this mode.",
-      "hits": {
-        "points": [
-          1,
-          2,
-          3,
-          4,
-          5,
-          6,
-          7,
-          8,
-          9,
-          10
-        ]
-      },
-      "anchor": "origin",
-      "shape": {
-        "rect": [
-          18,
-          4
-        ]
-      }
-    },
     "13305": {
       "name": "Focused Arrow Strike",
       "why": "'... dealing PATK * «56»% ... to the target and up to «5» enemies in a line within Attack Range' (range «18» m): the same piercing line as Sharp Shooting (13204, _kLogicData [3, 150]: 1.5 m wide, inferred for this family), 18 m from the caster toward the locked target, 1 + 5 targets (_iTargetMax is 1).",
@@ -109,13 +84,6 @@
       "anchor": "caster",
       "shape": { "rect": [18, 1.5] },
       "maxTargets": 4
-    },
-    "13320": {
-      "name": "Myriad Stars Chase the Moon",
-      "why": "'Fires a hurricane Arrow in the designated direction across a «18»-meter by «4»-meter area, continuously dealing PATK * «1400»% ... to up to «10» enemies in its path': _kDamageParam1 20000 (200%, shown in 2, _kShowDmg [2]) at each of the seven attack points after the launch (0.5-1.7 s) = 1400% (lv1 7 x 160 = «1120», lv3 7 x 180 = «1260»). The strip is 18 x 4 m per the description (kRange says 1800 x 600) and lies from where the shot was fired: the caster may walk during the cast ('MSPD increases by «30»%'). Mode 1 (talent, 12 attack points, '«2000»%' = 10 x 200%) still gets 7 hits here until mechanics can be keyed per mode.",
-      "hits": { "points": [1, 2, 3, 4, 5, 6, 7] },
-      "anchor": "origin",
-      "shape": { "rect": [18, 4] }
     },
     "13327": {
       "name": "Warg Companion (Warg Strike)",

@@ -20,6 +20,17 @@ public sealed partial class SkillCombatTests : IAsyncLifetime
     private CharacterService Character => _app.Services.GetRequiredService<CharacterService>();
     private GameSession Session(string name) => _app.Services.GetRequiredService<SessionRegistry>().All().Single(s => string.Equals(s.Account, name, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>Mado Gear (CartRemouldTable 1500300) ridden in battle slot 2: the Mechanic skills' _iSkillCondition
+    /// (LC_ConditionList [2003, 1500300]) needs it, as the client's pre-check does.</summary>
+    private Task RideMadoGear(string name) => Loop.InvokeAsync(() =>
+    {
+        var s = Session(name);
+        s.Mounts ??= new DBMountsInfo();
+        s.Mounts.Mounts[1500300] = new DBMount(); // owned, so MountService.Normalize keeps the ride
+        s.Mounts.MountIds[2] = new MountInfo { MountId = 1500300, IsRiding = true };
+        return Task.CompletedTask;
+    });
+
     public async Task InitializeAsync()
     {
         var ports = TestPorts.FreePorts();
@@ -372,7 +383,7 @@ public sealed partial class SkillCombatTests : IAsyncLifetime
     {
         // High-Energy Impact: take off at once, slam at the template's last attack point where the caster has flown.
         await using var alice = await InWorld("Alice");
-        await Gm("alice", "!job 6400"); await Teach("alice", 16307);
+        await Gm("alice", "!job 6400"); await Teach("alice", 16307); await RideMadoGear("alice");
         var takeoff = await Target("alice", stationary: true);
         var landing = await Target("alice", stationary: true);
         var caster = Session("alice");

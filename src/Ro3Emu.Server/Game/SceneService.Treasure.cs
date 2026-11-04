@@ -7,13 +7,8 @@ public sealed partial class SceneService
 {
     /// <summary>Custom data ScenePointId (Config/Define/Lua_CustomDataDefine.lua): LC_InteractCondition.CheckTreasureIsHunt
     /// offers the NPC's interaction only while it equals SeasonTreasureHunt.iPointId, the hunt's 5064 point.</summary>
-    private const long ScenePointIdCustomData = 105;
-    private const int TreasureNpcId = 21070002;
-    /// <summary>
-    /// Lua_CustomDataDefine.ScenePointId. NPCInteractConfig 21070002's NPC condition 7100041
-    /// (LC_InteractCondition.CheckTreasureIsHunt) offers the dig only when it equals the hunt's 5064 pointId.
-    /// </summary>
     internal const long ScenePointIdData = 105;
+    private const int TreasureNpcId = 21070002;
     /// <summary>Treasure hunt NPC UIDs: 2^46 + role id, below 2^53 (the client keeps unit ids in a double array, see
     /// DungeonService.SceneActorUidBase).</summary>
     internal const long TreasureUidPrefix = 1L << 46;
@@ -49,7 +44,7 @@ public sealed partial class SceneService
         var entity = NpcEntity(npc);
         entity.CustomDatas.Add(new CustomData
         {
-            Id = ScenePointIdCustomData,
+            Id = ScenePointIdData,
             CustomParam = new CustomParam { Tp = CustomParam.Types.ParamType.Long, LongParam = hunt.PointId },
         });
         var view = new AoIViewChangeData();

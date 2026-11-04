@@ -1,12 +1,12 @@
 {
-  "Format": 2,
+  "Format": 4,
   "Fingerprint": "24bf14073100eef1b1441d06d3d7f2058728bf1d776fd11be19fb580dc1d4e8d",
-  "ClientDir": "C:\\Games\\Ragnarok3",
-  "ExportedUtc": "2026-10-18T18:55:24.1592349Z",
+  "ClientDir": "C:\\Dev\\ro3emu-server\\Client\\Ragnarok3",
+  "ExportedUtc": "2026-11-04T05:10:55.6627965Z",
   "Messages": 1090,
   "NavFiles": 172,
   "ConfigTables": 516,
-  "Quick": "13489:119967065:639279464545814555",
+  "Quick": "13489:119967065:639281531865312643",
   "Files": {
     "config": 517,
     "sceneeditor": 381,

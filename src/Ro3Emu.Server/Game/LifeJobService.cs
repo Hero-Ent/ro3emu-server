@@ -415,9 +415,10 @@ public sealed partial class LifeJobService
         var next = s.LifeJob!.Clone(); var restrict = s.Restrictions!.Clone(); var runtime = Copy(s.LifeRuntime);
         try
         {
+            UnlockEarnedDrops(s, next, row);
             // (inferred) Each eligible main/extra drop rolls independently in basis points; repeated pool groups remain intact.
             foreach (long id in Numbers(row, "_iDropId"))
-                if (s.LifeJob!.LifeJobUnLockDrop.ContainsKey(id) && _data.Row("LifeDropConfig", id) is { } drop
+                if (next.LifeJobUnLockDrop.ContainsKey(id) && _data.Row("LifeDropConfig", id) is { } drop
                     && _functions.ConditionMet(s, GameData.Int(drop, "_iCondition")) && Random.Shared.Next(10000) < DropChance(s, drop))
                 {
                     var output = _awards.Resolve(s, GameData.Int(drop, "_iMultiGroupIDId"), _seasons.PlayBook).Grants;

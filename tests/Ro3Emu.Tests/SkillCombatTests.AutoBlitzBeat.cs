@@ -51,6 +51,21 @@ public sealed partial class SkillCombatTests
         await Next(bot, CombatService.SkillHit, SkillHitInfo.Parser, x => x.SessionId == accepted.SessionId);
     }
 
+    /// <summary>
+    /// A basic attack at <paramref name="roll"/> sends no automatic Blitz Beat. The basic attack keeps swinging on its own and
+    /// the falcon flies before it hits, so a swing rolled before the change can still land its Blitz Beat afterwards: count
+    /// from once those flights are over.
+    /// </summary>
+    private async Task AssertNoProcAt(BotClient bot, MonsterUnit monster, int roll)
+    {
+        RollAtChance(roll);
+        await Task.Delay(1500);
+        int before = HitsOf(bot, AutoBlitzRow);
+        await BasicAttack(bot, monster);
+        await Task.Delay(1500);
+        Assert.Equal(before, HitsOf(bot, AutoBlitzRow));
+    }
+
     private static int HitsOf(BotClient bot, int skill) => bot.Inbox.Snapshot().Count(e => e.IsGame(CombatService.SkillHit)
         && SkillHitInfo.Parser.ParseFrom(e.Body).SkillId == skill);
 
@@ -65,10 +80,7 @@ public sealed partial class SkillCombatTests
         var auto = await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, x => x.SkillId == AutoBlitzRow);
         Assert.Contains(auto.Dsts, d => d.DstID == monster.Uid && d.Damage > 0);
 
-        RollAtChance(1000);
-        await BasicAttack(alice, monster);
-        await Task.Delay(300);
-        Assert.Equal(1, HitsOf(alice, AutoBlitzRow));
+        await AssertNoProcAt(alice, monster, 1000);
     }
 
     // Thunder Shockwave's ["0", "13102", "4", "1", "3000", "0"]: "Increases the Chance for [Arrow Attack] to trigger [Blitz
@@ -84,10 +96,7 @@ public sealed partial class SkillCombatTests
         await BasicAttack(alice, monster);
         await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, x => x.SkillId == AutoBlitzRow);
 
-        RollAtChance(4000);
-        await BasicAttack(alice, monster);
-        await Task.Delay(300);
-        Assert.Equal(1, HitsOf(alice, AutoBlitzRow));
+        await AssertNoProcAt(alice, monster, 4000);
 
         var row = SkillConfig.Get(_app.Services.GetRequiredService<GameData>(), AutoBlitzRow)!.Value.Row;
         var effective = _app.Services.GetRequiredService<CombatService>().ExtraRow(Session("alice"), row);

@@ -414,6 +414,8 @@ public sealed class CareerSpecialTests : IAsyncLifetime
     {
         await using var a = await InWorld("Alice");
         await Become("alice", 3400, 99, 13310, 13311, 13312);
+        // The leased wolf walks beside her unridden: Warg Strike's _iSkillCondition 86000491 is a type 6 pendant [2006, 6].
+        Assert.Equal(0, await LeaseAsync(a, Wolf));
         var target = await WolfTargetAsync(10);
         var (_, _, hit) = await CastOnAsync(a, 1331201, target);
         Assert.Equal(1331201, hit.SkillId);

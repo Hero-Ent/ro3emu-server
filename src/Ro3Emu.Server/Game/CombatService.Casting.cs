@@ -125,7 +125,7 @@ public sealed partial class CombatService
                 error = ErrorCodes.SkillBusy;
             }
             else if (s.SkillCast is { Cancelled: false } activeSwing && Now < activeSwing.StartMs + activeSwing.ChantMs + activeSwing.ActionMs
-                && (!new SkillConfig(row.Value).CancelCast || !CastYields(activeSwing, row.Value, req) || SwingInFlight(activeSwing, row.Value, req))) error = ErrorCodes.SkillBusy;
+                && !CastYields(activeSwing, row.Value, req)) error = ErrorCodes.SkillBusy;
             else error = ValidateTarget(s, row.Value, req, origin, owned == null ? WalkSlack(s) : 0,
                 _data.Row("SkillConfig", request.SkillId) is { } askedRow ? Range(askedRow) : 0, turret);
         }

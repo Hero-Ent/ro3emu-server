@@ -779,4 +779,60 @@ public sealed partial class DungeonTests
         Assert.True(TaskService.IsDelivered(Session(bot), task), $"task {task} is {State(task)}");
         Assert.True(State(next) is TaskState.Running or TaskState.Finish, $"next task {next} is {State(next)}");
     }
+
+    // The Ant Queen's Nest 1000301 starts the player and Bobo outside its server nav (303 cells, far to the east). With the
+    // walk check enforced the destination was tested first, so every step there was snapped back and the player who
+    // arrived could not move at all.
+    [ClientDataFact]
+    public async Task AWalkOffTheScenesNavIsNotSnappedBack()
+    {
+        const long scene = 1000301;
+        var options = Service<IOptions<ServerOptions>>().Value;
+        options.WalkCheck = "enforce";
+        try
+        {
+            await using var alice = await InWorld("Alice");
+            await Gm(alice, "!quest accept 10104300"); // Explore the Ant Queen's Nest: [101018, 1000301, 1]
+            Assert.Equal(0, await Enter(alice, new EnterDungeonReq { SceneEntry = scene }));
+            await Load(alice, scene);
+            var from = await Service<GameLoop>().InvokeAsync(() => Task.FromResult(Session(alice).Position));
+            Assert.Null(Service<WorldData>().Map(scene)!.Nav!.NearestWalkable(from.X, from.Z, from.Y));
+            await Task.Delay(600); // the walk budget of the arrival
+            float x = from.X + 1.5f, z = from.Z;
+            await alice.SendGameAsync(MsgId.Walk, new WalkReq { Pos = new Vec3 { X = x, Y = from.Y, Z = z }, BStop = true, SpeedRate = 1 });
+            for (int i = 0; i < 100; i++)
+            {
+                var at = await Service<GameLoop>().InvokeAsync(() => Task.FromResult(Session(alice).Position));
+                if (Math.Abs(at.X - x) < 0.01f && Math.Abs(at.Z - z) < 0.01f) return;
+                await Task.Delay(20);
+            }
+            Assert.Fail("the walk off the nav was snapped back");
+        }
+        finally { options.WalkCheck = "log"; }
+    }
+
+    // After Maya's nest the story goes on on the field (10104320 tracks map 10540), and its quest stays hidden in the scene.
+    [ClientDataFact]
+    public async Task MayasNestReturnsThePlayerToTheFieldAfterItsClear()
+    {
+        const long scene = 1000401;
+        await using var alice = await InWorld("Alice");
+        await Gm(alice, "!lvl 99");
+        Assert.Equal(0, await Enter(alice, new EnterDungeonReq { SceneEntry = scene }));
+        long instance = await Load(alice, scene);
+        using var left = alice.Inbox.Expect(e => e.IsGame(DungeonService.Leave));
+        var plan = Session(alice).DungeonAttempt!.Plan;
+        for (int wave = 0; wave < plan.Waves.Count; wave++)
+        {
+            var step = plan.Waves[wave].Step!;
+            await Stage(alice, wave + 1, quest: step.Quest);
+            await ActorsIn(alice, step.Actors.Count);
+            if (plan.Waves[wave].Spawns.Count > 0)
+                foreach (var monster in await WaveIn(instance, plan.Waves[wave].Spawns.Count)) await Kill(alice, monster);
+            if (step.Complete.Count > 0) await Gm(alice, "!actors use");
+        }
+        Assert.Equal((DungeonRes)1, (await Next(alice, DungeonService.Result, DungeonResNotify.Parser)).Res);
+        var leave = await left.WaitAsync(TimeSpan.FromSeconds(DungeonService.PlaneExitSeconds + 10));
+        Assert.Equal(0, LeaveDungeonRsp.Parser.ParseFrom(leave.Body).Result);
+    }
 }

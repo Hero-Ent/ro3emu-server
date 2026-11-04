@@ -72,7 +72,7 @@ public sealed partial class SkillCombatTests
     public async Task EnergyReleaseSpendsHpThenExplodesAfterTheCountdown()
     {
         await using var alice = await InWorld("Alice");
-        await Gm("alice", "!job 6400"); await Teach("alice", 16317);
+        await Gm("alice", "!job 6400"); await Teach("alice", 16317); await RideMadoGear("alice");
         var caster = Session("alice");
         var origin = caster.Position.Clone();
         var near = new List<MonsterUnit>();
@@ -93,9 +93,13 @@ public sealed partial class SkillCombatTests
         // 3 s later the follow-up (1635201) explodes around the caster and costs 50% Max HP more, never fatally.
         var boom = await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.SkillId == 1635201);
         Assert.All(near, m => Assert.Contains(boom.Dsts, d => d.DstID == m.Uid)); // map monsters nearby may be hit too
-        await Task.Delay(200);
-        long afterBoom = await Loop.InvokeAsync(() => Task.FromResult(Character.Stats(caster)[2000]));
-        Assert.Equal(1, afterBoom);
+        // The loss follows the hit on the loop: wait for it rather than for a fixed time.
+        long afterBoom = afterCost;
+        for (var until = DateTime.UtcNow.AddSeconds(2); afterBoom > maxHp / 10 && DateTime.UtcNow < until; await Task.Delay(50))
+            afterBoom = await Loop.InvokeAsync(() => Task.FromResult(Character.Stats(caster)[2000]));
+        // Half of Max HP from the half left after the cost: 1 HP, plus what regenerated during the 3 s countdown.
+        // Without the loss about half of Max HP would be left.
+        Assert.InRange(afterBoom, 1, Math.Max(1, maxHp / 10));
         Assert.False(caster.Dead);
     }
 
@@ -103,7 +107,7 @@ public sealed partial class SkillCombatTests
     public async Task AerialBombardmentDropsSevenBombsOnTheStrip()
     {
         await using var alice = await InWorld("Alice");
-        await Gm("alice", "!job 6400"); await Teach("alice", 16318);
+        await Gm("alice", "!job 6400"); await Teach("alice", 16318); await RideMadoGear("alice");
         var target = await Target("alice", stationary: true);
         var origin = Session("alice").Position.Clone();
         await Loop.InvokeAsync(() => { target.Hp = 50_000_000; target.Moving = false; target.X = origin.X; target.Z = origin.Z + 6; return Task.CompletedTask; });
@@ -122,7 +126,7 @@ public sealed partial class SkillCombatTests
     public async Task ArmCannonSplashesAroundTheLockedTargetTwice()
     {
         await using var alice = await InWorld("Alice");
-        await Gm("alice", "!job 6400"); await Teach("alice", 16312);
+        await Gm("alice", "!job 6400"); await Teach("alice", 16312); await RideMadoGear("alice");
         var locked = await Target("alice", stationary: true);
         var beside = await Target("alice", stationary: true);
         var byCaster = await Target("alice", stationary: true);

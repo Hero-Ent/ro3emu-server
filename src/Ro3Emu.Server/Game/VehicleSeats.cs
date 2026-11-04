@@ -58,6 +58,10 @@ internal abstract class SeatedVehicle : MonsterUnit
                 Pos = Pos, Face = Face, ServerTime = MonsterService.NowMs, MoveType = MovementType.MoveTypeNone
             },
         };
+        // The driver's client moves the vehicle it controls (LC_PassengerComponent.ChangeControlUnit) at the vehicle
+        // unit's own speed, attribute 113, which every monster entity carries (MonsterUnit.Entity): without it the
+        // vehicle stood still under its driver and never played its walk. NPCConfig _iSpeed (Madogear 500 cm/s).
+        entity.Property.Add(new AoIProperty { Idx = AttributeId.Speed, Data = SpeedCm(MonsterService.NowMs), BaseData = Template.SpeedCm });
         if (Buffs.Count > 0) entity.BuffData = new AoIBuffInfo { AddBuffs = { Buffs.Select(b => b.Clone()) } };
         var carries = new AoICarryInfo();
         for (int seat = 0; seat < Seats.Length; seat++)

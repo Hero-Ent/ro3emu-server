@@ -79,7 +79,7 @@ public sealed partial class SkillCombatTests
     public async Task VulcanArmLoadsFirepowerOnlyAtFifteenStacks()
     {
         await using var alice = await InWorld("Alice");
-        await Gm("alice", "!job 6400"); await Teach("alice", 16313);
+        await Gm("alice", "!job 6400"); await Teach("alice", 16313); await RideMadoGear("alice");
         var s = Session("alice");
         var target = await Target("alice", stationary: true);
         var origin = s.Position.Clone();
