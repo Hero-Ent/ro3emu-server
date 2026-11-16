@@ -76,6 +76,29 @@ Fale com o usuario em portugues. O Hero Saga e um fork com historico compartilha
 - `pwsh` nao esta instalado: `client-stamp.ps1` nao roda no Windows PowerShell; calcule o carimbo com
   `git hash-object -- <arquivos>` (nunca por pipe: o PowerShell 5 poe BOM no stdin do git).
 
+## Licoes do sync de 2026-11-15 (264 commits)
+
+- **Precedencia combinada**: skill com entrada no `SkillMechanics` (ou Axe Tornado / High-Energy Impact) resolve pelo nosso
+  caminho (`CombatService.HeroMechanic`); as demais ganham os caminhos novos do upstream. Quando o upstream reimplementa uma
+  skill nossa com mais fidelidade aos dados (ex.: Firepower Loaded -> 1632001 pelo `_kLogicData`, campos reais no chao,
+  reacoes com cooldown do texto), apague a nossa entrada do JSON em vez de manter as duas: dois caminhos = hits/buffs em dobro
+  (Gravitation Field deu 15 strikes em vez de 8). Procure duplicatas em `CreateSkillObjectAsync`, `ClassLoops`,
+  `HitReactions`, `RowProcs`, `Stages` e nos `buffTriggers`.
+- **Shows de captura (Genesis)**: falcao, lobo e Arrow Storm do upstream vao nas rotas HIGH_LEVEL (31106/31108/31109); o
+  nosso pendant generico deve ficar fora para essas linhas (`FalconHigh`/`WargStrikeHigh`), senao o cliente reinicia o voo.
+- **Cenas scriptadas**: o upstream reescreve as mesmas cenas (1000201-1000501) com outra estrutura; manter as nossas = pegar
+  `main` para `ReconstructedDungeons*.cs`, `scripted-scenes.json`, `DungeonService.Scripted/Cannon.cs`,
+  `DungeonTests.Scripted*.cs`, apagar os arquivos novos deles so dessas cenas (`DungeonService.Slide.cs`,
+  `DungeonTests.Airship.cs`) e portar o que e generico (contador cheio, `Reached` da perna rapida, rider que caminha).
+- **Sem Windows**: da para instalar o SDK na VM Linux (`dotnet-install.sh --version` do `global.json`) e rodar
+  `dotnet build`/`dotnet test` com `-p:RunAnalyzers=false -p:EnforceCodeStyleInBuild=false -p:UseSharedCompilation=false`
+  (com analisadores o csc estoura 3 GB). Testes `[ClientDataFact]` precisam de `data/config`, `data/nav`, `data/sceneeditor`,
+  `data/skills` e os `.json/.tsv` de `Client/RO3Emu/data` copiados para `data/`. Rode em lotes de ~50 testes
+  (`--filter FullyQualifiedName~...`): a suite inteira leva mais de 1 h. Os analisadores (TreatWarningsAsErrors) ficam
+  para o `dotnet build Ro3Emu.slnx -c Release` no Windows antes de publicar.
+- **Hash do manifesto economico** e `ConfigViewTests.FieldNamesOutsideViews` mudam em todo sync: leia o valor novo do
+  proprio teste que falhou.
+
 ## Fase 2 - Integracao (so depois do "aprovado")
 
 1. `git status --short`: se houver mudancas nao commitadas, pare e pergunte (commitar ou adiar). Nao faca stash.

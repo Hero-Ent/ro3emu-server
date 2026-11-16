@@ -18,6 +18,83 @@ compartilhado. Integramos as novidades deles por **merge** (nunca cherry-pick), 
 | 2026-10-27 | `bbc9e3b2..7122af4f` (38 commits, PRs #85-#117) | tudo | nenhum revertido | ver "Sync 2026-10-27" |
 | 2026-10-31 | `7122af4f..077e59e9` (176 commits, PRs #118-#214) | tudo com preservação dos pontos críticos | nenhum revertido; launcher e identidades mantidos | ver "Sync 2026-10-31" |
 | 2026-11-03 | `077e59e9..ff0ad473` (152 commits, PRs #215-#366) | Grupos A, C, D, E, F, G | Grupo B (Dungeons/Raids/Maya DG - já corrigidas no Hero Saga) | ver "Sync 2026-11-03" |
+| 2026-11-15 | `ff0ad473..8d21277f` (264 commits, 156 sem merges, PRs #367-#453) | tudo, com precedência das mecânicas e cenas do Hero Saga (ver abaixo) | nenhum revertido; cenas scriptadas (Aeronave, Formiga-Rainha, Maya) e o canhão client-side do upstream ficaram de fora por decisão do usuário | ver "Sync 2026-11-15" |
+
+## Sync 2026-11-15
+
+Faixa `ff0ad473..8d21277f` (264 commits, 156 de conteúdo, PRs #367 a #453): fórmulas de dano reescritas (DEF escala com o
+nível do atacante, atributos de dano/cura/penetração/crítico, `_kDamageFormulaExtra` por nome, cooldown 205/206), efeitos de
+cartas (dois lotes: Baphomet, GTB, Maya, Orc Lord, Phen, Eddga, Doppelganger, Osiris, família de monstros, elementos de
+armadura...), reações de classe (Parry, Shield Reflect, Reflect Damage, Shrink, Death Bound, Devotion), imunidades e escudos
+de monstros, talentos de skills travadas, áreas nomeadas pelo texto, loops de classe (Warg Strike, Guillotine, Firepower,
+Joint Beat, Precision Thrust, King's Grace), skills de duas etapas (High-Energy Impact, Shadow Echo, Ultra Shield Bash),
+campos no chão (Sanctuary, Magnus, Gravitation Field, Meteor Storm, Fire Wall, barreiras), comportamento de monstros (leash,
+obstáculos, corpos), conteúdo dos forks (Spirit Tower, Hatchery, star-up, Growth Classroom, troféus, sinos do Louie,
+recompensas de primeira conclusão, baú cooperativo, Fly Wing), buffs offline (`_iOffline 2`), pet (eclosão S, cura, pet do
+mundo), movimento clássico por mouse (PR #419), ids de role acima dos NPCs, Arrow Storm, Deniro/Formiga-Rainha e canhões da
+Aeronave (PR #406/#451), SDK 10.0.403 e Microsoft.Data.Sqlite 11.0.0.
+
+Decisões do usuário:
+
+- **Cenas scriptadas (1000201/1000301/1000401/1000501):** mantidas as do Hero Saga (reconstrução pelo vídeo oficial, cues,
+  canhão server-side `DungeonService.Cannon`, `CombatService.Turret*`). Do upstream entraram só as partes genéricas: contador
+  cheio ao completar um passo (`GoalFullWave`), `ContinueAfterMs`/`Guides` por passo (lidos do JSON, sem uso nas nossas cenas),
+  o rider não sentado que caminha sozinho (#416, portado para o nosso `DungeonService.Ride`), a checagem da perna de um
+  slide/ride rápido cruzando uma região estreita (`Reached`, portado para o nosso slide/ride). Ficaram de fora
+  `DungeonService.Slide.cs`, `DungeonTests.Airship.cs`, a `Drive`/`RideAlone` do Deniro e o `SeatOnCannonAsync` só está
+  declarado (ninguém chama).
+- **Skills:** "nossa mecânica manda, upstream preenche o resto". Uma linha com entrada no `SkillMechanics` (ou Axe Tornado /
+  High-Energy Impact) resolve pelo nosso `CastImpacts`/`ApplyEffects` (`CombatService.HeroMechanic`); sem entrada, valem os
+  caminhos novos do upstream (`EnemiesByText`, `SkillAreaContains`, `LocksItsTarget`, `ChainRadius`, Venom Splasher, Energy
+  Release, Cross Ripper). Entraram por cima, para todas as skills: fórmula de DEF por nível, `DamageFormula`/`DamageAttributes`
+  (o nosso `StatScale` saiu), `HealRatio`, `DamageBranch` (depois do nosso branch de mecânica), `JobAllowsBuff`,
+  `ComesFromALoop`, `PilesFor`, escudos de monstro (`AbsorbAsync`/`SheildDamage`), status garantido, `ResistsDisplacement`,
+  `atOnce`/`WavesLeft`/`TouchesLeft` dos campos, follow-ups que gastam o status, `arrivedMs` no `CastYields`.
+- **Onde o upstream era melhor, a nossa entrada saiu:** Auto Counter (bônus de dano quando aparou), Parry/Shield Reflect/
+  Recoil/Reflect Damage (reações do `HitReactions`, com cooldowns do texto), Vulcan Arm/Arm Cannon (Firepower Loaded ->
+  1632001 pelo `_kLogicData`; o `ClassLoops` gasta as pilhas), Sanctuary/Magnus/Gravitation Field (campos reais no chão).
+  Ficaram as nossas: Energy Release, Venom Splasher, Rolling Cutter, Envenomed Blade (bounce), Rift Impact, High-Energy
+  Impact, Chain Lightning, Shadow Guard/Loop, Blitz Beat, Warg Hunt, armadilhas etc. O Charge Up continua pelo nosso gatilho
+  (`group:11604`), agora no nível que o buff nomeia.
+- **Movimento clássico por mouse:** adotada a versão final do PR #419 (repara só quando não há `KeyBoardInfo`; um save real,
+  inclusive com mouse desligado, é do jogador). O nosso `c6f3263e` foi substituído.
+- **Falcão/lobo/Arrow Storm:** os shows do upstream (captura do servidor Genesis, rotas HIGH_LEVEL 31106/31108/31109)
+  valem para Blitz Beat, Warg Strike e Arrow Storm; o nosso pendant genérico fica para as outras linhas (Warg Bite).
+- **Dash:** andar durante um 31112 é descartado (`SkillMovedUntilMs`, também no nosso `DashAsync`); o nosso pin (ResetPos no
+  fim, 0845ec85) ficou só para moves ao longo da face (Back Slide); um mergulho num ponto só corrige deriva.
+
+Como os conflitos foram resolvidos (26 arquivos):
+
+- `CombatService.Effects.cs` (15 blocos): `ResolveCastAsync` reescrito sem a duplicação de `MoveCasterAsync`/
+  `CreateSkillObjectAsync` que vinha do sync anterior (um impacto posterior só aplica o seu hit; uma linha canalizada não
+  aplica nada mais). `SelectEnemies` com as duas geometrias (mecânica nossa, senão `SkillAreaContains`). `SkillObject` sem
+  `TicksLeft`/`LastHits` (viraram `WavesLeft`/`TouchesLeft`); `Knockback`/`MaxTargets` nossos mantidos.
+- `CombatService.Casting.cs`: fila de casts nossa + `arrivedMs`; `ResetCooldownsAsync` chama o `ResetCooldownAsync` do
+  upstream; `IsResurrection` cobre AcolyteBD4 no nosso `CastImpacts`.
+- `CombatService.cs`: `Fighter.Stats`/`StatScale` removidos (teste `DamageParamExtraScalesTheRatioWithAspdAndLevel` saiu;
+  `SkillCombatTests.DamageFormula` do upstream cobre).
+- `EconomySnapshotReader.TypeManifest.cs`: hash `A3B9A5A255023364DEE38442BB6C94FF0BA8F18DABE3451296A4B3C1A66F47A5`
+  (FirstPassPaid + offline_buffs do upstream junto com GmResets/gifts nossos).
+- `ConfigViewTests.FieldNamesOutsideViews` = 2714 (2650 do upstream + 64 nossas).
+- `GmAccessTests`: os dois testes (nosso group_id do site + o do upstream sobre maiúsculas do login).
+- `PetFollowerService`: construtor com `IOptions<ServerOptions>` (upstream) e `WorldData?` (nosso).
+- `World.cs`/`WorldData.cs`: `FarSight`/`SightBeyondView` nossos + `Far`/`SeenFromAfar` e `PatrolPaths` do upstream.
+- Testes do upstream que modelam skills que ficaram com a nossa mecânica saíram: `EnergyReleaseGoesOffAfterItsCountdown`,
+  os dois de High-Energy Impact em `SkillCombatTests.Stages`, a linha Envenomed Blade de `AnAreaNamedByTheTextReachesItsTargets`.
+  Testes nossos que viraram do upstream: `ParryReleasesAutoCounterOnMeleeHitsWithItsCooldown` (coberto por
+  `AClassBuffStrikesBackOnceWithinItsCooldown`); `WargStrikeOnFootSendsTheWolfToItsTarget` e `BlitzBeatSendsTheFalconToItsTarget`
+  passaram a esperar as rotas HIGH_LEVEL.
+- Build e testes rodados numa VM Linux (SDK 10.0.404, sem os analisadores por falta de memória: rodar
+  `dotnet build Ro3Emu.slnx -c Release` no Windows antes de publicar): 3.343 testes do `Ro3Emu.Tests` com dados do cliente,
+  todos verdes (as 4 falhas de tempo/ordem passaram isoladas). `QuestWalkTests` (Slow) não entrou. `Ro3Emu.Patcher.Tests`
+  (referência a `GitHubReleases.cs`) e `PanelLinkTests` (`IsRo3EmuMode`) já não compilavam na `main` antes deste sync.
+
+Pendências:
+
+- Testar no jogo: Auto Counter (bônus ao aparar), Parry/Shield Reflect/Reflect Damage/Recoil pelas reações novas, Vulcan Arm ->
+  Arm Cannon Enhance (1632001), Sanctuary/Magnus/Gravitation Field como campos, Rift Impact (sem pin), Back Slide (com pin),
+  Swift Warg Lv2 após Warg Hunt, falcão do Blitz Beat e lobo do Warg Strike (uma vez só), movimento por mouse no Clássico.
+- Cliente/launcher/patcher: nada mudou no upstream; não precisa de versão nova.
 
 ## Sync 2026-11-03
 

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Romsg;
 using Ro3Emu.Server.Game;
@@ -6,29 +5,9 @@ using Ro3Emu.Server.Maps;
 
 namespace Ro3Emu.Tests;
 
-/// <summary>Phase 3 of the skill mechanics: attribute scaling, bounces, conditional branches.</summary>
+/// <summary>Phase 3 of the skill mechanics: bounces and conditional branches (attribute scaling is the upstream's DamageFormula since the 2026-11-15 sync).</summary>
 public sealed partial class SkillCombatTests
 {
-    [Fact]
-    public void DamageParamExtraScalesTheRatioWithAspdAndLevel()
-    {
-        static double Scale(string extra, long aspd, int level, long dex = 0)
-        {
-            using var doc = JsonDocument.Parse($"{{\"_kDamageParamExtra\": {extra}}}");
-            return CombatService.StatScale(doc.RootElement, id => id == 115 ? aspd : id == 5 ? dex : 0, level);
-        }
-        // Rolling Cutter "PATK * «40»%*(«1»+ASPD*«0.5»%)": ASPD 100% -> x1.5; capped at 500% ASPD -> x3.5.
-        Assert.Equal(1.5, Scale("[[50, 115, 10000, 500]]", 100, 1), 6);
-        Assert.Equal(3.5, Scale("[[50, 115, 10000, 500]]", 800, 1), 6);
-        Assert.Equal(1.3, Scale("[[30, 115, 10000]]", 100, 1), 6);
-        // Heal "Each Base Level increases Healing Volume by «0.1»%": level 50 -> x1.05; DEX Resonance «0.1»%.
-        Assert.Equal(1.05, Scale("[[1, 10, 0, 1]]", 100, 50), 6);
-        Assert.Equal(1.08, Scale("[[1, 10, 5, 1, 100]]", 100, 50, dex: 80), 6);
-        // Unknown layouts (Death Bound's reflect row, revive percentages) change nothing.
-        Assert.Equal(1, Scale("[[1, 3, 0, 1, 1200, 1, 1200]]", 100, 50), 6);
-        Assert.Equal(1, Scale("[[2, 5000, 101, 3]]", 100, 50), 6);
-    }
-
     [ClientDataFact]
     public async Task EnvenomedBladeBouncesToTheEnemiesNearTheTarget()
     {

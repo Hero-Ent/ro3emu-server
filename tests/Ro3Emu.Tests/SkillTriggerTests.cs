@@ -38,27 +38,7 @@ public sealed partial class SkillCombatTests
         Assert.True(bombed.Hp < 50_000_000);
     }
 
-    [ClientDataFact]
-    public async Task ParryReleasesAutoCounterOnMeleeHitsWithItsCooldown()
-    {
-        await using var alice = await InWorld("Alice");
-        await Gm("alice", "!job 1300"); await Teach("alice", 11210);
-        var s = Session("alice");
-        var attacker = await Target("alice", stationary: true);
-        var origin = s.Position.Clone();
-        await Loop.InvokeAsync(async () =>
-        {
-            attacker.Hp = 50_000_000; attacker.Moving = false; attacker.X = origin.X; attacker.Z = origin.Z + 1;
-            await Buffs.AddAsync(s, 1121001, 120000, s.Role!.Id);
-            for (int i = 0; i < 3; i++) // three swings inside the 1 s internal cooldown
-                foreach (var handler in Combat.TakenAsync) await handler(attacker, s, 100);
-        });
-        var counter = await Next(alice, CombatService.SkillHit, SkillHitInfo.Parser, h => h.SkillId == 1121101);
-        Assert.Contains(counter.Dsts, d => d.DstID == attacker.Uid);
-        await Task.Delay(300);
-        int casts = alice.Inbox.Snapshot().Count(e => e.IsGame(CombatService.SkillHit) && SkillHitInfo.Parser.ParseFrom(e.Body).SkillId == 1121101);
-        Assert.Equal(1, casts);
-    }
+    // Parry's Auto Counter is the upstream's hit reaction now (CombatService.HitReactions; SkillCombatTests.AClassBuffStrikesBackOnceWithinItsCooldown).
 
     [ClientDataFact]
     public async Task ChargeUpIsSpentByTheNextDamageNotByTheSkillThatGrantedIt()

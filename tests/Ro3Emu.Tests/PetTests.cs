@@ -36,6 +36,7 @@ public sealed class PetTests : IAsyncLifetime
             o.DataDir = _dataDir;
             o.GameDataDir = Path.Combine(RepoRoot(), "data");
             o.HttpPort = http; o.MicroGatePort = micro; o.GameGatePort = game;
+            o.PetWorldFollower = true; // the follower projection under test (off by default)
         }, _clock);
         await _app.StartAsync();
         _http = $"http://127.0.0.1:{http}";
@@ -675,6 +676,44 @@ public sealed class PetTests : IAsyncLifetime
     }
 
     [ClientDataFact]
+    public async Task OpeningTheHatcheryLevelsARoomWhoseBarIsAlreadyFull()
+    {
+        await using var bot = await InWorld();
+        await Unlock(hatch: true);
+        await Gm("!delitem 1");
+        var data = _app.Services.GetRequiredService<GameData>();
+        var cost = data.Row("PetIncubationRoomConfig", 2)!.Value.GetProperty("_kCost")[0];
+        int coin = cost[0].GetInt32();
+        long price = cost[1].GetInt64(), bar = GameData.Int(data.Row("PetIncubationRoomConfig", 2)!.Value, "_iExp");
+        // A bar that filled while the next step was unaffordable (or before rooms levelled themselves) stays full.
+        await _app.Services.GetRequiredService<GameLoop>().InvokeAsync(async () =>
+        {
+            using var held = await CharacterService.Lock(Session);
+            Session.Pets!.IncubationExp = 20;
+            Roles.SavePets(RoleId(bot), Session.Pets.ToByteArray());
+        });
+        await bot.SendGameAsync(PetService.OpenRoom, new NullArg());
+        await Next(bot, PetService.OpenRoom, NullArg.Parser);
+        // The level-up panel compares the room level with the one last opened, so that stays behind.
+        Assert.Equal((2L, 10L, 1L), (Saved(bot).IncubationLv, Saved(bot).IncubationExp, Saved(bot).OnOpenUIRoomLv));
+
+        // Room 2's step costs money: a full bar waits for it and the next opening buys the step.
+        await _app.Services.GetRequiredService<GameLoop>().InvokeAsync(async () =>
+        {
+            using var held = await CharacterService.Lock(Session);
+            Session.Pets!.IncubationExp = bar;
+            Roles.SavePets(RoleId(bot), Session.Pets.ToByteArray());
+        });
+        await bot.SendGameAsync(PetService.OpenRoom, new NullArg());
+        await Next(bot, PetService.OpenRoom, NullArg.Parser);
+        Assert.Equal((2L, bar), (Saved(bot).IncubationLv, Saved(bot).IncubationExp));
+        await Gm($"!item {coin} {price}");
+        await bot.SendGameAsync(PetService.OpenRoom, new NullArg());
+        await Next(bot, PetService.OpenRoom, NullArg.Parser);
+        Assert.Equal((3L, 0L, 0L), (Saved(bot).IncubationLv, Saved(bot).IncubationExp, Count(bot, coin)));
+    }
+
+    [ClientDataFact]
     public async Task FastHatchRequiresRoomTwoAndAtomicallyConsumesMaterialsAndAccelerators()
     {
         await using var bot = await InWorld();
@@ -703,6 +742,16 @@ public sealed class PetTests : IAsyncLifetime
         Assert.Equal(5, Saved(bot).IncubationCount);
         Assert.Equal(5, Saved(bot).IncubationHistory.Count);
         Assert.Empty(Saved(bot).IncubationSlot);
+        // Empty slots before and after: the drawn eggs travel as placed, then removed, so the client's slot data
+        // changes after the pity sync and the S-class countdown redraws (RefreshPoolSlot -> RefreshPetHit).
+        var events = bot.Inbox.Snapshot().ToList();
+        DBPetInfoIncrement Pets(int i) => DBPetInfoIncrement.Parser.ParseFrom(events[i].Body);
+        int placed = events.FindLastIndex(e => e.IsGame(5017) && DBPetInfoIncrement.Parser.ParseFrom(e.Body).IncubationSlot.Values.Any(v => v.All != null));
+        int removed = events.FindLastIndex(e => e.IsGame(5017) && DBPetInfoIncrement.Parser.ParseFrom(e.Body).IncubationSlot.Values.Any(v => v.Del));
+        Assert.True(placed >= 0 && placed < removed);
+        Assert.Equal(5, Pets(placed).IncubationSlot.Values.Count(v => v.All?.IncubateInfo.ContainsKey(10001) == true));
+        Assert.Equal(5, Pets(removed).IncubationSlot.Values.Count(v => v.Del));
+        Assert.True(events.FindLastIndex(e => e.IsGame(LotteryService.LotterySync)) < placed);
         var before = Saved(bot).ToByteArray();
         await bot.SendGameAsync(PetService.FastEgg, new FastIncubateReq { RoundId = 10001 });
         Assert.NotEqual(0, (await Next(bot, PetService.FastEgg, FastIncubateRes.Parser)).Result);

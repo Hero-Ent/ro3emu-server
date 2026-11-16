@@ -66,6 +66,12 @@ public sealed class ServerOptions
     /// keeps it; an operator who wants the RO1 feel turns it on.</summary>
     public bool Ro1MonsterHp { get; set; }
 
+    /// <summary>A pet in the active setup plan walks beside its owner as a type-7 world unit (PetFollowerService). Off by
+    /// default: the client shows a deployed pet only in its guardian skill (LC_Scene_Sync._useInSkill, petConfigId, a local
+    /// model effect), and its only follower, PendantType.PetFollow, has no PendantConfig row while LC_PetHelper.IsFollowPet
+    /// returns false. The projection is (inferred), kept for an operator who wants the pet visible.</summary>
+    public bool PetWorldFollower { get; set; }
+
     /// <summary>Game-message JSON log (data/logs/traffic-*.jsonl): "off", "on" or a comma-separated account list.
     /// Formatting and writes run off the game loop; keep it off for load tests and production.</summary>
     public string TrafficLog { get; set; } = "off";
@@ -229,11 +235,11 @@ public sealed class ServerOptions
     public string[] GuildBlockedWords { get; set; } = [];
 
     /// <summary>
-    /// "instant": a guild is Normal at once unless the founder ticks the create widget's responder toggle (this server's
-    /// shortcut). "responders": every guild is founded through GuildResponsePeopleLimit responders, as the original;
-    /// the toggle then only waives the founder's approval of each response.
+    /// "responders" (as the client says): a guild costs GuildCreateCostShow and is founded through GuildResponsePeopleLimit
+    /// responders within GuildResponseTimeLimit, or the founder gets the cost back by mail; the create widget's toggle only
+    /// waives the founder's approval of each response. "instant": a host's shortcut, a guild is free and Normal at once.
     /// </summary>
-    public string GuildFounding { get; set; } = "instant";
+    public string GuildFounding { get; set; } = "responders";
 
     /// <summary>
     /// Guild League registration's membership threshold. Unset: GuildSettingConfig GuildLeaguePeopleNum (40, read as the

@@ -52,6 +52,14 @@ public sealed class RoleStore(AccountStore accounts)
     public const float SpawnX = 156f;
     public const float SpawnZ = 192f;
 
+    /// <summary>
+    /// Lowest role id handed out. A role id is the player's unit uuid, and the client resolves some uuids as NPCConfig ids
+    /// first: UI_Sys_DPSFloat_ListWidgetCtrl._refreshName (and UI_Sys_DamageCount_DPSWidgetCtrl) shows
+    /// NPCConfig.GetNPCNameByID(iGuid) whenever NPCConfig has that row, so role 100001 read as NPC 100001 "Kafra Staff".
+    /// The floor sits above every NPCConfig id and below int32.MaxValue, which some role-id fields still use (inferred).
+    /// </summary>
+    public const long RoleIdFloor = 1_000_000_000;
+
     private readonly AccountStore _accounts = accounts;
     private string? _rewardRealm;
     internal string RewardRealmId => _rewardRealm ??= _accounts.ReadSync<string>(new RewardSourceReadPlan());
@@ -485,6 +493,8 @@ public sealed class RoleStore(AccountStore accounts)
     public byte[]? LoadBarRoom(long id) => LoadBlob(id, "barroom");
     public byte[]? LoadGmState(long id) => LoadBlob(id, "gm_state");
     public void SaveGmState(long id, byte[] state) => SaveBlob(id, "gm_state", state);
+    public byte[]? LoadOfflineBuffs(long id) => LoadBlob(id, "offline_buffs");
+    public void SaveOfflineBuffs(long id, byte[] state) => SaveBlob(id, "offline_buffs", state);
     public byte[]? LoadJobExpCatchUp(long id) => LoadBlob(id, "job_exp_catchup");
     public void SaveJobExpCatchUp(long id, byte[] state, RoleItemPlanBuilder? transaction = null) => SaveBlob(id, "job_exp_catchup", state, transaction);
     public byte[]? LoadGuildInfo(long id) => LoadBlob(id, "guild_info");

@@ -78,6 +78,10 @@ public sealed partial class ReconstructedDungeons
         public int ShowAfter { get; init; }
         public long FallAfter { get; init; }
         public int AfterMs { get; init; }
+
+        /// <summary>The scene editor guide routes (m_kGuidePoints) shown while the step runs (DungeonService.GuideWays); null: the
+        /// scene does not name them per step.</summary>
+        public IReadOnlyList<long>? Guides { get; init; }
     }
 
     /// <summary>
@@ -194,6 +198,8 @@ public sealed partial class ReconstructedDungeons
     {
         public long ContinuesTo { get; init; } = ContinuesTo != 0 ? ContinuesTo : Next;
         public bool LeavesAfterClear { get; init; } = LeavesAfterClear;
+        /// <summary>Milliseconds from the clear to the entry into the scene that continues it (0: DungeonService.ContinueSeconds).</summary>
+        public int ContinueAfterMs { get; init; }
     }
 
     private readonly Dictionary<long, ScriptedScene> _scripted = [];
@@ -222,7 +228,10 @@ public sealed partial class ReconstructedDungeons
                 entry.Value.GetProperty("confidence").GetString() ?? "", steps, unplayed,
                 nextScene,
                 entry.Value.TryGetProperty("restartOnDeath", out var restart) && restart.GetBoolean(),
-                nextScene, leaves);
+                nextScene, leaves)
+            {
+                ContinueAfterMs = entry.Value.TryGetProperty("continueAfterMs", out var after) ? after.GetInt32() : 0,
+            };
         }
     }
 
@@ -275,6 +284,9 @@ public sealed partial class ReconstructedDungeons
             ShowAfter = s.TryGetProperty("after", out var afterStep) && afterStep.TryGetProperty("show", out var afterShow) ? afterShow.GetInt32() : 0,
             FallAfter = s.TryGetProperty("after", out var afterFall) && afterFall.TryGetProperty("fall", out var fall) ? fall.GetInt64() : 0,
             AfterMs = s.TryGetProperty("after", out var afterDelay) && afterDelay.TryGetProperty("delay", out var delay) ? delay.GetInt32() : 0,
+            Guides = s.TryGetProperty("guides", out var guides)
+                ? [.. guides.GetProperty("routes").EnumerateArray().Select(v => v.GetInt64())]
+                : null,
         };
     }
 

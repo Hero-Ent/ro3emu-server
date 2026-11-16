@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 using Ro3Emu.Server.Maps;
 using Romsg;
 
@@ -31,9 +32,17 @@ public sealed partial class CombatService
         return true;
     }
 
-    /// <summary>The trigger's row: a fixed one, or its group at the level of the skill that granted the buff (else 1).</summary>
-    private int? TriggerRow(SkillMechanics.BuffTrigger trigger, GameSession caster) =>
-        trigger.Skill ?? (trigger.Group is int g ? FollowUpRow(g, caster.Progress is { } p ? Math.Max(1, _skills.Level(p, trigger.LevelFrom ?? g)) : 1) : null);
+    /// <summary>The trigger's row: a fixed one, or its group at the level the buff's own _kLogicData names ([group, strike group, the
+    /// level's row]: Charge Up 1160405 -> Charge Up Strike 1162205, as the upstream reads it), else at the level of the skill that
+    /// granted the buff (else 1).</summary>
+    private int? TriggerRow(SkillMechanics.BuffTrigger trigger, GameSession caster, ActiveBuff? buff = null)
+    {
+        if (trigger.Skill is int fixedRow) return fixedRow;
+        if (trigger.Group is not int g) return null;
+        if (buff != null && BuffConfig.Get(_data, buff.ConfigId)?.LogicData is [_, var strikes, var levelled, ..] && strikes == g && levelled > 0
+            && _data.Row("SkillConfig", g * 100 + levelled % 100) != null) return g * 100 + (int)(levelled % 100);
+        return FollowUpRow(g, caster.Progress is { } p ? Math.Max(1, _skills.Level(p, trigger.LevelFrom ?? g)) : 1);
+    }
 
     private SkillMechanics.BuffTrigger? TriggerOf(ActiveBuff buff) =>
         SkillMechanics.TriggerFor(buff.ConfigId, _data.Row("BuffConfig", buff.ConfigId) is { } row ? (int)GameData.Int(row, "_iBuffID") : 0);
@@ -46,7 +55,7 @@ public sealed partial class CombatService
         if (caster?.Role == null || caster.Dead || caster.SceneLoading) return;
         var monster = unit as MonsterUnit;
         if (monster != null && (monster.Dead || monster.WorldScene != caster.WorldScene)) return;
-        if (!TriggerReady(caster.Role.Id, trigger) || TriggerRow(trigger, caster) is not int row) return;
+        if (!TriggerReady(caster.Role.Id, trigger) || TriggerRow(trigger, caster, buff) is not int row) return;
         await CastTriggeredAsync(caster, row, monster, monster?.Pos ?? caster.Position);
     }
 
@@ -61,7 +70,7 @@ public sealed partial class CombatService
             if (trigger.MaxRange > 0 && MonsterService.Distance(attacker, holder) > trigger.MaxRange) continue;
             if (trigger.Front && !InFront(holder, attacker.Pos)) continue;
             if (trigger.WhileBuff is int needed && !HasBuffGroup(holder, needed)) continue;
-            if (!TriggerReady(holder.Role.Id, trigger) || TriggerRow(trigger, holder) is not int row) continue;
+            if (!TriggerReady(holder.Role.Id, trigger) || TriggerRow(trigger, holder, buff) is not int row) continue;
             if (trigger.Consume) await _buffs.RemoveAsync(holder, buff);
             await CastTriggeredAsync(holder, row, attacker, attacker.Pos);
         }
@@ -89,7 +98,7 @@ public sealed partial class CombatService
             // "The next time you deal DMG": the skill that grants the buff does not spend it with its own hits.
             if (Tuples(row, "_kBuff1").Any(t => t.ValueKind == JsonValueKind.Array && t.GetArrayLength() > 0 && t[0].GetInt32() == buff.ConfigId)) continue;
             if (trigger.WhileBuff is int needed && !HasBuffGroup(holder, needed)) continue;
-            if (!TriggerReady(holder.Role.Id, trigger) || TriggerRow(trigger, holder) is not int released) continue;
+            if (!TriggerReady(holder.Role.Id, trigger) || TriggerRow(trigger, holder, buff) is not int released) continue;
             if (trigger.Consume) await _buffs.RemoveAsync(holder, buff);
             await CastTriggeredAsync(holder, released, target, target.Pos);
         }

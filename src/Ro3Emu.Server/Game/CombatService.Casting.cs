@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Romsg;
 using Ro3Emu.Server.Data;
@@ -13,6 +14,8 @@ public sealed class ActiveSkillCast
     public required long Id { get; init; }
     public required long OwnerId { get; init; }
     public required long WorldScene { get; init; }
+    /// <summary>Targets a staged cast has given a status so far, shared by its hits: Tetra Vortex's guarantee.</summary>
+    public HashSet<long>? StatusLanded { get; set; }
     public long SceneGeneration { get; init; }
     public Ro3Emu.Server.Game.Ownership.AttachmentLease? Attachment { get; init; }
     public required CastSkillReq Request { get; init; }
@@ -23,6 +26,8 @@ public sealed class ActiveSkillCast
     public required int ActionMs { get; init; }
     public bool Cancelled { get; set; }
     public bool Resolved { get; set; }
+    /// <summary>The skills of the requests refused while this cast ran: the client waits on each until its reply.</summary>
+    internal HashSet<int> RefusedRequests { get; } = [];
     public SkillObject? Operator { get; init; }
     /// <summary>A cast the server releases on its own (a follow-up): not the session's cast slot, so it is not
     /// interrupted by the player's next cast or by walking.</summary>
@@ -34,6 +39,8 @@ public sealed class ActiveSkillCast
     internal HashSet<int>? GuardianOnce { get; init; }
     /// <summary>A turret's shot (CombatService.TurretFired): its projectile and its effects.</summary>
     public TurretShot? Turret { get; init; }
+    /// <summary>The players this cast struck, for what follows it (CardEffects).</summary>
+    internal GameSession[] PlayersStruck { get; set; } = [];
     public long SourceId => Operator?.Uid ?? OwnerId;
 }
 
@@ -67,12 +74,16 @@ public sealed partial class CombatService
         else await s.SkillCastGate.WaitAsync();
         try
         {
+            // One instant for both: whether the running cast's shown hit lands and whether it yields. Read apart, a press at
+            // the edge of the slack found the hit still ahead, then the cast yielding a millisecond later, and lost the hit.
+            long arrivedMs = Now;
+            await LandShownHitAsync(s, arrivedMs);
             using var state = await CharacterService.Lock(s);
             // Complete the runtime admission before any socket send can suspend. Frozen packets
             // retain the original order; an obsolete attachment cannot start a committed cast.
             if (s.Owners?.Current is { Notices: null } context) notices = new OwnerNotices(context);
             if (IsGuardianRequest(request)) await CastGuardianAsync(s, request.Clone());
-            else await CastCoreAsync(s, request, lineup);
+            else await CastCoreAsync(s, request, arrivedMs, lineup);
         }
         finally { notices?.Dispose(); s.SkillCastGate.Release(); admission?.Dispose(); }
         if (notices != null) await notices.FlushAsync();
@@ -82,7 +93,7 @@ public sealed partial class CombatService
     private bool IsGuardianRequest(CastSkillReq request) => _data.Row("SkillConfig", request.SkillId) is { } row
         && GameData.Int(row, "_iSystemType") is GuardianPetRules.WrapperType or GuardianPetRules.EffectType;
 
-    private async Task CastCoreAsync(GameSession s, CastSkillReq request, bool lineup = false)
+    private async Task CastCoreAsync(GameSession s, CastSkillReq request, long arrivedMs, bool lineup = false)
     {
         var req = request.Clone();
         bool turret = TurretSkill?.Invoke(s, req.SkillId) == true;
@@ -117,7 +128,7 @@ public sealed partial class CombatService
         if (error == 0)
         {
             int group = (int)GameData.Int(row!.Value, "_iSkillID"), mode = (int)GameData.Int(row.Value, "_iMode");
-            if (own == null && Math.Max(s.SkillCds.GetValueOrDefault(group), s.SkillModeCds.GetValueOrDefault((group, mode))) > Now) error = ErrorCodes.SkillCooldown;
+            if (own == null && CooldownEnd(s, group, mode) > Now) error = ErrorCodes.SkillCooldown;
             else if (own == null && Now < s.SwingLockUntilMs - SwingJitterMs && new SkillConfig(row.Value).IsNormalAttack(_data)) error = ErrorCodes.SkillBusy;
             else if (s.SkillCast is { Cancelled: false } active && InterruptibleAt(active, req.SkillId) is var free && free > Now)
             {
@@ -125,7 +136,7 @@ public sealed partial class CombatService
                 error = ErrorCodes.SkillBusy;
             }
             else if (s.SkillCast is { Cancelled: false } activeSwing && Now < activeSwing.StartMs + activeSwing.ChantMs + activeSwing.ActionMs
-                && !CastYields(activeSwing, row.Value, req)) error = ErrorCodes.SkillBusy;
+                && !CastYields(activeSwing, row.Value, req, arrivedMs)) error = ErrorCodes.SkillBusy;
             else error = ValidateTarget(s, row.Value, req, origin, owned == null ? WalkSlack(s) : 0,
                 _data.Row("SkillConfig", request.SkillId) is { } askedRow ? Range(askedRow) : 0, turret);
         }
@@ -179,14 +190,17 @@ public sealed partial class CombatService
                 ArrivalSpeed = s.Speed / 100f, WalkFromUtc = s.LastWalkUtc
             };
         }
-        else s.Attack = null;
+        // _iIfAutoAtk 1 (NotInterrupt, LC_Skill_RunTimeContext): the running attack goes on after this cast.
+        else if (new SkillConfig(row.Value).IfAutoAtk != 1) s.Attack = null;
         if (GameData.Int(row.Value, "_iIfAutoAtk") == 2 && owned == null && playerTarget != null)
             _eventAttacks[s] = new EventAttack(playerTarget, loopSkill,
                 Now + lead + SkillMs(s, row.Value) + ChantMs(s, row.Value) + 1,
                 s.Position.X, s.Position.Z);
         if (own != null) await OwnSkillCast!(s, req.SkillId);
         else await StartCooldownAsync(s, row.Value, SkillConfig.Get(_data, request.SkillId) is { } asked ? (int)asked.Mode : null);
-        await StartCastAsync(s, WargHuntRow(s, row!.Value, req), req, id, owned, lead, turret: shot);
+        // A follow-up's cast spends the status that offered it (SkillService.FollowUps).
+        if (own == null && owned == null && _skills.FollowUpStatus(s, new SkillConfig(row.Value)) is { } offered) await _buffs.RemoveAsync(s, offered);
+        await StartCastAsync(s, WargHuntRow(s, row.Value, req), req, id, owned, lead, turret: shot);
         if (owned == null && !lineup && new SkillConfig(row.Value).SystemType == SkillService.QueueSystemType)
             StartLineup(s, s.SkillCast);
     }
@@ -325,6 +339,7 @@ public sealed partial class CombatService
             s.Role?.Name, req.SkillId, req.TargetId, error, req.IsAutoCast);
         var reply = new CastSkillRsp { Result = error, IsAutoCast = req.IsAutoCast };
         if (parameter != 0) reply.Params.Add(parameter);
+        if (s.SkillCast is { Cancelled: false } running) running.RefusedRequests.Add(req.SkillId);
         await s.SendGameAsync(UseSkill, reply);
         if (s.SkillCast is not { Cancelled: false })
         {
@@ -338,12 +353,12 @@ public sealed partial class CombatService
     /// May this cast cut the running one short? The running skill decides, as in LC_Skill_RunTimeContext.SkillCanInterrupted;
     /// the client reads _bCancelCast only for its cancel button. A normal attack during a normal attack keeps its own pacing.
     /// </summary>
-    private bool CastYields(ActiveSkillCast active, JsonElement row, CastSkillReq req)
+    private bool CastYields(ActiveSkillCast active, JsonElement row, CastSkillReq req, long nowMs)
     {
         var next = new SkillConfig(row);
         var running = new SkillConfig(active.Row);
         if (next.IsNormalAttack(_data) && running.IsNormalAttack(_data)) return next.CancelCast && !SwingInFlight(active, row, req);
-        return CastYields(running.InterruptedType, running.Id == next.Id, Now - active.StartMs,
+        return CastYields(running.InterruptedType, running.Id == next.Id, nowMs - active.StartMs,
             SkillShow.InterruptOffset(_data.SkillTemplate(running.ScriptShow), active.ChantMs, active.ActionMs));
     }
 
@@ -388,6 +403,39 @@ public sealed partial class CombatService
 
     internal const int SwingJitterMs = 150;
 
+    /// <summary>
+    /// A skill that yields from its show's m_fInterruptTime (_iInterruptedType 2) and whose hit (m_kAtkPoints) comes before
+    /// that time has shown its hit on the client by the time the client sends the next skill: a held key
+    /// (enum_SkillReleaseType.HoldContinue, _iPcReleasingSkill, UI_Sys_Main_JoyStickSkillWidgetBaseCtrl.OnInputKey) sends
+    /// one every 0.2 s. <see cref="SwingJitterMs"/> lets the next one in that much early, where the hit could still be ahead
+    /// on the server: Turn Undead hits at 2.283 s of its show and yields from 2.367 s, so a held Turn Undead lost a third of
+    /// its hits. Such a hit lands as the skill yields.
+    /// </summary>
+    private bool HitShownBeforeYield(ActiveSkillCast action, long nowMs)
+    {
+        var skill = new SkillConfig(action.Row);
+        if (action.Cancelled || action.Resolved || skill.IsNormalAttack(_data) || nowMs < action.StartMs) return false;
+        var template = _data.SkillTemplate(skill.ScriptShow);
+        var points = SkillShow.AttackPoints(template);
+        return HitPrecedesYield(skill.InterruptedType, ImpactOffset(template, points.FirstOrDefault(0.2), action.ChantMs, action.ActionMs),
+            SkillShow.InterruptOffset(template, action.ChantMs, action.ActionMs), nowMs - action.StartMs);
+    }
+
+    /// <summary>
+    /// The next skill cuts a cast whose hit the client has already shown (<see cref="HitShownBeforeYield"/>): that hit lands
+    /// first. Called before the character lock is taken: a killing hit's reward takes that lock
+    /// (RewardService.CommitKillAsync), and the lock is not reentrant, so landing it under the lock stalled the role (#433).
+    /// </summary>
+    private async Task LandShownHitAsync(GameSession s, long nowMs)
+    {
+        if (s.SkillCast is not { } action || !HitShownBeforeYield(action, nowMs)) return;
+        action.Resolved = true;
+        await ResolveCastAsync(s, action);
+    }
+
+    internal static bool HitPrecedesYield(long interruptedType, int impactMs, int? interruptMs, long elapsedMs) =>
+        interruptedType == 2 && interruptMs is { } yield && impactMs <= yield && elapsedMs >= yield - SwingJitterMs;
+
     private bool Learned(GameSession s, JsonElement row)
     {
         int id = (int)GameData.Int(row, "_iID");
@@ -406,6 +454,8 @@ public sealed partial class CombatService
     private static float Distance(Vec3 a, Vec3 b) => MonsterService.Distance(a.X, a.Z, b.X, b.Z);
     private static float Range(JsonElement row) => Math.Max(0, GameData.Int(row, "_iDistanceMax") / 100f);
     private static string Script(JsonElement row) => row.TryGetProperty("_kScriptLogic", out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+    // AcolyteBD4 is Resurrection's mode row under Revive [Buff Effect] (SkillConfig 1411211-1411214), with the same text.
+    private static bool IsResurrection(JsonElement row) => Script(row) is "Resurrection" or "AcolyteBD4";
     private static double[] Numbers(JsonElement row, string key) => row.TryGetProperty(key, out var list) && list.ValueKind == JsonValueKind.Array
         ? [.. list.EnumerateArray().Select(v => GameData.Number(v) ?? 0)] : [];
     private static IEnumerable<JsonElement> Tuples(JsonElement row, string key) => row.TryGetProperty(key, out var list) && list.ValueKind == JsonValueKind.Array
@@ -471,8 +521,17 @@ public sealed partial class CombatService
         bool turret = false)
     {
         int release = (int)GameData.Int(row, "_iRelease");
+        if (AimsFromSeat?.Invoke(s, (int)new SkillConfig(row).Id) == true)
+        {
+            // The crosshair's ray (LC_TPSComponent._raycast) names its unit in targetsId; a shot past everything hits nothing.
+            // The row's 3 m height range is not asked: the deck stands up to 20 m above the patrols it fires at.
+            if (req.TargetId == 0 && req.TargetsId.Count > 0) req.TargetId = req.TargetsId[0];
+            if (FindMonster(s.WorldScene, req.TargetId) is not { } aimed || !CanHitMonster(s, aimed)) req.TargetId = 0;
+            req.TargetPos ??= origin.Clone();
+            return 0;
+        }
         var monster = FindMonster(s.WorldScene, req.TargetId);
-        bool revive = Script(row) == "Resurrection";
+        bool revive = IsResurrection(row);
         var player = req.TargetId == s.Role!.Id ? s : FindPlayer(s, req.TargetId, revive);
         var enemyPlayer = EventTarget(s, req.TargetId);
         Vec3 targetPosition;
@@ -508,13 +567,15 @@ public sealed partial class CombatService
             // that id's distance. (inferred) One out of reach is not hit, and the cast stands: such a row can be pressed
             // with a far target still selected. A row without a reach in its data says nothing to compare.
             if (new SkillConfig(row).RangeType == SkillRelease.SingleTarget && aim > 1 + slack
-                && (monster?.Pos ?? enemyPlayer?.Position) is { } named && Distance(origin, named) > aim) req.TargetId = 0;
+                && (monster?.Pos ?? enemyPlayer?.Position) is { } named && Distance(origin, named) > aim + (monster?.Template.DamageRadius ?? 0)) req.TargetId = 0;
             return 0;
         }
         if (!_buffs.CanSeePosition(s, targetPosition)) return ErrorCodes.SkillTargetInvalid;
         float d = Distance(origin, targetPosition);
         float reach = slack > 0 ? Distance(WalkPoint(s, origin, targetPosition, slack), targetPosition) - LegJitter : d;
-        if (d < new SkillConfig(row).DistanceMin / 100f - slack || reach > Math.Max(Range(row), askedRange) + 0.5f)
+        // The client adds the target's m_fModelDamageRadius to the casting range: a melee hit on Eddga reaches 5.4 m from its centre, not 3.
+        float body = monster?.Template.DamageRadius ?? 0;
+        if (d < new SkillConfig(row).DistanceMin / 100f - slack || reach > Math.Max(Range(row), askedRange) + body + 0.5f)
             return ErrorCodes.SkillDistance;
         if (turret) return 0;
         float height = GameData.Int(row, "_iHeightRange") / 100f;
@@ -574,7 +635,7 @@ public sealed partial class CombatService
                 default: result.Invalid = true; break; // reject an unsupported cost rather than grant a free cast.
             }
         }
-        if (result.Attrs.TryGetValue(AttributeId.Sp, out long sp)) result.Attrs[AttributeId.Sp] = ModifiedSpCost(_buffs.GuardianAttributes(s), sp);
+        if (result.Attrs.TryGetValue(AttributeId.Sp, out long sp)) result.Attrs[AttributeId.Sp] = ModifiedSpCost(_character.Stats(s), sp);
         return result;
     }
 
@@ -616,19 +677,43 @@ public sealed partial class CombatService
         if (notice.Infos.Count > 0) await s.SendGameAsync(SkillCdUpdate, notice);
     }
 
+    /// <summary>Takes this long off a skill group's running cooldowns (Crescent Wheel on Axe Tornado), each under the mode it was shown; past its end it ends.</summary>
+    internal static async Task CutCooldownAsync(GameSession s, int group, long ms)
+    {
+        long now = Now;
+        var notice = new SkillCdNotify { Uuid = s.Role!.Id };
+        foreach (var (key, end) in s.SkillModeCds.Where(c => c.Key.Group == group && c.Value > now).ToArray())
+        {
+            long left = Math.Max(now, end - ms);
+            if (left > now) s.SkillModeCds[key] = left; else s.SkillModeCds.Remove(key);
+            notice.Infos.Add(new SkillCdInfo { SkillId = group, SkillMode = key.Mode, CdStartTimestampMs = now, CdEndTimestampMs = left });
+        }
+        if (s.SkillCds.TryGetValue(group, out long plain) && plain > now)
+        {
+            long left = Math.Max(now, plain - ms);
+            if (left > now) s.SkillCds[group] = left; else s.SkillCds.Remove(group);
+            if (notice.Infos.Count == 0) notice.Infos.Add(new SkillCdInfo { SkillId = group, CdStartTimestampMs = now, CdEndTimestampMs = left });
+        }
+        if (notice.Infos.Count > 0) await s.SendGameAsync(SkillCdUpdate, notice);
+    }
+
     private async Task StartCooldownAsync(GameSession s, JsonElement row, int? askedMode = null)
     {
+        if (ShadowEchoWaits(s, row)) return;
         if ((s.GmCombat & GmCombatSwitches.NoCooldown) != 0) return; // GmNoCD / GmUnlimit 1: no skill cooldown starts
         int group = (int)GameData.Int(row, "_iSkillID"), mode = (int)GameData.Int(row, "_iMode");
-        long now = Now, cd = GameData.Int(row, "_iCD");
+        var stats = _character.Stats(s);
+        long now = Now, cd = ReducedCooldown(GameData.Int(row, "_iCD"), stats[AttributeId.PerCd]);
         var notice = new SkillCdNotify { Uuid = s.Role!.Id };
         void Set(int g, int m, long duration, bool shared, int shownMode)
         {
             if (duration <= 0) return;
-            long end = now + duration;
-            s.SkillModeCds[(g, m)] = Math.Max(end, s.SkillModeCds.GetValueOrDefault((g, m)));
+            // The client overwrites by key (LC_Scene_Sync): a shorter public cooldown must not replace the skill's own, so the longest is told.
+            long end = Math.Max(now + duration, s.SkillModeCds.GetValueOrDefault((g, m)));
+            s.SkillModeCds[(g, m)] = end;
             if (shared) s.SkillCds[g] = Math.Max(end, s.SkillCds.GetValueOrDefault(g));
-            notice.Infos.Add(new SkillCdInfo { SkillId = g, SkillMode = shownMode, CdStartTimestampMs = now, CdEndTimestampMs = end });
+            if (notice.Infos.FirstOrDefault(i => i.SkillId == g && i.SkillMode == shownMode) is { } told) told.CdEndTimestampMs = Math.Max(told.CdEndTimestampMs, end);
+            else notice.Infos.Add(new SkillCdInfo { SkillId = g, SkillMode = shownMode, CdStartTimestampMs = now, CdEndTimestampMs = end });
         }
         // The client files a 31113 under group * 10000 + its mode (LC_Skill_Function.GetSkillCDInfoKey) and its bar reads
         // the key of the row it keeps, the row it asks to cast. A mode a talent or a mount selects (type 15: Joint Beat,
@@ -643,28 +728,20 @@ public sealed partial class CombatService
         {
             int sibling = (int)groups[i];
             if (_data.Row("SkillConfig", sibling) is { } siblingRow) sibling = (int)GameData.Int(siblingRow, "_iSkillID");
-            if (sibling > 0) Set(sibling, 0, (long)shared[i], true, 0);
+            if (sibling > 0) Set(sibling, 0, ReducedCooldown((long)shared[i], stats[AttributeId.PerPubCd]), true, 0);
         }
         if (notice.Infos.Count > 0) await s.SendGameAsync(SkillCdUpdate, notice);
     }
 
-    /// <summary>Ends the cooldowns of skill groups (Warg Bite "resetting the Cooldown of [Warg Hunt]").</summary>
-    private async Task ResetCooldownsAsync(GameSession s, IReadOnlyList<int> groups)
+    /// <summary>Ends the cooldowns of skill groups (Warg Bite "resetting the Cooldown of [Warg Hunt]"), each through <see cref="ResetCooldownAsync"/>.</summary>
+    private static async Task ResetCooldownsAsync(GameSession s, IReadOnlyList<int> groups)
     {
-        long now = Now;
-        var notice = new SkillCdNotify { Uuid = s.Role!.Id };
-        foreach (int g in groups)
-        {
-            s.SkillCds.Remove(g);
-            foreach (var key in s.SkillModeCds.Keys.Where(k => k.Item1 == g).ToList())
-            {
-                if (s.SkillModeCds[key] > now)
-                    notice.Infos.Add(new SkillCdInfo { SkillId = g, SkillMode = key.Item2, CdStartTimestampMs = now, CdEndTimestampMs = now });
-                s.SkillModeCds.Remove(key);
-            }
-        }
-        if (notice.Infos.Count > 0) await s.SendGameAsync(SkillCdUpdate, notice);
+        foreach (int g in groups) await ResetCooldownAsync(s, g);
     }
+
+    /// <summary>AttributeConfig 205 "Skill Cooldown" and 206 "Global CD": the text says they reduce it, and 15998100 is a blessing with 205 +3000.
+    /// The client takes the times from 31113. (inferred) A plain share; their _kRange lets a debuff lengthen it by up to 99%.</summary>
+    internal static long ReducedCooldown(long ms, long percent) => (long)Math.Round(ms * Math.Max(0, 1 - percent / 10000.0));
 
     /// <summary>Legacy auto-attack entry point, using the same cancellation-safe cast owner as manual skills.</summary>
     /// <summary>
@@ -746,14 +823,22 @@ public sealed partial class CombatService
         else if (!independent && s.CastWalkLock != 0) await _buffs.SetCastWalkLockAsync(s, 0);
         if (actor == null && config.Movement == 0 && (holdStill || !s.Walking))
             SceneService.HoldWalk(s, DateTime.UtcNow.AddMilliseconds(leadMs + action.ChantMs + action.ActionMs), s.Walking);
-        s.WorldState.ResurrectionCastId = Script(row) == "Resurrection" ? id : 0;
+        s.WorldState.ResurrectionCastId = IsResurrection(row) ? id : 0;
         s.Face = face;
         req.Face = face;
-        Task Timeline() => SendCastTimelineAsync(s, new UseInSkillInfo
+        async Task Timeline()
         {
-            SrcID = action.SourceId, SkillID = req.SkillId, TargetId = req.TargetId, TargetPos = req.TargetPos ?? origin,
-            Face = face, SessionId = id, ChantMs = action.ChantMs, SkillMs = action.ActionMs, StartTime = action.StartMs, PlayAct = true,
-        }, highLevel: GameData.Int(row, "_iSkillEffectLevel") > 0, extra: actor != null || req.IsExtraSkill);
+            await SendCastTimelineAsync(s, new UseInSkillInfo
+            {
+                SrcID = action.SourceId, SkillID = req.SkillId, TargetId = req.TargetId, TargetPos = req.TargetPos ?? origin,
+                Face = face, SessionId = id, ChantMs = action.ChantMs, SkillMs = action.ActionMs, StartTime = action.StartMs, PlayAct = true,
+            }, highLevel: GameData.Int(row, "_iSkillEffectLevel") > 0 || FalconHigh(row) || WargStrikeHigh(row), extra: actor != null || req.IsExtraSkill);
+            if (FalconHigh(row)) await SendFalconAsync(s, row, req.SkillId, req.TargetId);
+            else if (IsArrowStorm(row)) await SendArrowStormAsync(s, req.SkillId, req.TargetId, req.TargetPos ?? origin);
+            else if (WargStrikeHigh(row))
+                ScheduleRuntime(action.WorldScene, TimeSpan.FromMilliseconds(WolfDelayMs),
+                    () => Live(s, action) ? SendWolfAsync(s, req.SkillId, req.TargetId) : Task.CompletedTask);
+        }
         if (leadMs <= 0) await Timeline();
         else ScheduleRuntime(action.WorldScene, TimeSpan.FromMilliseconds(leadMs), () => Live(s, action) ? Timeline() : Task.CompletedTask);
         if (SkillMechanics.For(row) is { } mechanic) await StartMechanicAsync(s, action, mechanic);
@@ -865,8 +950,7 @@ public sealed partial class CombatService
     /// </summary>
     private static List<(int At, Impact? Impact)> CastImpacts(JsonElement row, double[] points, Func<double, int> ms, ActiveSkillCast action)
     {
-        string script = Script(row);
-        if (script == "Resurrection") return [(action.ChantMs, null)];
+        if (IsResurrection(row)) return [(action.ChantMs, null)];
         if (IsSpin(row) && points.Length >= 2 && SpinTicks(row) is var ticks and > 0)
         {
             double start = points.Length >= 3 ? points[1] : points[0];
@@ -964,6 +1048,11 @@ public sealed partial class CombatService
             else await CastAsync(s, nextSwing);
             return;
         }
+        if (DropsWaitingRequest(s, req))
+        {
+            await s.SendGameAsync(SkillInterrupt, new SkillInterruptResp { IsInterruptSucc = false });
+            return;
+        }
         bool valid = req == null || req.InterruptSkillId == 0 || req.InterruptSkillId == s.SkillCast?.Request.SkillId
             || req.InterruptSkillId == s.Attack?.SkillId || _eventAttacks.TryGetValue(s, out var eventAttack) && req.InterruptSkillId == eventAttack.SkillId;
         bool interrupted = valid && (s.SkillCast != null || s.Attack != null || _eventAttacks.ContainsKey(s));
@@ -971,6 +1060,7 @@ public sealed partial class CombatService
         {
             s.Attack = null;
             _eventAttacks.Remove(s);
+            if (req?.NxtSkill != null) await LandShownHitAsync(s, Now);
             await CancelCastAsync(s, req?.NxtSkill != null ? SkillInterruptedInfo.Types.SkillInterruptType.Skill : SkillInterruptedInfo.Types.SkillInterruptType.Move);
         }
         await s.SendGameAsync(SkillInterrupt, new SkillInterruptResp { IsInterruptSucc = interrupted });
@@ -1017,12 +1107,35 @@ public sealed partial class CombatService
     }
 
     /// <summary>
+    /// A 31124 without a next skill that only drops the request the client still waits on. The client keeps a pressed skill
+    /// as its "cache" from the 31102 it sends until the reply (LC_Skill_Function.SendSkill sets SetLocalSkillCacheInfo,
+    /// LC_Scene_Sync._useSkillReq clears it), and drops it with such a 31124: on letting go of the key
+    /// (UI_Sys_Main_JoyStickSkillWidgetBaseCtrl.CancelInputSkill: interruptSkillId is that skill) or on a move during a skill
+    /// that blocks moving (LC_UnitChecker.CheckClearCacheSkill: interruptSkillId 0). The running skill is no part of it: the
+    /// client lets a skill be cut only as LC_Skill_RunTimeContext.GetSkillCanInterrupted allows, and a held Turn Undead
+    /// (_iInterruptedType 2) cannot be cut before its m_fInterruptTime. So while the running cast cannot yield to the
+    /// skill named and a request for it was refused during the cast, the cast goes on: cutting it lost every hit of a Turn
+    /// Undead pressed again and again. This server queues no request, so there is nothing else to drop (inferred).
+    /// A swing is left out: the attack loop stops on a 31124.
+    /// </summary>
+    private bool DropsWaitingRequest(GameSession s, SkillInterruptReq? req)
+    {
+        if (req is not { NxtSkill: null } || s.SkillCast is not { Cancelled: false } running) return false;
+        var skill = new SkillConfig(running.Row);
+        if (skill.IsNormalAttack(_data)) return false;
+        bool waited = req.InterruptSkillId == 0 ? running.RefusedRequests.Count > 0 : running.RefusedRequests.Contains(req.InterruptSkillId);
+        return waited && !CastYields(skill.InterruptedType, req.InterruptSkillId == running.Request.SkillId, Now - running.StartMs,
+            SkillShow.InterruptOffset(_data.SkillTemplate(skill.ScriptShow), running.ChantMs, running.ActionMs));
+    }
+
+    /// <summary>
     /// LC_State_Unit_Skill ends a skill in its action phase when StatusForbidden holds SkillCast. (inferred) SkillChant does the
     /// same for the chant, which is what the name says, though the client's own use of it was not found. So Sleep and Silence
-    /// break a cast, and Stun or Freeze, whose _kForbidden has neither, do not.
+    /// break a cast, and Stun or Freeze, whose _kForbidden has neither, do not. Card: Phen keeps a cast through them. OPEN: this only keeps the
+    /// server's cast; the forbid bits still go out, and LC_State_Unit_Skill may end the skill on the client by them (needs a client test).
     /// </summary>
     private Task BreakForbiddenCastAsync(GameSession s) =>
-        s.SkillCast is { Cancelled: false } cast
+        s.SkillCast is { Cancelled: false } cast && !ControlCannotInterrupt(s)
         && _buffs.HasForbidden(s, Now - cast.StartMs < cast.ChantMs ? ForbiddenState.SkillChant : ForbiddenState.SkillCast)
             ? CancelCastAsync(s, SkillInterruptedInfo.Types.SkillInterruptType.State) : Task.CompletedTask;
 
@@ -1048,11 +1161,34 @@ public sealed partial class CombatService
         });
     }
 
+    /// <summary>A skill row the server casts for the player on its next walk (Swift Warg after Warg Strike or Warg Hunt, TalentProcs).</summary>
+    private readonly ConditionalWeakTable<GameSession, StrongBox<int>> _castOnNextWalk = [];
+
+    internal void CastOnNextWalk(GameSession s, int row) => _castOnNextWalk.AddOrUpdate(s, new(row));
+
+    /// <summary>
+    /// A walk that sets off casts the row <see cref="CastOnNextWalk"/> holds, in the walk's direction (WalkReq.dir), once.
+    /// (inferred) It runs as one of the Skill Bar's casts: after this walk on the loop, without a 31103 the client did not
+    /// ask for, skipped when the row cannot be cast then. A step taken while the cast that armed it still holds the caster
+    /// (the walk's first 300 ms do not end it, PlayerMoved) waits for that cast's action to end, as a Lineup member does.
+    /// </summary>
+    internal void PlayerWalked(GameSession s, WalkReq walk)
+    {
+        if (walk.BStop || walk.SpeedRate <= 0 || s.Role == null || !_castOnNextWalk.TryGetValue(s, out var row)) return;
+        _castOnNextWalk.Remove(s);
+        long wait = s.SkillCast is { Cancelled: false } running ? Math.Max(0, running.StartMs + running.ChantMs + running.ActionMs + 1 - Now) : 0;
+        float face = s.WalkDir;
+        ScheduleRuntime(s.WorldScene, TimeSpan.FromMilliseconds(wait), () => s.Role == null ? Task.CompletedTask : CastAsync(s,
+            new CastSkillReq { SkillId = row.Value, TargetId = s.Role.Id, TargetPos = s.Position.Clone(), Face = face }, lineup: true));
+    }
+
     public void PlayerMoved(GameSession s)
     {
         if (_eventAttacks.TryGetValue(s, out var eventAttack)
             && MonsterService.Distance(eventAttack.StartX, eventAttack.StartZ, s.Position.X, s.Position.Z) > 1.5f) _eventAttacks.Remove(s);
-        if (s.Attack is { } a && MonsterService.Distance(a.StartX, a.StartZ, s.Position.X, s.Position.Z) > 0.1f)
+        // A position correction of a few cm is no step away (inferred): a real walk, or past 1.5 m as event attacks use, ends the loop.
+        if (s.Attack is { } a && MonsterService.Distance(a.StartX, a.StartZ, s.Position.X, s.Position.Z) > 0.1f
+            && (s.Walking || a.StartedWalking || MonsterService.Distance(a.StartX, a.StartZ, s.Position.X, s.Position.Z) > 1.5f))
         {
             // Clicking an enemy from afar: the client attacks on reaching range and stops a few ms later (in-game
             // 11.10), so that first stop is where the auto-attack starts, not a step away that ends it. Hero Saga: the

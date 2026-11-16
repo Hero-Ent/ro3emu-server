@@ -2,33 +2,6 @@
   "version": 1,
   "about": "Crusader line (Crusader 1210, Paladin 1310, Royal Guard 1410): skill mechanics SkillConfig does not carry, read from each skill's own description and timeline (SkillMechanics.cs documents every field). Entries are keyed by _iSkillID, so they apply to every _iMode row of the group; groups whose modes disagree (Shield Cast 11610, Blood Cross 11604) are left out and listed in the findings. Everything is (inferred); 'why' quotes the evidence.",
   "buffTriggers": {
-    "group:11404": {
-      "name": "Shield Reflect -> Shield Reflect Auto Counter",
-      "why": "Shield Reflect 11410: 'When you take Melee Physical DMG from an attacker within «5» meters, deals Neutral Melee Physical DMG equal to your PATK * «20»% + «50» to the attacker. This effect can trigger up to «1» times per second'; buff 1140401 _kLogicData [11419] = group 11419 'Shield Reflect Auto Counter' (lv10 row P1 2000 / P2 50 = the text), at the learned Shield Reflect level.",
-      "on": "meleeHitTaken",
-      "group": 11419,
-      "levelFrom": 11410,
-      "maxRange": 5,
-      "cooldownMs": 1000
-    },
-    "group:11409": {
-      "name": "Recoil -> Recoil Auto Counter (Stun)",
-      "why": "Recoil 11416: 'While [Auto Guard] is active, taking damage from an attacker within «5» meters has a «1»% Chance to inflict [Stun] on them for «1» sec. (Cooldown: «3» sec.)'; buff 1140901 _kLogicData [11420] = row 1142001 'Recoil Auto Counter' whose _kBuff2 is Stun 901601 for 1000 ms. Auto Guard is buff group 11403 (1140301-1140310).",
-      "on": "hitTaken",
-      "skill": 1142001,
-      "maxRange": 5,
-      "chance": 100,
-      "cooldownMs": 3000,
-      "whileBuff": 11403
-    },
-    "group:11610": {
-      "name": "Reflect Damage -> Thorn",
-      "why": "Reflect Damage 11609: 'When you are hit, deals Neutral Melee Physical DMG equal to PATK * «40»% to up to «5» enemies within a «6»-meter radius. This effect can trigger up to «1» times every «0.5» seconds'; buff 1161001-1161005 _kLogicData [11618, ...] = group 11618 'Thorn' (P1 4000, _kRange 600, 5 targets) at the learned Reflect Damage level.",
-      "on": "hitTaken",
-      "group": 11618,
-      "levelFrom": 11609,
-      "cooldownMs": 500
-    },
     "group:11611": {
       "name": "Casting Shield -> extra Thorn",
       "why": "Shield Cast 11610: '[Casting Shield]: When you are hit, triggers an Extra Auto Counter from [Reflect Damage]'; buff 1161101-1161110 _kLogicData [11618] = Thorn, at the Reflect Damage level. The text gives no limit of its own; the «0.5» s of Reflect Damage is reused (inferred) so a pack of monsters cannot release it on every swing.",

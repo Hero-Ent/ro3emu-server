@@ -14,6 +14,8 @@ public sealed class WorldInteractionService
 {
     public const uint Change = 32702, Action = 32703, Change3C = 32704,
         SeatChange = 32708, VehicleSync = 31074;
+    /// <summary>GameplayStatusConfig _iStatusType 10: enum_InteractState.CommonCannon, InteractInfo.EState.UpperCannon.</summary>
+    private const int CannonStatusType = 10;
 
     /// <summary>The unit a role's gameplay state is on: a world NPC, or a scripted dungeon's scene actor (<see cref="Active.Scripted"/>).</summary>
     private readonly record struct Anchor(long Uid, long SceneEntry, int NpcId)
@@ -112,7 +114,7 @@ public sealed class WorldInteractionService
     {
         if (_active.TryGetValue(s, out var old))
         {
-            if (old.Npc.Uid == npc.Uid && req.InteractionId == 4900025) await ExitAsync(s, false);
+            if (old.Npc.Uid == npc.Uid && req.InteractionId == 4900025 && !Held(s, old)) await ExitAsync(s, false);
             return;
         }
         if (ValidateInteraction(s, npc, req) != 0 || _data.Row("NPCInteractConfig", req.InteractionId) is not { } interaction) return;
@@ -126,14 +128,17 @@ public sealed class WorldInteractionService
         if (seat >= 0) await Send3CAsync(s, _active[s]);
     }
 
+    private static InteractInfo Info(Active state) => new()
+    {
+        EType = (InteractInfo.Types.EState)state.StatusType, StateId = state.StatusId,
+        InteractConfigId = state.InteractionId, ActiveObjId = state.Npc.Uid,
+        // LC_GamePlayStatusMgr.CommonCannon reads the cannon from it, for every player who shows the gunner.
+        UpperCannonInfo = state.StatusType == CannonStatusType ? new UpperCannonState { CannonGuId = state.Npc.Uid } : null,
+    };
+
     private async Task NotifyAsync(GameSession s, Active state, bool interrupt)
     {
-        var info = new InteractInfo
-        {
-            EType = (InteractInfo.Types.EState)state.StatusType, StateId = state.StatusId,
-            InteractConfigId = state.InteractionId, ActiveObjId = state.Npc.Uid,
-        };
-        var message = new InteractChangeNtf { Uid = s.Role!.Id, DataInfo = info, Interrupt = interrupt };
+        var message = new InteractChangeNtf { Uid = s.Role!.Id, DataInfo = Info(state), Interrupt = interrupt };
         await s.SendGameAsync(Change, message);
         foreach (var viewer in _world.Viewers(s)) await viewer.SendGameAsync(Change, message);
     }
@@ -167,12 +172,7 @@ public sealed class WorldInteractionService
         if (_active.TryGetValue(subject, out var state) && StillHere(subject, state))
             await viewer.SendGameAsync(Change, new InteractChangeNtf
             {
-                Uid = subject.Role!.Id,
-                DataInfo = new InteractInfo
-                {
-                    EType = (InteractInfo.Types.EState)state.StatusType,
-                    StateId = state.StatusId, InteractConfigId = state.InteractionId, ActiveObjId = state.Npc.Uid
-                }
+                Uid = subject.Role!.Id, DataInfo = Info(state),
             });
         // A rider is shown on its seat to a new viewer: its AOI base carries no carry info.
         if (_active.TryGetValue(subject, out var seated) && StillHere(subject, seated))
@@ -183,13 +183,14 @@ public sealed class WorldInteractionService
     public async Task UseActionAsync(GameSession s, UseInteractActionReq req)
     {
         int code = ErrorCodes.NpcParameter;
-        if (_active.TryGetValue(s, out var state) && StillHere(s, state)
+        if (_active.TryGetValue(s, out var state) && StillHere(s, state) && !Held(s, state)
             && _data.Row("GameplayStatusButtonConfig", req.ButtonId) is { } button
             && Id(button, "_iButtonFuncType") == 0
             && button.TryGetProperty("_kAction", out var actions)
             && actions.ToString().Contains("5004", StringComparison.Ordinal)
             && _data.Row("ActionConfig", 5004) is { } action && action.GetProperty("_iFunctionName").GetString() == "QuitStatus"
             && (state.StatusType == 4 && req.ButtonId == 42
+                || state.StatusType == CannonStatusType
                 || state.StatusType == 3 && VehicleSeats(state) is { Length: > 0 } configured
                     && state.SeatIndex >= 0 && state.SeatIndex < configured.Length
                     && _data.Row("VehicleSeatConfig", configured[state.SeatIndex]) is { } seatRow
@@ -271,6 +272,26 @@ public sealed class WorldInteractionService
         return state.Token;
     }
 
+    /// <summary>
+    /// Seats a player on a scripted dungeon's cannon by the interaction's GameplayStatusConfig of type 10 (enum_InteractState
+    /// CommonCannon). The caller has decided the interaction is open. Returns the state's token, as
+    /// <see cref="SeatOnSceneActorAsync"/> does; 0 when the player is in a state already or the interaction is no cannon's.
+    /// (upstream #406; Hero Saga's airship keeps its own server-side turret in DungeonService.Cannon, so nothing calls this yet.)
+    /// </summary>
+    public async Task<long> SeatOnCannonAsync(GameSession s, long cannonUid, int npcId, int interactionId)
+    {
+        if (!InWorld(s) || _active.ContainsKey(s) || NPCInteractConfig.Get(_data, interactionId) is not { StatusId: > 0 } interaction
+            || GameplayStatusConfig.Get(_data, interaction.StatusId) is not { StatusType: CannonStatusType }) return 0;
+        var state = new Active(new Anchor(cannonUid, s.SceneEntry, npcId), interactionId, (int)interaction.StatusId, CannonStatusType, -1,
+            Scripted: true, Token: ++_seatToken);
+        _active[s] = state;
+        await NotifyAsync(s, state, false);
+        return state.Token;
+    }
+
+    /// <summary>Whether the player sits on a scripted dungeon's cannon.</summary>
+    internal bool IsOnCannon(GameSession s) => _active.TryGetValue(s, out var state) && state.StatusType == CannonStatusType;
+
     private async Task CarryAsync(GameSession s, Active state, bool seated, GameSession? onlyTo = null)
     {
         if (s.Role == null || state.StatusType != 3 || state.SeatIndex < 0) return;
@@ -300,4 +321,12 @@ public sealed class WorldInteractionService
 
     /// <summary>Whether the player is seated on a scripted dungeon's scene actor.</summary>
     internal bool IsSeatedOnSceneActor(GameSession s) => _active.TryGetValue(s, out var state) && state.Scripted;
+
+    /// <summary>
+    /// Whether a scripted ride keeps its rider seated (DungeonService.RideHolds): the exit button is refused. (inferred) The
+    /// original's script is not shipped, so holding the rider until the ride's end region is a guess (play-tested).
+    /// </summary>
+    internal Func<GameSession, bool>? ExitHeld { get; set; }
+
+    private bool Held(GameSession s, Active state) => state.Scripted && ExitHeld?.Invoke(s) == true;
 }

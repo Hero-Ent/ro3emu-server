@@ -15,7 +15,7 @@ public sealed partial class SkillCombatTests
         await alice.SendGameAsync(CombatService.UseSkill, new CastSkillReq { SkillId = 1310205, TargetId = monster.Uid });
         var accepted = await Next(alice, CombatService.UseSkill, CastSkillRsp.Parser);
         Assert.Equal(0, accepted.Result);
-        var flight = await Next(alice, CombatService.SkillEffect, SkillEffectDisplayNotify.Parser, e => e.EffectType == 5);
+        var flight = await Next(alice, CombatService.SkillEffectHigh, SkillEffectDisplayNotify.Parser, e => e.EffectType == 5); // the HIGH_LEVEL route of the Genesis capture (upstream #451)
         Assert.Equal(13102200, flight.EffectId);
         Assert.Equal(monster.Uid, flight.TargetId);
         Assert.Equal(Session("alice").Role!.Id, flight.SourceId);

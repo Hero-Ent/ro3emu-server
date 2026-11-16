@@ -174,6 +174,8 @@ internal sealed class RoleSchemaPlan : DbPlan
         SchemaSql.AddColumn(db, tx, "role", "gm_state", "BLOB");
         // JSON CharacterService.JobExpCatchUpState: the role's Job EXP debt is decided, and what is left of it.
         SchemaSql.AddColumn(db, tx, "role", "job_exp_catchup", "BLOB");
+        // JSON BuffService.OfflineBuffState: the buffs that outlive a logout.
+        SchemaSql.AddColumn(db, tx, "role", "offline_buffs", "BLOB");
         SchemaSql.Execute(db, tx, """
             CREATE TABLE IF NOT EXISTS role_lifecycle (
                 role_id INTEGER PRIMARY KEY,
@@ -201,8 +203,10 @@ internal sealed class RoleSchemaPlan : DbPlan
             revision.Parameters.AddWithValue("$part", part);
             revision.ExecuteNonQuery();
         }
-        // Role ids show up as uuids in the client; start well above small entity ids.
-        SchemaSql.Execute(db, tx, "INSERT OR IGNORE INTO sqlite_sequence (name, seq) SELECT 'role', 100000 WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = 'role')");
+        // Role ids show up as uuids in the client; new roles start above every NPCConfig id (RoleIdFloor). Raising an
+        // older realm's counter keeps its existing roles and only moves where the next id comes from.
+        SchemaSql.Execute(db, tx, $"INSERT OR IGNORE INTO sqlite_sequence (name, seq) SELECT 'role', {RoleIdFloor} WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = 'role')");
+        SchemaSql.Execute(db, tx, $"UPDATE sqlite_sequence SET seq = {RoleIdFloor} WHERE name = 'role' AND seq < {RoleIdFloor}");
         // E01 shares this schema transaction; legacy balances become the opening cut at sequence zero.
         new EconomySchemaPlan().Execute(db, tx);
         return 1;

@@ -142,7 +142,7 @@ public sealed class ConfigViewTests
 
     // Each client field name written as a string outside Data/Config is a read the startup check cannot see. The
     // count only goes down: lower it when a change removes such reads, never raise it.
-    private const int FieldNamesOutsideViews = 2718;
+    private const int FieldNamesOutsideViews = 2714; // 2650 do upstream + 64 do Hero Saga (SkillMechanics, cenas scriptadas, launcher)
     private static readonly string Obj = Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar;
 
     [Fact]

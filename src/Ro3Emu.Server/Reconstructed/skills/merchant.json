@@ -2,11 +2,6 @@
   "version": 1,
   "about": "Merchant line (Merchant 6100, Blacksmith 6200, Whitesmith 6300, Mechanic 6400): skill mechanics SkillConfig does not carry, read from each skill's own description and timeline (SkillMechanics.cs documents every field). The original server scripts are not in the client, so every entry is inferred; 'why' quotes the evidence. Axe Tornado (16304) and High-Energy Impact (16307) are scheduled in CombatService.CastImpacts. Talent proc rows without a usable text of their own (16010, 16205) quote their talent's BuffConfig text; 'group:mode' keys override a mode row (Arm Cannon's enhanced volleys).",
   "skills": {
-    "16313": {
-      "name": "Vulcan Arm",
-      "why": "'Every «15» casts of [Vulcan Arm] trigger [Firepower Loaded] «1» times. [Firepower Loaded]: Increases the number of Cannon shells Launched by each [Arm Cannon] attack to «8» for «3» attacks': _kBuff1 [[1631301, 10000, 15000], [1631701, 10000, -1]] (mode 1: 1631501) gave Firepower Loaded on every cast. 1631301 'Firepower Ready: At @{1} stacks, triggers [Firepower Loading]' stacks to 15 (_iStackType 7, _iMaxStack 15); Firepower Loaded has _iMaxStack 3. So the grant waits for 15 piles of the counter, which it then spends, and comes with 3 piles (one per Arm Cannon - Enhance shot, consumePiles on 16312 modes 1/3/4).",
-      "stackGrant": { "counter": 1631301, "at": 15, "grants": [1631701, 1631501], "piles": 3 }
-    },
     "16006": {
       "name": "Cart Revolution",
       "why": "'up to @{2} selected enemies within @{1} meters and up to «3» other enemies within «2» meters of them': a 2 m splash around the locked target, 1 + 3 targets (_iTargetMax is 1).",
@@ -73,8 +68,7 @@
       "hits": { "points": [0, 1, 2, 3] },
       "anchor": "target",
       "shape": { "circle": 6 },
-      "maxTargets": 6,
-      "consumePiles": [16317, 16315]
+      "maxTargets": 6
     },
     "16312:3": {
       "name": "Arm Cannon - Enhance (Melody talent + Firepower Loaded)",
@@ -82,8 +76,7 @@
       "hits": { "points": [0, 1, 2, 3] },
       "anchor": "target",
       "shape": { "circle": 6 },
-      "maxTargets": 6,
-      "consumePiles": [16317, 16315]
+      "maxTargets": 6
     },
     "16312:4": {
       "name": "Melody Cannon - Enhance",
@@ -91,8 +84,7 @@
       "hits": { "points": [0, 1, 2, 3] },
       "anchor": "target",
       "shape": { "circle": 6 },
-      "maxTargets": 6,
-      "consumePiles": [16317, 16315]
+      "maxTargets": 6
     },
     "16314": {
       "name": "Pile Bunker",

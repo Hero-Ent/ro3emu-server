@@ -65,6 +65,8 @@ public static partial class EconomySnapshotReader
     // Job EXP catch-up: role.job_exp_catchup is CharacterService.JobExpCatchUpState: the Job EXP paid to the role, what
     // later job advances still owe it and the rank last paid, no balance and no asset; the EXP comes with its cd13e/grant
     // receipts.
+    // Offline buffs: role.offline_buffs is BuffService.OfflineBuffState (the timed buffs a logout keeps, with their end and
+    // attribute changes): no balance and no asset; the food or item that granted them was spent by its own receipt.
     // Tavern: role.barroom is TavernService.RoleState (Star Power received from Tavern gifts, its week, active days and
     // today's time in a room): counters, no balance and no asset; the gift drink is spent by the event/tavern-gift receipt.
     // Shop gifts: role.gifts is ShopService.GiftState (sent and received gift orders): records, no balance and no asset;
@@ -103,7 +105,10 @@ public static partial class EconomySnapshotReader
     // newactivity receipt that also saves them.
     // Leaderboard rewards: server_state rank_rewards (RankRewardService) names each rewarded board's last settlement
     // time. A key, no balance: the goods are the rank letters' attachments, each delivered once by its delivery key.
-    public const string ExpectedFormatManifestHash = "C9BD18647272BD159C9DD658F6036A42D4FE681E8D7944A8129EB6EBDF99AA9C";
+    // First-clear rewards: role.dungeons DungeonService.State.FirstPassPaid names the bosses whose _iPartAward was paid;
+    // once-only markers, no balance and no asset (the goods are paid by the dungeon/first-pass-award receipt that writes
+    // the marker).
+    public const string ExpectedFormatManifestHash = "A3B9A5A255023364DEE38442BB6C94FF0BA8F18DABE3451296A4B3C1A66F47A5";
     public static string FormatManifestHash => State.FormatManifestHash;
 
     private sealed partial class State

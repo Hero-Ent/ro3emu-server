@@ -74,7 +74,14 @@ public sealed partial class RoleSessionService(RoleStore roles, Data.GameData da
                 await patience.WaitAsync();
             }
         }
-        await systems.LeaveAsync(session, Step, () => SavePosition(session));
+        // Read before leaving the scene, written after the position: the position barrier goes first.
+        byte[]? offlineBuffs = session.OfflineBuffsLoaded ? buffs.OfflineState(session) : null;
+        session.OfflineBuffsLoaded = false;
+        await systems.LeaveAsync(session, Step, () =>
+        {
+            SavePosition(session);
+            if (offlineBuffs != null && snapshotRole is { } kept) roles.SaveOfflineBuffs(kept, offlineBuffs);
+        });
         if (snapshotRole is { } released) roles.ReleaseLoginSnapshot(released);
         if (failures.Count != 0) throw new AggregateException("Essential role cleanup failed.", failures);
     }
@@ -113,7 +120,7 @@ public sealed partial class RoleSessionService(RoleStore roles, Data.GameData da
         var resp = new AccountLoginCreateRoleResp { Result = result };
         if (role != null)
         {
-            resp.RoleBaseInfo = RoleProto.BaseInfo(role);
+            resp.RoleBaseInfo = RoleProto.BaseInfo(role, session.ClientAccount);
             resp.Appearances.Add(RoleProto.Appearances(role));
         }
         await session.SendGameAsync(MsgId.LoginRoleCreate, resp);
@@ -282,6 +289,8 @@ public sealed partial class RoleSessionService(RoleStore roles, Data.GameData da
         session.SkillModeCds.Clear();
         session.SkillCds.Clear();
         session.Buffs.Clear();
+        buffs.RestoreOffline(session, roles.LoadOfflineBuffs(role.Id));
+        session.OfflineBuffsLoaded = true;
         session.BuffEffectCds.Clear();
         session.ImmuneDeathOffer = null;
         session.ImmuneRecoveryUntilMs = 0;
@@ -310,7 +319,7 @@ public sealed partial class RoleSessionService(RoleStore roles, Data.GameData da
             Result = 0,
             RoleAssets = new RoleAssets
             {
-                BasicInfo = RoleProto.BaseInfo(role),
+                BasicInfo = RoleProto.BaseInfo(role, session.ClientAccount),
                 ServerTimeMs = NowMs(),
                 ServerInfo = new ServerBasicInfo
                 {
@@ -329,6 +338,7 @@ public sealed partial class RoleSessionService(RoleStore roles, Data.GameData da
         // Saved client settings (intro skipped, control mode, key bindings...) via the generic DB increment sync.
         session.Settings = LoadSettings(role.Id); // C/D 17: kept on the session, merged and written lazily from now on
         session.SettingsPart = null;
+        if (RepairClassicMovement(session.Settings)) settings.MarkDirty(session, urgent: false);
         await session.SendGameAsync(MsgId.AutoSyncSettings, SettingsSync(session.Settings));
         EnsureSelection(session, lease);
         await systems.LoginAsync(session, () => EnsureSelection(session, lease));
@@ -359,11 +369,18 @@ public sealed partial class RoleSessionService(RoleStore roles, Data.GameData da
             SceneService.HoldWalk(session, DateTime.UtcNow, walking: false);
             return;
         }
+        // A skill's 31112 is moving the player: the client stops its walk and its perform agent puts the unit at the move's
+        // start and carries it to the end (LC_Scene_Sync._skillStartMove: StopMove, LC_PerformEffect_Agent.SkillStartMove).
+        // A walk that comes meanwhile was sent before the client had the move, or reports a point of it; taken, it put the
+        // server back where the move began, and the next walk from the landing was snapped back there (Rift Impact, whose
+        // move starts at its first attack point, 0 s). (inferred) It is dropped, without a correction.
+        if (MonsterService.NowMs < session.SkillMovedUntilMs) return;
         if (!await scene.AcceptWalkAsync(session, walk)) return;
         session.PreviousPosition = session.Position;
         session.Position = walk.Pos;
         session.Face = walk.Face;
         session.WalkDir = float.IsFinite(walk.Dir) ? walk.Dir : walk.Face;
+        session.LastWalkUtc = DateTime.UtcNow; // also when the walk check is off
         session.Walking = !walk.BStop && walk.SpeedRate > 0;
         positions.MarkDirty(session, urgent: walk.BStop); // C/D 18: written lazily, never on the loop
         await systems.MovedAsync(session, walk);
@@ -408,12 +425,18 @@ public sealed partial class RoleSessionService(RoleStore roles, Data.GameData da
                 return;
             }
             MergeSettings(stored, wire);
+            bool repaired = RepairClassicMovement(stored);
             if (req.Type.Contains(SettingType.WildAfk) && stored.WildAFKInfo != null)
             {
                 // AFK accounting follows this preference: durable now, together with its reconciliation.
                 roles.SaveSettings(role.Id, stored.ToByteArray());
                 settings.Persisted(session);
                 await afk.SettingsChangedAsync(session, stored.WildAFKInfo);
+                await session.SendGameAsync(MsgId.AutoSyncSettings, SettingsSync(stored));
+            }
+            else if (repaired)
+            {
+                settings.MarkDirty(session, urgent: false);
                 await session.SendGameAsync(MsgId.AutoSyncSettings, SettingsSync(stored));
             }
             else settings.MarkDirty(session, urgent: false);
@@ -458,8 +481,9 @@ public sealed partial class RoleSessionService(RoleStore roles, Data.GameData da
     /// is saved (or MovementCtrl is 2) and falls back to the mode's defaults only when both movement flags are off. The
     /// mode panel saves those defaults (_applyPCInteractDefault) only when the chosen mode differs from the one it opened
     /// with, and its close/timeout path (_returnCloseClock) never does: a role that keeps Classic that way has no
-    /// KeyBoardInfo, keyboard movement on and mouse movement off, so no ground cell under the cursor and clicks do not
-    /// walk. Such settings get mouse movement and the Classic key map. True when they changed.
+    /// KeyBoardInfo at all, so clicks do not walk. Such settings (absent or corrupt KeyBoardInfo only) get the Nostalgic
+    /// defaults written (G_ClientCfg.PCInteractSetting.Nostalgic, as _applyPCInteractDefault saves them); any real save, including one with mouse movement
+    /// turned off, is left untouched. True when they changed.
     /// </summary>
     internal static bool RepairClassicMovement(DBSettingInfo settings)
     {
@@ -469,14 +493,24 @@ public sealed partial class RoleSessionService(RoleStore roles, Data.GameData da
         try { mode = GameModeSetting.Parser.ParseFrom(modeBytes); }
         catch (InvalidProtocolBufferException) { return false; }
         if (mode.GameMode != oldSchool) return false;
+
+        bool hasKeyBoard = settings.ClientSetting.TryGetValue((int)SettingType.KeyBoard, out var keyBytes);
         var keys = new KeyBoardInfo();
-        if (settings.ClientSetting.TryGetValue((int)SettingType.KeyBoard, out var keyBytes))
+        if (hasKeyBoard)
         {
             try { keys = KeyBoardInfo.Parser.ParseFrom(keyBytes); }
-            catch (InvalidProtocolBufferException) { keys = new KeyBoardInfo(); }
+            catch (InvalidProtocolBufferException) { keys = new KeyBoardInfo(); hasKeyBoard = false; }
         }
-        if (keys.EnableMouseMove && keys.KeyBoardMode == oldSchool) return false;
+
+        // Repair only when no KeyBoardInfo exists at all (or it is corrupt): a player with saved settings owns them,
+        // including one who turned mouse movement off. Never re-enable EnableMouseMove over a real save.
+        if (hasKeyBoard) return false;
+
         keys.EnableMouseMove = true;
+        keys.EnableKeyboardMove = false;
+        keys.SelectBtn = 0;  // enum_PCMouseBtn.Left (Unity MouseButton 0)
+        keys.MoveBtn = 0;    // enum_PCMouseBtn.Left (Unity MouseButton 0)
+        keys.CameraMode = 0; // enum_PCCameraDragMode.RightDrag (Unity MouseButton 1)
         keys.KeyBoardMode = oldSchool;
         settings.ClientSetting[(int)SettingType.KeyBoard] = keys.ToByteString();
         return true;
@@ -523,10 +557,11 @@ public sealed partial class RoleSessionService(RoleStore roles, Data.GameData da
         // AttributeConfig ids: STR..LUK 1-6, derived 101-116, HP/SP 2000/2001, level 2002 (CharacterService.Refresh).
         var properties = session.EntityProperties.Length > 0
             ? session.EntityProperties
-            : [(101, 100), (2000, 100), (102, 50), (2001, 50), (AttrSpeed, session.Speed), (AttrBaseAtkSpeed, 100)];
-        foreach (var (idx, value) in properties)
+            : [(101, 100, 100), (2000, 100, 100), (102, 50, 50), (2001, 50, 50), (AttrSpeed, session.Speed, session.Speed), (AttrBaseAtkSpeed, 100, 100)];
+        // baseData: the pre-percentage part (CharacterService.EntityPropertiesOf), as 31008 sends it.
+        foreach (var (idx, value, baseValue) in properties)
         {
-            entity.Property.Add(new AoIProperty { Idx = idx, Data = value, BaseData = value });
+            entity.Property.Add(new AoIProperty { Idx = idx, Data = value, BaseData = baseValue });
         }
         entity.EquipInfo.Add(session.EquipLook);
         BuffService.PopulateEntity(session, entity);

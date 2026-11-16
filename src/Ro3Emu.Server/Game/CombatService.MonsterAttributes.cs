@@ -34,11 +34,11 @@ public sealed partial class CombatService
         var t = unit.Template;
         // The template as it was, without the per-hit attribute pass when nothing overlays it.
         if (!_buffs.HasUnitCombatBuffs(unit))
-            return new(t.Atk, t.Matk, t.Hit, t.Cri, t.Level, t.Element) { Def = t.Def, Mdef = t.Mdef, Flee = t.Flee };
+            return new(t.Atk, t.Matk, t.Hit, t.Cri, t.Level, t.Element) { Def = t.Def, Mdef = t.Mdef, Flee = t.Flee, Race = t.Race, Size = t.Size, Kind = KindOf(t) };
         var stats = MonsterStats(unit);
         return new(stats[AttributeId.Atk], stats[AttributeId.Matk], stats[AttributeId.Hit], stats[AttributeId.Cri], unit.Template.Level,
             unit.Template.Element)
-        { Def = stats[AttributeId.Def], Mdef = stats[AttributeId.Mdef], Flee = stats[AttributeId.Flee], ResCri = stats[AttributeId.ResCri] };
+        { Def = stats[AttributeId.Def], Mdef = stats[AttributeId.Mdef], Flee = stats[AttributeId.Flee], ResCri = stats[AttributeId.ResCri], Race = t.Race, Size = t.Size, Kind = KindOf(t) };
     }
 
     private long MonsterBuffDamage(MonsterUnit monster, JsonElement? skill, long amount)
@@ -59,6 +59,7 @@ public sealed partial class CombatService
             EntityUuid = (ulong)unit.Uid,
             StateInfo = new AoiObjStateInfo { Data = new CommonBigMask { Values = { (ulong)monster.StatusBits | _buffs.UnitStatus(unit) } } },
             ForbidInfo = new AoiObjForbidInfo { Data = new CommonBigMask { Values = { _buffs.UnitForbiddenMask(unit) } } },
+            StaggerInfo = new AoiObjStaggerInfo { StaggerMask = _buffs.UnitStaggerMask(unit) },
         };
         // Buffs that do not count (BuffService.CountsInUnitStats) leave the template's stats and speed as they were; publish
         // only changes that do and, once the last of them is gone, the return to the template.

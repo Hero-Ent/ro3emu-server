@@ -131,8 +131,6 @@ public sealed partial class DungeonService
         public HashSet<long> Killed { get; } = [];
         /// <summary>The completing events a step with "all" has seen so far.</summary>
         public HashSet<(ReconstructedDungeons.TriggerKind Kind, long Id)> StepSeen { get; } = [];
-        /// <summary>A scripted step's strikes, or a turret's shots, taken so far toward each monster's defeat, by monster uid
-        /// (DungeonService.Cannon).</summary>
         /// <summary>The current step's region cues already played (their index in the step's cues).</summary>
         internal HashSet<int> FiredCues { get; } = [];
         /// <summary>Participants seated on a scene actor that is a vehicle (DungeonService.Story): the actor, whether they
@@ -143,6 +141,8 @@ public sealed partial class DungeonService
         /// <summary>The longest fall a completed step started, in ms: the next scene waits for the landing.</summary>
         internal int FallMs { get; set; }
         internal bool Continued { get; set; }
+        /// <summary>A scripted step's strikes, or a turret's shots, taken so far toward each monster's defeat, by monster uid
+        /// (DungeonService.Cannon).</summary>
         public Dictionary<long, int> Struck { get; } = [];
         /// <summary>The participants sitting on a scripted step's cannons (DungeonService.Cannon).</summary>
         internal Dictionary<GameSession, Gunner> Gunners { get; } = [];
@@ -199,6 +199,8 @@ public sealed partial class DungeonService
         public bool Spawning { get; set; }
         /// <summary>The current scripted step got one of its completing client events (DungeonService.Scripted).</summary>
         public bool StepDone { get; set; }
+        /// <summary>The wave whose scripted step was completed, so its counter reads full and the next one's does not.</summary>
+        public int GoalFullWave { get; set; } = -1;
         /// <summary>A Realm of the Gods raid waits in its preparation phase (DungeonService.RealmOfGods).</summary>
         public bool Preparing { get; set; }
         /// <summary>The boss's Sacred Blessing level (TenGameplayBuffConfig row) active for this run, fixed at its start.</summary>
@@ -545,8 +547,10 @@ public sealed partial class DungeonService
         var v = new DungeonVar { VarId = 10003 };
         if (Step(a) is { } step && size == 0)
         {
-            // A scripted step: its configured counter, or the events an "all" step has seen (inferred).
-            v.Vi64.Add(step.All ? [a.StepSeen.Count, step.Complete.Count] : [step.Goal.Done, step.Goal.Total]);
+            // A scripted step: its configured counter, or the events an "all" step has seen (inferred). A step that was
+            // completed reads full, or the tracker keeps "Open the treasured chest (0/1)" until the scene ends.
+            bool completed = a.GoalFullWave == a.Wave;
+            v.Vi64.Add(step.All ? [a.StepSeen.Count, step.Complete.Count] : [completed ? step.Goal.Total : step.Goal.Done, step.Goal.Total]);
             return v;
         }
         v.Vi64.Add([Math.Clamp(a.Killed.Count - a.WaveBase, 0, size), size]);

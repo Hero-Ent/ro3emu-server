@@ -24,6 +24,13 @@ public sealed record MonsterTemplate(
     public float BattleCallRange { get; init; }
     /// <summary>AIConfig _iBattleCallResponse 1: it answers such a call.</summary>
     public bool AnswersBattleCall { get; init; }
+    /// <summary>Metres a skill reaches past its centre (<see cref="Data.Config.UnitConfig.DamageRadius"/>).</summary>
+    public float DamageRadius { get; init; }
+    /// <summary>NPCConfig _iNPCSubType 3 MT_MINI, 4 MT_MVP, 6 MT_BOSS, as the boss skills and Paragon count them.</summary>
+    public bool IsBoss { get; init; }
+    /// <summary>Its HP is restored when it is back from a lost fight: AIConfig _iUnFightBUFF holds the full-heal buff
+    /// (MonsterService.ResetHealBuff), or the NPC has no AI row (inferred).</summary>
+    public bool HealsOnReturn { get; init; } = true;
 }
 
 /// <summary>A live monster on a map (entityType 1): HP, home point, current walk segment and AI state. The siege war
@@ -73,6 +80,10 @@ public class MonsterUnit : WorldUnit
     public TowerPetUnit? PetTarget { get; set; }
     public long NextSwingMs { get; set; }
     public long NextChaseMs { get; set; }
+    /// <summary>When this monster may search a way around an obstacle again: a straight walk failed, and the search is not free.</summary>
+    public long NextPathMs { get; set; }
+    /// <summary>The players who have engaged it since it last left combat: losing its target, it turns to the nearest of them.</summary>
+    public List<Game.GameSession> Hated { get; } = [];
     public bool Returning { get; set; }
     /// <summary>Back home it keeps its damage instead of healing to full (the siege castle, TerritoryWarsService.SiegeObjects).</summary>
     public bool KeepsDamage { get; set; }

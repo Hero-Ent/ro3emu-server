@@ -6,10 +6,13 @@ using Ro3Emu.Server.Maps;
 
 namespace Ro3Emu.Server.Game;
 
-/// <summary>A buff on a player: BuffConfig id, its attribute changes, when it ends (absolute server ms).</summary>
+/// <summary>A buff on a player: BuffConfig id, its attribute changes, when it ends (absolute server ms).
+/// <paramref name="UntilSpent"/>: a buff with no time of its own that ends when it is spent (<see cref="BuffService.AddUntilSpentAsync"/>);
+/// its <paramref name="ExpireMs"/> is only the server's bound.</summary>
 public sealed record ActiveBuff(long Guid, int ConfigId, long ExpireMs, int DurationMs, IReadOnlyList<(long Attr, double Value)> Changes, long SourceId,
     int PileCount = 1, bool IsPassive = false, bool IsTotemOwned = false, int StateOrdinal = 0, bool ShowIcon = true,
-    long ShieldRemaining = 0, bool IsGuardianOwned = false, bool ShieldDebuffImmunity = false, int HpFloorBasisPoints = 0);
+    long ShieldRemaining = 0, bool IsGuardianOwned = false, bool ShieldDebuffImmunity = false, int HpFloorBasisPoints = 0,
+    bool UntilSpent = false);
 
 /// <summary>
 /// Buff lifetime and control state. The explicit state map below is inferred from
@@ -151,7 +154,7 @@ public sealed partial class BuffService : IGameTicker
 
     private async Task AddCoreAsync(GameSession p, int configId, int durationMs, long sourceId, int? explicitPileCount,
         long shieldAmount = 0, bool guardianOwned = false, bool shieldDebuffImmunity = false, int hpFloorBasisPoints = 0,
-        double attributeMultiplier = 1, bool stackShield = false)
+        double attributeMultiplier = 1, bool stackShield = false, bool untilSpent = false)
     {
         if (p.Role == null || _data.Row("BuffConfig", configId) is not { } row || GameData.Int(row, "_iBuffID") <= 0) return;
         if (await RejectIncomingAsync(p, row, guardianOwned, sourceId)) return;
@@ -166,15 +169,18 @@ public sealed partial class BuffService : IGameTicker
         int stackType = (int)GameData.Int(row, "_iStackType");
         int maxStack = (int)Math.Max(1, GameData.Int(row, "_iMaxStack"));
         // Inferred server policy from enum_BuffStackType: named layer types add a pile; others refresh.
-        int pile = explicitPileCount ?? (existing != null && stackType is 1 or 2 or 3 or 7
+        int pile = explicitPileCount ?? (existing != null && existing.ExpireMs > now && stackType is 1 or 2 or 3 or 7
             ? Math.Min(maxStack, existing.PileCount + 1) : 1);
+        // LC_Buff_System.UpdateBuffData copies a known GUID's times, stack and source, never its config: a new level under the old GUID would keep the old row on the client.
+        if (existing != null && existing.ConfigId != configId) { await RemoveAsync(p, existing); existing = null; }
         IEnumerable<(long Id, double Value)> pairs = GameData.Pairs(row, "_kChangeAttri");
         if (SourceAttributes != null) pairs = SourceAttributes(sourceId, row, [.. pairs]);
         var changes = pairs.Select(c => (c.Id, c.Value * pile * attributeMultiplier)).ToList();
         var buff = new ActiveBuff(existing?.Guid ?? Interlocked.Increment(ref _guids), configId,
             now + durationMs, durationMs, changes, sourceId, pile, StateOrdinal: StateFor(configId, group, guardianOwned),
             ShieldRemaining: stackShield ? SkillShieldRules.Stacked(LiveShield(existing), shieldAmount, pile) : Math.Max(0, shieldAmount),
-            IsGuardianOwned: guardianOwned, ShieldDebuffImmunity: shieldDebuffImmunity, HpFloorBasisPoints: hpFloorBasisPoints);
+            IsGuardianOwned: guardianOwned, ShieldDebuffImmunity: shieldDebuffImmunity, HpFloorBasisPoints: hpFloorBasisPoints,
+            UntilSpent: untilSpent);
         if (existing != null) p.Buffs.Remove(existing);
         p.Buffs.Add(buff);
         TrackPeriodic(p, null, buff);
@@ -274,12 +280,14 @@ public sealed partial class BuffService : IGameTicker
         double attributeMultiplier = 1, bool guardianOwned = false)
     {
         if (_data.Row("BuffConfig", configId) is not { } row || GameData.Int(row, "_iBuffID") <= 0) return;
-        if (_unitBuffs.TryGetValue(unit.Uid, out var live) && ImmuneTo(live, row, guardianOwned)) return;
+        _unitBuffs.TryGetValue(unit.Uid, out var live);
+        // The resist first: Element Control strikes on it, and an MVP's born buff answers both.
         if (live != null && sourceId != unit.Uid && UnitResistsControl(live, row))
         {
             foreach (var handler in ControlResisted) await handler(unit, sourceId, row);
             return;
         }
+        if (live != null && ImmuneTo(live, row)) return;
         if (durationMs <= 0) durationMs = (int)GameData.Int(row, "_iTime");
         if (durationMs <= 0) durationMs = 60000;
         if (sourceId != unit.Uid && !ApplyDecay(unit.Uid, unit.SceneEntry, configId, ref durationMs)) return;
@@ -291,8 +299,9 @@ public sealed partial class BuffService : IGameTicker
         int stackType = (int)GameData.Int(row, "_iStackType");
         int maxStack = (int)Math.Max(1, GameData.Int(row, "_iMaxStack"));
         // (inferred) Match the player path: named layer types increase piles; other types refresh.
-        int pile = existing != null && stackType is 1 or 2 or 3 or 7
+        int pile = existing != null && existing.ExpireMs > MonsterService.NowMs && stackType is 1 or 2 or 3 or 7
             ? Math.Min(maxStack, existing.PileCount + 1) : 1;
+        if (existing != null && existing.ConfigId != configId) { await RemoveUnitBuffAsync(unit, existing); existing = null; }
         var buff = new ActiveBuff(existing?.Guid ?? Interlocked.Increment(ref _guids), configId,
             MonsterService.NowMs + durationMs, durationMs,
             [.. GameData.Pairs(row, "_kChangeAttri").Select(c => (c.Id, c.Value * pile * attributeMultiplier))], sourceId, pile,
@@ -354,6 +363,21 @@ public sealed partial class BuffService : IGameTicker
     }
 
     /// <summary>SkillConfig._kCost type 3 consumes piles of a BuffConfig group. The tuple's id is a group (inferred).</summary>
+    /// <summary>(inferred) The server's bound on a buff that lasts until it is spent: its row has no time of its own (_iTime 0 or -1).</summary>
+    internal const int UntilSpentBoundMs = 3_600_000;
+
+    /// <summary>
+    /// A buff that ends when it is spent (Firepower Loaded, Cannon Enhance, Empowered Warg Strike, ...), at <paramref name="piles"/> whatever
+    /// its stack type when given (Firepower Loaded's stack type 6 only refreshes, and it starts at its 3 attacks). It reaches the client
+    /// with no time, as a permanent buff does (<see cref="Wire"/>); the server drops it after <see cref="UntilSpentBoundMs"/>.
+    /// </summary>
+    internal Task AddUntilSpentAsync(GameSession p, int configId, long sourceId, int? piles = null) =>
+        AddCoreAsync(p, configId, UntilSpentBoundMs, sourceId, piles, untilSpent: true);
+
+    /// <summary>How many piles of a buff group a monster holds.</summary>
+    internal int UnitPiles(WorldUnit unit, int buffGroup) => _unitBuffs.TryGetValue(unit.Uid, out var list)
+        ? list.Where(b => b.ExpireMs > MonsterService.NowMs && b.ConfigId / 100 == buffGroup).Sum(b => b.PileCount) : 0;
+
     public bool HasBuffPiles(GameSession p, int buffGroup, int count) => count > 0
         && p.Buffs.Where(b => b.ExpireMs > MonsterService.NowMs && _data.Row("BuffConfig", b.ConfigId) is { } row
             && GameData.Int(row, "_iBuffID") == buffGroup).Sum(b => b.PileCount) >= count;
@@ -534,10 +558,15 @@ public sealed partial class BuffService : IGameTicker
     private bool Visible(ActiveBuff buff) => !buff.IsPassive
         || _data.Row("BuffConfig", buff.ConfigId) is { } row && GameData.Int(row, "_iShowIcon") != 0;
 
+    /// <summary>
+    /// A passive or until-spent buff has no time on the wire: with duration 0 the icon draws no progress
+    /// (UI_Sys_BuffIcon_BaseWidgetCtrl.RefreshProgress) and the buff list no time left (UI_Sys_BuffItemWidgetCtrl: iDuration &lt;= 0
+    /// -> _setTime(nil)); the client keeps it until 31105 removes it. A server bound sent as the end showed an hour counting down.
+    /// </summary>
     private static BuffInfo Wire(ActiveBuff buff) => new()
     {
-        BuffGuid = buff.Guid, ConfigId = buff.ConfigId, ExpireTime = buff.IsPassive ? 0 : buff.ExpireMs,
-        Duration = buff.DurationMs, PileCount = buff.PileCount, IsTotalTime = true, SourceId = buff.SourceId,
+        BuffGuid = buff.Guid, ConfigId = buff.ConfigId, ExpireTime = buff.IsPassive || buff.UntilSpent ? 0 : buff.ExpireMs,
+        Duration = buff.UntilSpent ? 0 : buff.DurationMs, PileCount = buff.PileCount, IsTotalTime = true, SourceId = buff.SourceId,
     };
 
     public void Tick(GameTime time)

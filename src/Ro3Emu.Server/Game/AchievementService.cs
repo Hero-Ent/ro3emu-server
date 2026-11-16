@@ -5,6 +5,7 @@ using Google.Protobuf;
 using Romsg;
 using Ro3Emu.Server.Accounts;
 using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 
 namespace Ro3Emu.Server.Game;
 
@@ -39,8 +40,8 @@ public sealed class AchievementService : IGameTicker
         CAffection = 106016, CTavernQuest = 106007, CTavernStar = 106008, CFashionLevel = 303001, CAppearance = 303002,
         CAppearanceCount = 303003, CJobRank = 101019, CLoginDays = 101011;
 
-    /// <summary>No table (fashion level) or an unresolved meaning (§5, §10.5).</summary>
-    private static readonly HashSet<long> BlockedConditions = [CFashionLevel, CAppraiseRare, CJobTalent];
+    /// <summary>An unresolved meaning (§5, §10.5).</summary>
+    private static readonly HashSet<long> BlockedConditions = [CAppraiseRare, CJobTalent];
 
     /// <summary>Event counters: no history, the slot is the count since the feature exists (spec §5 "E"). 106007
     /// TaskFinishRepeated [task, n] counts deliveries of the task (the Tavern's daily quest, <see cref="OnTaskCompletions"/>).</summary>
@@ -49,6 +50,13 @@ public sealed class AchievementService : IGameTicker
 
     /// <summary>Friend conditions read the social relation from the database: login and relation hooks only.</summary>
     private static readonly HashSet<long> FriendConditions = [CFriends, CAffection];
+
+    /// <summary>LC_FashionHelper.GetFashionTypeBySlot: an appearance grid (enum_EquipGridType 8-10, 12-17, MG_Common.proto
+    /// AppearanceGridType_*) and the WardRobeConfig._iType slot of DBWardRobeInfo.curUseAppearances it shows.</summary>
+    private static readonly Dictionary<long, int> AppearanceGrids = new()
+    {
+        [8] = 1, [9] = 2, [10] = 3, [12] = 4, [13] = 5, [14] = 6, [15] = 7, [16] = 8, [17] = 9,
+    };
 
     /// <summary>Realm of the Gods boss records (TenGameplayConfig normal / hard) for 210004.</summary>
     private static readonly long[] GodRealms = [100101, 100102];
@@ -78,6 +86,8 @@ public sealed class AchievementService : IGameTicker
         public Dictionary<long, Row> Rows { get; } = [];
         /// <summary>0 = AchievementLevel (global), 100-105 = AchievementType rows of the type, sorted by _iLevel.</summary>
         public Dictionary<int, Tier[]> Tiers { get; } = [];
+        /// <summary>The Wardrobe's Fashion Rating levels (GenericStageRewardsConfig type 3), sorted by _iScore.</summary>
+        public (long Score, long Level)[] FashionLevels { get; set; } = [];
     }
 
     private readonly GameData _data;
@@ -194,6 +204,8 @@ public sealed class AchievementService : IGameTicker
                 catalog.Tiers[group.Key] = [.. group.Select(r =>
                         new Tier((int)GameData.Int(r, "_iLevel"), GameData.Int(r, "_iPoint"), GameData.Int(r, "_iAward")))
                     .OrderBy(t => t.Level)];
+        catalog.FashionLevels = [.. GenericStageRewardsConfig.All(_data).Where(r => r.Type == DailyActivityService.FashionStage)
+            .Select(r => (r.Score, r.Level)).OrderBy(l => l.Score)];
         int blockedCount = catalog.Rows.Values.Count(r => r.Blocked);
         _log.LogInformation("Achievements: {Rows} rows, {Blocked} blocked, {Types} level tables", catalog.Rows.Count, blockedCount, catalog.Tiers.Count);
         return catalog;
@@ -213,10 +225,10 @@ public sealed class AchievementService : IGameTicker
         _ => -1,
     };
 
-    /// <summary>Spec §5 "Blocked": the rows whose source or meaning is missing. 303004's fashion variant lists
-    /// grids 8-13, whose WardRobeConfig mapping is inferred only.</summary>
+    /// <summary>Spec §5 "Blocked": the rows whose source or meaning is missing. 303004 lists body grids 1-7 or
+    /// appearance grids (<see cref="AppearanceGrids"/>, "Dressed to Impress").</summary>
     private static bool IsBlocked(long[] t) => BlockedConditions.Contains(t[0])
-        || t[0] == CEquipQuality && (t.Length < 4 || t[3..].Any(grid => grid is < 1 or > 7));
+        || t[0] == CEquipQuality && (t.Length < 4 || t[3..].Any(grid => grid is < 1 or > 7 && !AppearanceGrids.ContainsKey(grid)));
 
     /// <summary>DungeonService record key "{multiId}:{mark}"; the mark is the 1-based _kBoss position whose npc matches.</summary>
     private string? BossRecord(long multi, long npc)
@@ -331,8 +343,11 @@ public sealed class AchievementService : IGameTicker
         long r = row.Required[index];
         switch (t[0])
         {
-            case CEquipQuality: // [n, quality, grids...]: listed body grids holding an item of quality >= p2
-                return t[3..].Count(grid => s.Items.Any(i => i.Grid == grid && Quality(i.Entry) >= t[2]));
+            case CEquipQuality: // [n, quality, grids...]: listed grids holding an item, or wearing a look, of quality >= p2
+                if (s.Wardrobe == null && t[3..].Any(AppearanceGrids.ContainsKey)) return null;
+                return t[3..].Count(grid => AppearanceGrids.TryGetValue(grid, out int slot)
+                    ? WornQuality(s, slot) >= t[2]
+                    : s.Items.Any(i => i.Grid == grid && Quality(i.Entry) >= t[2]));
             case CRefineLevel: // highest refine level on any grid
                 return s.EquipLevels.Refine.Values.DefaultIfEmpty(0).Max();
             case CCardQuality: // [1, type, subtype, quality]: a card of quality >= p4 seen (collection or bag)
@@ -377,6 +392,8 @@ public sealed class AchievementService : IGameTicker
                     key => _data.Row("WardRobeConfig", key) is { } w ? GameData.Int(w, "_iType") : -1)));
             case CTavernStar: // [n]: Star Power received from Tavern gifts (TavernService, 5043 popularity)
                 return s.Tavern?.Popularity;
+            case CFashionLevel: // [level]: the Wardrobe's Fashion Rating level
+                return s.Wardrobe == null ? null : FashionLevel(WardrobeService.FashionScore(_data, s.Wardrobe));
             case CJobRank: // [rank]: JobConfig._iJobRank >= p1
                 return s.Progress == null ? null
                     : _data.Row("JobConfig", s.Progress.Career) is { } job && GameData.Int(job, "_iJobRank") >= t[1] ? r : 0;
@@ -389,6 +406,12 @@ public sealed class AchievementService : IGameTicker
 
     private long PetQuality(int pet) => _petQuality.GetOrAdd(pet, id => _data.Row("PetBaseConfig", id) is { } row ? GameData.Int(row, "_iQuality") : -1);
 
+    /// <summary>The highest _iLevel whose _iScore the fashion score reaches, the level the Wardrobe's level panel
+    /// shows and claims up to (UI_Sys_WardrobeLevelPanelCtrl, see DailyActivityService.StageError). That 303001 reads
+    /// this level is inferred from its text, "Reach Wardrobe Fashion Rating Lv. @{1}".</summary>
+    private long FashionLevel(long score) =>
+        Rows().FashionLevels.Where(l => l.Score <= score).Select(l => l.Level).DefaultIfEmpty(0).Max();
+
     /// <summary>LC_InteractCondition operator table (lua :313-356): 1 ==, 2 ~=, 3 &gt;, 4 &gt;=, 5 &lt;, 6 &lt;=.</summary>
     private static bool Compare(long op, long value, long param) => op switch
     {
@@ -400,6 +423,12 @@ public sealed class AchievementService : IGameTicker
         6 => value <= param,
         _ => false,
     };
+
+    /// <summary>WardRobeConfig._iQuality of the look worn in a wardrobe slot, -1 for none or an expired one. That the
+    /// quality of 303004 reads this column for an appearance grid is (inferred): it is the item quality's counterpart.</summary>
+    private long WornQuality(GameSession s, int slot) =>
+        s.Wardrobe!.CurUseAppearances.TryGetValue(slot, out int id) && OwnedAppearances(s).Contains(id)
+            ? WardRobeConfig.Get(_data, id)?.Quality ?? -1 : -1;
 
     /// <summary>Lit-up costumes and owned mounts that have not expired (mount ids are WardRobeConfig ids).</summary>
     private HashSet<long> OwnedAppearances(GameSession s)

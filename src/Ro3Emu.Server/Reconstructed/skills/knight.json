@@ -2,14 +2,6 @@
   "version": 1,
   "about": "Swordsman line (Novice 1000, Swordsman 1100, Knight 1200, Lord Knight 1300, Rune Knight 1400): skill mechanics SkillConfig does not carry, read from each skill's own description, its talent (SpecialEffectConfig) text and timeline (SkillMechanics.cs documents every field). 'group:mode' keys override a talent mode row. Dragon Breath (11304/11305) and Sonic Wave (11309) use the generic Rect360 rule and are not listed. Everything is (inferred); 'why' quotes the evidence.",
   "buffTriggers": {
-    "group:11210": {
-      "name": "Parry -> Auto Counter",
-      "why": "Parry 11210: 'When You take melee Physical damage, casts [Auto Counter] in front of You. Internal cooldown: «1» seconds'; buff 1121001-1121010 _kLogicData names the matching Auto Counter row of group 11211 (1121101-1121110, 'dealing Physical ATK*«30»%+«20» ... to «5» enemies in a «3»m*«5»m area in front of you'), so the row follows the learned Parry level.",
-      "on": "meleeHitTaken",
-      "group": 11211,
-      "levelFrom": 11210,
-      "cooldownMs": 1000
-    }
   },
   "skills": {
     "11304": {
@@ -25,17 +17,6 @@
       "why": "'... to up to «5» enemies within a «5»-meter radius': circle of 5 m around the caster (_kRange 550 = 5.5 m).",
       "anchor": "caster",
       "shape": { "circle": 5 }
-    },
-    "11105": {
-      "name": "Auto Counter",
-      "why": "'After casting, enter a Parry state for «1» sec. ... When Parry ends, perform an Auto Counter against up to «5» enemies within a «3»m * «5»m area ahead, dealing Physical ATK * «100»% + «150»': the row has no damage params, so the generic cast deals nothing; the parry buff 1110510 names the counter row in its _kLogicData [1110610] (11106 lv10: P1 10000, P2 150 = the lv10 description). Released 1000 ms later (= the parry duration, and the template's second attack point at 1.0 s). Lower skill levels still release the lv10 row (see findings).",
-      "followUp": { "group": 11106, "delayMs": 1000 }
-    },
-    "11106": {
-      "name": "Auto Counter (counter strike)",
-      "why": "'... dealing Physical ATK*«100»%+«150» Neutral melee Physical damage to «5» enemies in a «3»m*«5»m area in front of you': _iRangeType 1 would hit only a locked target (a released counter has none); a 5 m long, 3 m wide strip from the caster (_kRange [500, 300] agrees).",
-      "anchor": "caster",
-      "shape": { "rect": [5, 3] }
     },
     "11211": {
       "name": "Auto Counter (Parry counter)",

@@ -108,8 +108,8 @@ public sealed partial class DungeonService
                 NotifyType = EntityBase.Types.NotifyType.All, MovementInfo = Movement(MonsterService.NowMs),
             };
             if (Template is { } t)
-                foreach (var (idx, value) in new (long, long)[] { (101, t.MaxHp), (2000, t.MaxHp), (2002, t.Level), (113, t.SpeedCm),
-                             (102, t.MaxSp), (2001, t.MaxSp) })
+                foreach (var (idx, value) in new (long, long)[] { (AttributeId.MaxHp, t.MaxHp), (AttributeId.Hp, t.MaxHp), (2002, t.Level), (AttributeId.Speed, t.SpeedCm),
+                             (102, t.MaxSp), (AttributeId.Sp, t.MaxSp) })
                     entity.Property.Add(new AoIProperty { Idx = idx, Data = value, BaseData = value });
             // The driver's client moves the vehicle it controls (LC_PassengerComponent.ChangeControlUnit) at the vehicle
             // unit's own speed, attribute 113, as TerritoryWarsService.VehicleUnit carries it: an NPC-type vehicle had
@@ -135,6 +135,10 @@ public sealed partial class DungeonService
         // A fight-only step has no client event to wait for: its kills complete it.
         a.StepDone = step.Complete.Count == 0;
         await SyncSceneActorsAsync(a, step.Actors);
+        string actorsShown = _log.IsEnabled(LogLevel.Information)
+            ? string.Join("; ", a.SceneActors.Select(u => $"{u.NpcId} at {u.X:0.0},{u.Z:0.0} buffs [{string.Join(',', u.Buffs.Select(b => b.ConfigId))}]"))
+            : "";
+        LogStepBegins(a.Plan.SceneEntry, a.Wave + 1, step.Stage, actorsShown);
         await SyncCompanionsAsync(a, step.Companions);
         await SyncAlliesAsync(a, step.Allies ?? []);
         a.StepGeneration++;
@@ -142,6 +146,7 @@ public sealed partial class DungeonService
         if (step.Seek is { } seek) StartSeek(a, seek);
         if (step.Shelter is { } shelter) StartShelter(a, shelter);
         if (step.React is { } react) StartReaction(a, react);
+        await ShowStepGuideWaysAsync(a);
         if (step.Story != 0 && !a.Settled && !a.Room.Closed)
             // Once, in a var-change event: the client calls PlayCutSceneStory on every push of this var.
             await BroadcastAsync(a, Event, new DungeonEventNotify
@@ -155,6 +160,9 @@ public sealed partial class DungeonService
         foreach (var timer in step.Complete.Where(c => c.Kind == Kind.After))
             StepLater(a, a.StepGeneration, (int)timer.Id, () => StepEventAsync(a, null, [(Kind.After, timer.Id)]));
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Scripted scene {Scene} step {Step} '{Stage}' begins; actors {Actors}")]
+    private partial void LogStepBegins(long scene, int step, string stage, string actors);
 
     /// <summary>
     /// Shows exactly the step's actors: one already shown at the same point with the same NPC stays (its buffs change in
@@ -329,7 +337,7 @@ public sealed partial class DungeonService
         if (code != 0) return true;
         // Dracula's Lair: a bush search may find the key; its finder is the rescuer, the only one the cage opens for.
         if (a!.Dracula is { } dracula) await dracula.Owner.InteractedAsync(a, s, actor!.NpcId);
-        await StrikeAsync(a!, s, actor!, req.InteractionId);
+        await BoardCannonAsync(a!, s, actor!, req.InteractionId);
         await SeatRiderAsync(a!, s, actor!, (int)req.InteractionId);
         await BoardCannonAsync(a!, s, actor!, req.InteractionId);
         await TryRideAsync(a!, s, actor!, req.InteractionId); // a vehicle's driver seat (DungeonService.Story)
@@ -431,6 +439,27 @@ public sealed partial class DungeonService
         await GmCommands.ReplyAsync(s, FormattableString.Invariant($"Beside {npc} at {actor.X + 1:0.0},{actor.Z:0.0}, 1 m from it (reach {Reach(actor)} m)."));
     }
 
+    /// <summary>The most points a fast leg is tested at (inferred bound: a leg longer than this many metres is sampled sparser).</summary>
+    private const int FastLegSamples = 100;
+
+    /// <summary>
+    /// Whether the participant's walk reached a region. A sliding client reports every 0.1 s (Controller_Slide
+    /// m_fSlideSyncInterval), so a fast slide can pass a narrow region (the 5 m deep end of the Ant Queen's passage) between
+    /// two reports, and a seated driver (the Deniro) is as fast: for them the leg since the last report is tested every
+    /// metre too (ported from upstream #451, on Hero Saga's own slide and rides).
+    /// </summary>
+    private static bool Reached(Attempt a, GameSession s, Func<float, float, bool> inside)
+    {
+        if (inside(s.Position.X, s.Position.Z)) return true;
+        if (!a.Sliding.Contains(s) && !a.Riding.ContainsKey(s)) return false;
+        var from = s.PreviousPosition;
+        float dx = s.Position.X - from.X, dz = s.Position.Z - from.Z;
+        int steps = Math.Min(FastLegSamples, (int)MathF.Ceiling(MathF.Sqrt(dx * dx + dz * dz)));
+        for (int i = 1; i < steps; i++)
+            if (inside(from.X + dx * i / steps, from.Z + dz * i / steps)) return true;
+        return false;
+    }
+
     /// <summary>A participant's accepted walk: server regions and points of the current step.</summary>
     public async Task PlayerMovedAsync(GameSession s)
     {
@@ -442,7 +471,7 @@ public sealed partial class DungeonService
         {
             bool inside = t.Kind switch
             {
-                Kind.Region => _catalog.SceneRegion(a.Plan.SceneEntry, t.Id) is { } region && region.Contains(s.Position.X, s.Position.Z),
+                Kind.Region => _catalog.SceneRegion(a.Plan.SceneEntry, t.Id) is { } region && Reached(a, s, region.Contains),
                 Kind.Point => _catalog.ScenePoint(a.Plan.SceneEntry, t.Id) is { } p
                     && MonsterService.Distance(s.Position.X, s.Position.Z, p.X, p.Z) <= t.Radius,
                 _ => false,
@@ -479,6 +508,8 @@ public sealed partial class DungeonService
             }
         }
         a.StepDone = true;
+        a.GoalFullWave = a.Wave;
+        if (GoalParams(a) != null) await BroadcastAsync(a, BaseInfo, Snapshot(a));
         _log.LogInformation("Scripted scene {Scene} step {Step} '{Stage}' completed by {Role} ({Events})",
             a.Plan.SceneEntry, a.Wave + 1, step.Stage, s?.Role?.Id, string.Join(", ", events));
         int hold = await RespondAsync(a, step.React, step.React?.Complete, used);
